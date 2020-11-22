@@ -21,8 +21,8 @@ proc addHeaders(msg: var string, headers: HttpHeaders) =
   for k, v in headers:
     msg.add(k & ": " & v & "\c\L")
 
-proc respond*(req: Request, code: HttpCode, content: string,
-              headers: HttpHeaders = nil): Future[void] {.async.}=
+proc resp*(req: Request, content: string,
+              headers: HttpHeaders = nil, code: HttpCode = 200.HttpCode): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``, headers and
   ## content.
  
@@ -42,7 +42,7 @@ proc respond*(req: Request, code: HttpCode, content: string,
   msg.add(content)
   discard await req.transp.write(msg)
 
-proc respondError(req: Request, code: HttpCode): Future[void] {.async.}=
+proc respError(req: Request, code: HttpCode): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
   let content = $code
   var msg = "HTTP/1.1 " & content & "\c\L"
@@ -84,7 +84,7 @@ proc processRequest(
   try:
     request.url = parseUrl(mfParser.getPath)
   except ValueError:
-    asyncCheck request.respondError(Http400)
+    asyncCheck request.respError(Http400)
     return true
   case mfParser.minor[]:
     of '0': 
@@ -115,18 +115,18 @@ proc processRequest(
   if request.headers.hasKey("Content-Length"):
     var contentLength = 0
     if parseSaturatedNatural(request.headers["Content-Length"], contentLength) == 0:
-      await request.respond(Http400, "Bad Request. Invalid Content-Length.")
+      await request.resp("Bad Request. Invalid Content-Length.", code = Http400 )
       return true
     else:
       if contentLength > looper.maxBody:
-        await request.respondError(Http413)
+        await request.respError(code = Http413)
         return false
       await request.transp.readExactly(addr request.buf[count],contentLength)
       if request.buf.len != contentLength:
-        await request.respond(Http400, "Bad Request. Content-Length does not match actual.")
+        await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
         return true
   elif request.reqMethod == HttpPost:
-    await request.respond(Http411, "Content-Length required.")
+    await request.resp("Content-Length required.", code = Http411)
     return true
 
   # Call the user's callback.
@@ -184,6 +184,6 @@ when isMainModule:
     echo req.url
     let headers = {"Date": "Tue, 29 Apr 2014 23:40:08 GMT",
         "Content-type": "text/plain; charset=utf-8"}
-    await req.respond(Http200, "Hello World", headers.newHttpHeaders())
+    await req.resp("Hello World", headers.newHttpHeaders())
   let address = initTAddress("127.0.0.1:8888")
   waitFor serve(address,cb)
