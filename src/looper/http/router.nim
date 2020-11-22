@@ -138,7 +138,7 @@ proc printRouteTree*[H](router : Router[H]) =
 #
 # Constructors
 #
-proc newRouter*[H]() : Router[H] =
+proc newRouter*[H](): Router[H] =
   ## Creates a new ``Router`` instance
   result = Router[H](verbTrees:CritBitTree[PatternNode[H]]())
 

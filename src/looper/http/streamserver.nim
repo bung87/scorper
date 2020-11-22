@@ -1,6 +1,7 @@
 import chronos
 import httpcore, urlly
 import mofuparser, parseutils, strutils
+import router
 
 type
   Request* = ref object
@@ -13,9 +14,11 @@ type
     buf: array[1024,char]
 
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
-  Looper = ref object of StreamServer
+  Looper* = ref object of StreamServer
     callback: AsyncCallback
     maxBody: int
+    router: Router[AsyncCallback]
+
 
 proc addHeaders(msg: var string, headers: HttpHeaders) =
   for k, v in headers:
@@ -130,7 +133,12 @@ proc processRequest(
     return true
 
   # Call the user's callback.
-  await looper.callback(request)
+  if looper.callback != nil:
+    await looper.callback(request)
+  elif looper.router != nil:
+    let matched = looper.router.match($request.meth,request.url)
+    if matched.success:
+      await matched.handler(request)
 
   if "upgrade" in request.headers.getOrDefault("connection"):
     return false
@@ -175,15 +183,10 @@ proc serve*(address: TransportAddress,
   pserver.start()
   await pserver.join()
 
-when isMainModule:
-  proc cb(req: Request) {.async.} =
-    echo req.hostname
-    echo req.meth
-    echo req.headers
-    echo req.protocol
-    echo req.url
-    let headers = {"Date": "Tue, 29 Apr 2014 23:40:08 GMT",
-        "Content-type": "text/plain; charset=utf-8"}
-    await req.resp("Hello World", headers.newHttpHeaders())
-  let address = initTAddress("127.0.0.1:8888")
-  waitFor serve(address,cb)
+proc newLooper*(address: TransportAddress, handler:AsyncCallback | Router[AsyncCallback], flags: set[ServerFlags] = {ReuseAddr}): Looper =
+  new result
+  when handler is AsyncCallback:
+    result.callback = handler
+  elif handler is Router[AsyncCallback]:
+    result.router = handler
+  result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
