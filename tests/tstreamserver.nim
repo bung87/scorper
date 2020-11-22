@@ -1,0 +1,140 @@
+discard """
+  cmd: "nim c --threads:on $file"
+  exitcode: 0
+  output: "OK"
+  disabled: false
+"""
+
+import strutils
+from net import TimeoutError
+include ./looper/http/streamserver
+import httpclient
+
+const TestUrl = "http://localhost:64123/foo?bar=qux"
+
+template runTest(
+    handler: proc (request: Request): Future[void] {.gcsafe.},
+    request: proc (server: Looper): Future[AsyncResponse],
+    test: proc (response: AsyncResponse, body: string): Future[void]) =
+
+  let address = initTAddress("127.0.0.1:64123")
+  waitFor serve(address,handler)
+
+  let
+    response = waitFor(request(server))
+    body = waitFor(response.body)
+
+  discard test(response, body)
+
+proc test200() {.async.} =
+  proc handler(request: Request) {.async.} =
+    await request.respond(Http200, "Hello World, 200")
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      clientResponse = await client.request(TestUrl)
+
+    server.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.status == Http200)
+    doAssert(body == "Hello World, 200")
+    doAssert(response.headers.hasKey("Content-Length"))
+    doAssert(response.headers["Content-Length"] == "16")
+
+  runTest(handler, request, test)
+
+proc test404() {.async.} =
+  proc handler(request: Request) {.async.} =
+    await request.respond(Http404, "Hello World, 404")
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      clientResponse = await client.request(TestUrl)
+
+    server.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.status == Http404)
+    doAssert(body == "Hello World, 404")
+    doAssert(response.headers.hasKey("Content-Length"))
+    doAssert(response.headers["Content-Length"] == "16")
+
+  runTest(handler, request, test)
+
+proc testCustomEmptyHeaders() {.async.} =
+  proc handler(request: Request) {.async.} =
+    await request.respond(Http200, "Hello World, 200", newHttpHeaders())
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      clientResponse = await client.request(TestUrl)
+
+    server.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.status == Http200)
+    doAssert(body == "Hello World, 200")
+    doAssert(response.headers.hasKey("Content-Length"))
+    doAssert(response.headers["Content-Length"] == "16")
+
+  runTest(handler, request, test)
+
+proc testCustomContentLength() {.async.} =
+  proc handler(request: Request) {.async.} =
+    let headers = newHttpHeaders()
+    headers["Content-Length"] = "0"
+    await request.respond(Http200, "Hello World, 200", headers)
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      clientResponse = await client.request(TestUrl)
+
+    server.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.status == Http200)
+    doAssert(body == "")
+    doAssert(response.headers.hasKey("Content-Length"))
+    doAssert(response.headers["Content-Length"] == "0")
+
+  runTest(handler, request, test)
+
+proc testPost() {.async.} =
+  proc handler(request: Request) {.async.} =
+    doAssert(request.body == "hello")
+    await request.respond(Http200, "Hello World, 200")
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      clientResponse = await client.post(TestUrl, body = "hello")
+    server.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.status == Http200)
+    doAssert(body == "Hello World, 200")
+
+  runTest(handler, request, test)
+
+waitfor(test200())
+waitfor(test404())
+waitfor(testCustomEmptyHeaders())
+waitfor(testCustomContentLength())
+waitfor(testPost())
+
+echo "OK"
