@@ -173,20 +173,22 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
       transp.close
       break
 
-proc serve*(address: TransportAddress,
+proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr}
             ) {.async.} =
   var looper = Looper()
   looper.callback = callback
+  let address = initTAddress(address)
   let pserver = createStreamServer(address, processClient, flags, child = cast[StreamServer](looper))
   pserver.start()
   await pserver.join()
 
-proc newLooper*(address: TransportAddress, handler:AsyncCallback | Router[AsyncCallback], flags: set[ServerFlags] = {ReuseAddr}): Looper =
+proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback], flags: set[ServerFlags] = {ReuseAddr}): Looper =
   new result
   when handler is AsyncCallback:
     result.callback = handler
   elif handler is Router[AsyncCallback]:
     result.router = handler
+  let address = initTAddress(address)
   result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))

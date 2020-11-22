@@ -14,7 +14,7 @@ when isMainModule:
   
   let r = newRouter[AsyncCallback]()
   r.addRoute(cb, "get","/")
-  let address = initTAddress("127.0.0.1:8888")
+  let address = "127.0.0.1:8888"
   let flags = {ReuseAddr}
   var server = newLooper(address,r,flags)
   server.start()
