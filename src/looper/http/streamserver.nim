@@ -69,7 +69,7 @@ proc processRequest(
   except TransportIncompleteError:
     return true
   # Headers
-  var mfParser = MofuParser()
+  var mfParser = MofuParser(headers:newSeqOfCap[MofuHeader](64))
   let headerEnd = mfParser.parseHeader(addr request.buf[0], request.buf.len)
   case mfParser.getMethod
     of "GET": request.reqMethod = HttpGet

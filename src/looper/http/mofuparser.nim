@@ -161,13 +161,11 @@ const HEADER_VALUE_TOKEN = [
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 ]
 
-const headerSize {.intdefine.} = 64
-
 type
   MofuParser* = ref object
     httpMethod*, path*, minor*: ptr char
     httpMethodLen*, pathLen*, headerLen*: int
-    headers*: array[headerSize, MofuHeader]
+    headers*: seq[MofuHeader]
 
   MofuHeader* = object
     name*, value: ptr char
@@ -208,11 +206,11 @@ template `[]=`[T](p: ptr T, off: int, val: T) =
 
 getCPU()
 
-proc parseHeader(headers: var array[headerSize, MofuHeader], buf: var ptr char, bufLen: int): int =
+proc parseHeader(headers: var seq[MofuHeader], buf: var ptr char, bufLen: int): int =
   var bufStart = buf
   var hdrLen = 0
-
   while true:
+    var header = MofuHeader()
     case buf[]:
       of '\0':
         return -1
@@ -250,8 +248,8 @@ proc parseHeader(headers: var array[headerSize, MofuHeader], buf: var ptr char, 
             if not HEADER_NAME_TOKEN[buf[].int].bool: return -1
           buf += 1
 
-        headers[hdrLen].name = start
-        headers[hdrLen].nameLen = bufEnd - start
+        header.name = start
+        header.nameLen = bufEnd - start
 
         # HEADER VALUE CHECK
         var bufLen = bufLen - (buf - bufStart)
@@ -265,10 +263,10 @@ proc parseHeader(headers: var array[headerSize, MofuHeader], buf: var ptr char, 
               return -1
           buf += 1
 
-        headers[hdrLen].value = start
-        headers[hdrLen].valueLen = buf - start - 1
-
-        hdrLen.inc()
+        header.value = start
+        header.valueLen = buf - start - 1
+        headers.add header
+        inc hdrLen
 
   return hdrLen
 
@@ -485,7 +483,7 @@ proc toHttpHeaders*(mhr: MofuParser): HttpHeaders =
   return hds.newHttpHeaders
 
 when isMainModule:
-  import times
+  import times,httputils
 
   var buf =
     "GET /test HTTP/1.1\r\l" &
@@ -501,15 +499,20 @@ when isMainModule:
     "Cookie: name=mofuparser\r\l" &
     "\r\ltest=hoge"
 
-  var mhreq = MofuParser()
-
   let old = cpuTime()
   for i in 0 .. 100000:
+    var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
     discard mhreq.parseHeader(addr buf[0], buf.len)
   echo "mofuparser:" & $(cpuTime() - old)
-
+  var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
   discard mhreq.parseHeader(addr buf[0], buf.len)
   echo mhreq.getMethod()
   echo mhreq.getPath()
   for name, value in mhreq.headersPair:
     echo name & ": " & value
+
+  var a = cast[seq[char]](buf)
+  let old2 = cpuTime()
+  for i in 0 .. 100000:
+    discard parseRequest(a)
+  echo "httputils:" & $(cpuTime() - old2)
