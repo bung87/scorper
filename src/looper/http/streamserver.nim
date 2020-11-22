@@ -4,7 +4,7 @@ import mofuparser, parseutils, strutils
 
 type
   Request* = ref object
-    reqMethod*: HttpMethod
+    meth*: HttpMethod
     headers*: HttpHeaders
     protocol*: tuple[orig: string, major, minor: int]
     url*: Url
@@ -72,15 +72,15 @@ proc processRequest(
   var mfParser = MofuParser(headers:newSeqOfCap[MofuHeader](64))
   let headerEnd = mfParser.parseHeader(addr request.buf[0], request.buf.len)
   case mfParser.getMethod
-    of "GET": request.reqMethod = HttpGet
-    of "POST": request.reqMethod = HttpPost
-    of "HEAD": request.reqMethod = HttpHead
-    of "PUT": request.reqMethod = HttpPut
-    of "DELETE": request.reqMethod = HttpDelete
-    of "PATCH": request.reqMethod = HttpPatch
-    of "OPTIONS": request.reqMethod = HttpOptions
-    of "CONNECT": request.reqMethod = HttpConnect
-    of "TRACE": request.reqMethod = HttpTrace
+    of "GET": request.meth = HttpGet
+    of "POST": request.meth = HttpPost
+    of "HEAD": request.meth = HttpHead
+    of "PUT": request.meth = HttpPut
+    of "DELETE": request.meth = HttpDelete
+    of "PATCH": request.meth = HttpPatch
+    of "OPTIONS": request.meth = HttpOptions
+    of "CONNECT": request.meth = HttpConnect
+    of "TRACE": request.meth = HttpTrace
   try:
     request.url = parseUrl(mfParser.getPath)
   except ValueError:
@@ -102,7 +102,7 @@ proc processRequest(
     request.transp.close()
     return false
 
-  if request.reqMethod == HttpPost:
+  if request.meth == HttpPost:
     # Check for Expect header
     if request.headers.hasKey("Expect"):
       if "100-continue" in request.headers["Expect"]:
@@ -125,7 +125,7 @@ proc processRequest(
       if request.buf.len != contentLength:
         await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
         return true
-  elif request.reqMethod == HttpPost:
+  elif request.meth == HttpPost:
     await request.resp("Content-Length required.", code = Http411)
     return true
 
@@ -178,7 +178,7 @@ proc serve*(address: TransportAddress,
 when isMainModule:
   proc cb(req: Request) {.async.} =
     echo req.hostname
-    echo req.reqMethod
+    echo req.meth
     echo req.headers
     echo req.protocol
     echo req.url
