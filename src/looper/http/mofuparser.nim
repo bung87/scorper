@@ -164,16 +164,16 @@ const HEADER_VALUE_TOKEN = [
 const headerSize {.intdefine.} = 64
 
 type
-  MPHTTPReq* = ref object
+  MofuParser* = ref object
     httpMethod*, path*, minor*: ptr char
     httpMethodLen*, pathLen*, headerLen*: int
-    headers*: array[headerSize, MPHeader]
+    headers*: array[headerSize, MofuHeader]
 
-  MPHeader* = object
+  MofuHeader* = object
     name*, value: ptr char
     nameLen*, valueLen*: int
 
-  MPChunk* = ref object
+  MofuChunk* = ref object
     state: ChunkState
     byteLeftChunk, hexCount, consume: int
 
@@ -208,7 +208,7 @@ template `[]=`[T](p: ptr T, off: int, val: T) =
 
 getCPU()
 
-proc mpParseHeader(headers: var array[headerSize, MPHeader], buf: var ptr char, bufLen: int): int =
+proc parseHeader(headers: var array[headerSize, MofuHeader], buf: var ptr char, bufLen: int): int =
   var bufStart = buf
   var hdrLen = 0
 
@@ -272,7 +272,7 @@ proc mpParseHeader(headers: var array[headerSize, MPHeader], buf: var ptr char, 
 
   return hdrLen
 
-proc mpParseRequest*(mhr: MPHTTPReq, req: ptr char, reqLen: int): int =
+proc parseHeader*(mhr: MofuParser, req: ptr char, reqLen: int): int =
   # argment initialization
   mhr.httpMethod = nil
   mhr.path = nil
@@ -342,7 +342,7 @@ proc mpParseRequest*(mhr: MPHTTPReq, req: ptr char, reqLen: int): int =
 
   # PARSE HEADER
   bufLen = bufLen - (buf - req)
-  let hdrLen = mhr.headers.mpParseHeader(buf, bufLen)
+  let hdrLen = mhr.headers.parseHeader(buf, bufLen)
 
   if hdrLen != -1:
     mhr.headerLen = hdrLen
@@ -361,7 +361,7 @@ template decodeHex(ch: char): int =
     ch.int - 'a'.int + '\x0a'.int
   else: -1
 
-proc mpParseChunk*(mc: MPChunk, buf: ptr char, bSize: var int): int =
+proc parseChunk*(mc: MofuChunk, buf: ptr char, bSize: var int): int =
   var dest, src: int
   var bufSize = bSize
   var ret = -2
@@ -458,25 +458,25 @@ proc mpParseChunk*(mc: MPChunk, buf: ptr char, bSize: var int): int =
   complete()
   chunkExit()
 
-proc getMethod*(req: MPHTTPReq): string {.inline.} =
+proc getMethod*(req: MofuParser): string {.inline.} =
   result = ($(req.httpMethod))[0 .. req.httpMethodLen]
 
-proc getPath*(req: MPHTTPReq): string {.inline.} =
+proc getPath*(req: MofuParser): string {.inline.} =
   result = ($(req.path))[0 .. req.pathLen]
 
-proc getHeader*(req: MPHTTPReq, name: string): string {.inline.} =
+proc getHeader*(req: MofuParser, name: string): string {.inline.} =
   for i in 0 ..< req.headerLen:
     if ($(req.headers[i].name))[0 .. req.headers[i].namelen] == name:
       result = ($(req.headers[i].value))[0 .. req.headers[i].valuelen]
       return
   result = ""
 
-iterator headersPair*(req: MPHTTPReq): tuple[name, value: string] =
+iterator headersPair*(req: MofuParser): tuple[name, value: string] =
   for i in 0 ..< req.headerLen:
     yield (($(req.headers[i].name))[0 .. req.headers[i].namelen],
            ($(req.headers[i].value))[0 .. req.headers[i].valuelen])
 
-proc toHttpHeaders*(mhr: MPHTTPReq): HttpHeaders =
+proc toHttpHeaders*(mhr: MofuParser): HttpHeaders =
   var hds: seq[tuple[key: string, val: string]] = @[]
 
   for hd in mhr.headersPair:
@@ -501,14 +501,14 @@ when isMainModule:
     "Cookie: name=mofuparser\r\l" &
     "\r\ltest=hoge"
 
-  var mhreq = MPHTTPReq()
+  var mhreq = MofuParser()
 
   let old = cpuTime()
   for i in 0 .. 100000:
-    discard mhreq.mpParseRequest(addr buf[0], buf.len)
+    discard mhreq.parseHeader(addr buf[0], buf.len)
   echo "mofuparser:" & $(cpuTime() - old)
 
-  discard mhreq.mpParseRequest(addr buf[0], buf.len)
+  discard mhreq.parseHeader(addr buf[0], buf.len)
   echo mhreq.getMethod()
   echo mhreq.getPath()
   for name, value in mhreq.headersPair:

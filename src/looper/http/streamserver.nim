@@ -69,9 +69,9 @@ proc processRequest(
   except TransportIncompleteError:
     return true
   # Headers
-  var mhreq = MPHTTPReq()
-  let headerEnd = mhreq.mpParseRequest(addr request.buf[0], request.buf.len)
-  case mhreq.getMethod
+  var mfParser = MofuParser()
+  let headerEnd = mfParser.parseHeader(addr request.buf[0], request.buf.len)
+  case mfParser.getMethod
     of "GET": request.reqMethod = HttpGet
     of "POST": request.reqMethod = HttpPost
     of "HEAD": request.reqMethod = HttpHead
@@ -82,11 +82,11 @@ proc processRequest(
     of "CONNECT": request.reqMethod = HttpConnect
     of "TRACE": request.reqMethod = HttpTrace
   try:
-    request.url = parseUrl(mhreq.getPath)
+    request.url = parseUrl(mfParser.getPath)
   except ValueError:
     asyncCheck request.respondError(Http400)
     return true
-  case mhreq.minor[]:
+  case mfParser.minor[]:
     of '0': 
       request.protocol.major = 1
       request.protocol.minor = 0
@@ -95,7 +95,7 @@ proc processRequest(
       request.protocol.minor = 1
     else:
       discard
-  request.headers = mhreq.toHttpHeaders
+  request.headers = mfParser.toHttpHeaders
   # Ensure the client isn't trying to DoS us.
   if request.headers.len > headerLimit:
     await request.transp.sendStatus("400 Bad Request")
