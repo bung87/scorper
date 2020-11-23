@@ -125,9 +125,9 @@ proc processRequest(
         await request.respError(code = Http413)
         return false
       await request.transp.readExactly(addr request.buf[count],contentLength)
-      if request.buf.len != contentLength:
-        await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
-        return true
+      # if request.buf.len + headerEnd != contentLength:
+      #   await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+      #   return true
   elif request.meth == HttpPost:
     await request.resp("Content-Length required.", code = Http411)
     return true
@@ -192,3 +192,6 @@ proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback], 
     result.router = handler
   let address = initTAddress(address)
   result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
+
+proc isClosed*(server:Looper):bool =
+  server.status = ServerStatus.Closed

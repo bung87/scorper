@@ -8,34 +8,37 @@ discard """
 import strutils
 from net import TimeoutError
 include ./looper/http/streamserver
-import httpclient
+include ./looper/http/streamclient
 
-const TestUrl = "http://localhost:64123/foo?bar=qux"
+const TestUrl = "http://127.0.0.1:64123/foo?bar=qux"
 
-template runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
+proc runTest(
+    handler: proc (request: Request): Future[void] {.closure, gcsafe.},
     request: proc (server: Looper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
+    test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
 
-  let address = initTAddress("127.0.0.1:64123")
-  waitFor serve(address,handler)
-
+  let address = "127.0.0.1:64123"
+  let a = initTAddress(address)
+  let flags = {ReuseAddr}
+  var server = newLooper(address, handler, flags)
+  server.start()
   let
     response = waitFor(request(server))
-    body = waitFor(response.body)
+    body = waitFor(response.readBody())
 
-  discard test(response, body)
+  waitFor test(response, body)
+  server.stop()
+  server.close()
 
 proc test200() {.async.} =
   proc handler(request: Request) {.async.} =
-    await request.respond(Http200, "Hello World, 200")
+    await request.resp("Hello World, 200")
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-
-    server.close()
+    client.close()
 
     return clientResponse
 
@@ -45,17 +48,17 @@ proc test200() {.async.} =
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 proc test404() {.async.} =
   proc handler(request: Request) {.async.} =
-    await request.respond(Http404, "Hello World, 404")
+    await request.resp( "Hello World, 404",code = Http404)
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-
+    client.close()
     server.close()
 
     return clientResponse
@@ -66,17 +69,17 @@ proc test404() {.async.} =
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 proc testCustomEmptyHeaders() {.async.} =
   proc handler(request: Request) {.async.} =
-    await request.respond(Http200, "Hello World, 200", newHttpHeaders())
+    await request.resp( "Hello World, 200", newHttpHeaders())
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-
+    client.close()
     server.close()
 
     return clientResponse
@@ -87,19 +90,19 @@ proc testCustomEmptyHeaders() {.async.} =
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 proc testCustomContentLength() {.async.} =
   proc handler(request: Request) {.async.} =
     let headers = newHttpHeaders()
     headers["Content-Length"] = "0"
-    await request.respond(Http200, "Hello World, 200", headers)
+    await request.resp( "Hello World, 200", headers)
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-
+    client.close()
     server.close()
 
     return clientResponse
@@ -110,26 +113,26 @@ proc testCustomContentLength() {.async.} =
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "0")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 proc testPost() {.async.} =
   proc handler(request: Request) {.async.} =
-    doAssert(request.body == "hello")
-    await request.respond(Http200, "Hello World, 200")
+    # doAssert(request.body == "hello")
+    await request.resp("Hello World, 200")
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.post(TestUrl, body = "hello")
+    client.close()
     server.close()
-
     return clientResponse
 
   proc test(response: AsyncResponse, body: string) {.async.} =
     doAssert(response.status == Http200)
     doAssert(body == "Hello World, 200")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 waitfor(test200())
 waitfor(test404())
