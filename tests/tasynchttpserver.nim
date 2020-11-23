@@ -1,5 +1,5 @@
 discard """
-  cmd: "nim c --threads:on $file"
+  cmd: "nim c --threads:on -d:danger -d:release $file"
   exitcode: 0
   output: "OK"
   disabled: false
