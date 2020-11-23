@@ -70,7 +70,7 @@ type
 
   MultipartEntries* = openArray[tuple[name, content: string]]
   MultipartData* = ref object
-    content: seq[MultipartEntry]
+    entries: seq[MultipartEntry]
 
   ProtocolError* = object of IOError ## exception that is raised when server
                                      ## does not conform to the implemented
@@ -118,7 +118,7 @@ proc `$`*(data: MultipartData): string =
   ## convert MultipartData to string so it's human readable when echo
   ## see https://github.com/nim-lang/Nim/issues/11863
   const sep = "-".repeat(30)
-  for pos, entry in data.content:
+  for pos, entry in data.entries:
     result.add(sep & center($pos, 3) & sep)
     result.add("\nname=\"" & entry.name & "\"")
     if entry.isFile:
@@ -152,7 +152,7 @@ proc add*(p: MultipartData, name, content: string, filename: string = "",
     entry.filename = filename
     entry.contentType = contentType
 
-  p.content.add(entry)
+  p.entries.add(entry)
 
 proc add*(p: MultipartData, xs: MultipartEntries): MultipartData
          {.discardable.} =
@@ -215,12 +215,12 @@ proc `[]=`*(p: MultipartData, name: string,
   p.add(name, file.content, file.name, file.contentType, useStream = false)
 
 proc getBoundary(p: MultipartData): string =
-  if p == nil or p.content.len == 0: return
+  if p == nil or p.entries.len == 0: return
   while true:
     result = $rand(int.high)
-    for i, entry in p.content:
+    for i, entry in p.entries:
       if result in entry.content: break
-      elif i == p.content.high: return
+      elif i == p.entries.high: return
 
 proc sendFile(socket: Socket | AsyncSocket,
               entry: MultipartEntry) {.async.} =
@@ -633,7 +633,7 @@ proc newConnection(client: AsyncHttpClient,
 
 proc readFileSizes(client: AsyncHttpClient,
                    multipart: MultipartData) {.async.} =
-  for entry in multipart.content.mitems():
+  for entry in multipart.entries.mitems():
     if not entry.isFile: continue
     if not entry.isStream:
       entry.fileSize = entry.content.len
@@ -660,7 +660,7 @@ proc format(client: AsyncHttpClient,
   await client.readFileSizes(multipart)
 
   var length: int64
-  for entry in multipart.content:
+  for entry in multipart.entries:
     result.add(format(entry, bound) & httpNewLine)
     if entry.isFile:
       length += entry.fileSize + httpNewLine.len
@@ -691,7 +691,7 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
     raise newException(ValueError, "No uri scheme supplied.")
 
   var data: seq[string]
-  if multipart != nil and multipart.content.len > 0:
+  if multipart != nil and multipart.entries.len > 0:
     data = await client.format(multipart)
   else:
     client.headers["Content-Length"] = $body.len
@@ -713,7 +713,7 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
 
   if data.len > 0:
     var buffer: string
-    for i, entry in multipart.content:
+    for i, entry in multipart.entries:
       buffer.add data[i]
       if not entry.isFile: continue
       if buffer.len > 0:
