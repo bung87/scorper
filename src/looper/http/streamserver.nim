@@ -75,6 +75,7 @@ proc processRequest(
     return true
   # Headers
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
+  request.headers = request.httpParser.toHttpHeaders
   case request.httpParser.getMethod
     of "GET": request.meth = HttpGet
     of "POST": request.meth = HttpPost
@@ -86,7 +87,7 @@ proc processRequest(
     of "CONNECT": request.meth = HttpConnect
     of "TRACE": request.meth = HttpTrace
   try:
-    request.url = parseUrl(request.httpParser.getPath)
+    request.url = parseUrl("http://" & request.hostname & request.httpParser.getPath)
   except ValueError:
     asyncCheck request.respError(Http400)
     return true
@@ -99,7 +100,6 @@ proc processRequest(
       request.protocol.minor = 1
     else:
       discard
-  request.headers = request.httpParser.toHttpHeaders
   # Ensure the client isn't trying to DoS us.
   if request.headers.len > headerLimit:
     await request.transp.sendStatus("400 Bad Request")
@@ -125,10 +125,11 @@ proc processRequest(
       if contentLength > looper.maxBody:
         await request.respError(code = Http413)
         return false
-      await request.transp.readExactly(addr request.buf[count],contentLength)
-      # if request.buf.len + headerEnd != contentLength:
-      #   await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
-      #   return true
+      try:
+        await request.transp.readExactly(addr request.buf[count],contentLength)
+      except AsyncStreamIncompleteError:
+        await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+        return true
   elif request.meth == HttpPost:
     await request.resp("Content-Length required.", code = Http411)
     return true
