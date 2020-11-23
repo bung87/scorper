@@ -3,10 +3,13 @@ import httpcore, urlly
 import mofuparser, parseutils, strutils
 import router
 import netunit
+import options
+
+const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
 type
   Request* = ref object
-    meth*: HttpMethod
+    meth*: Option[HttpMethod]
     headers*: HttpHeaders
     protocol*: tuple[orig: string, major, minor: int]
     url*: Url
@@ -78,15 +81,18 @@ proc processRequest(
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
   request.headers = request.httpParser.toHttpHeaders
   case request.httpParser.getMethod
-    of "GET": request.meth = HttpGet
-    of "POST": request.meth = HttpPost
-    of "HEAD": request.meth = HttpHead
-    of "PUT": request.meth = HttpPut
-    of "DELETE": request.meth = HttpDelete
-    of "PATCH": request.meth = HttpPatch
-    of "OPTIONS": request.meth = HttpOptions
-    of "CONNECT": request.meth = HttpConnect
-    of "TRACE": request.meth = HttpTrace
+    of "GET": request.meth = some HttpGet
+    of "POST": request.meth = some HttpPost
+    of "HEAD": request.meth = some HttpHead
+    of "PUT": request.meth = some HttpPut
+    of "DELETE": request.meth = some HttpDelete
+    of "PATCH": request.meth = some HttpPatch
+    of "OPTIONS": request.meth = some HttpOptions
+    of "CONNECT": request.meth = some HttpConnect
+    of "TRACE": request.meth = some HttpTrace
+  if request.meth.isNone():
+    await request.respError(Http501)
+    return true
   try:
     request.url = parseUrl("http://" & request.hostname & request.httpParser.getPath)
   except ValueError:
@@ -107,7 +113,7 @@ proc processRequest(
     request.transp.close()
     return false
 
-  if request.meth == HttpPost:
+  if request.meth.get == HttpPost:
     # Check for Expect header
     if request.headers.hasKey("Expect"):
       if "100-continue" in request.headers["Expect"]:
@@ -117,23 +123,24 @@ proc processRequest(
 
   # Read the body
   # - Check for Content-length header
-  if request.headers.hasKey("Content-Length"):
-    var contentLength = 0
-    if parseSaturatedNatural(request.headers["Content-Length"], contentLength) == 0:
-      await request.resp("Bad Request. Invalid Content-Length.", code = Http400 )
-      return true
-    else:
-      if contentLength > looper.maxBody:
-        await request.respError(code = Http413)
-        return false
-      try:
-        await request.transp.readExactly(addr request.buf[count],contentLength)
-      except AsyncStreamIncompleteError:
-        await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+  if unlikely(request.meth.get in MethodNeedsBody):
+    if request.headers.hasKey("Content-Length"):
+      var contentLength = 0
+      if parseSaturatedNatural(request.headers["Content-Length"], contentLength) == 0:
+        await request.resp("Bad Request. Invalid Content-Length.", code = Http400 )
         return true
-  elif request.meth == HttpPost:
-    await request.resp("Content-Length required.", code = Http411)
-    return true
+      else:
+        if contentLength > looper.maxBody:
+          await request.respError(code = Http413)
+          return false
+        try:
+          await request.transp.readExactly(addr request.buf[count],contentLength)
+        except AsyncStreamIncompleteError:
+          await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+          return true
+    else:
+      await request.resp("Content-Length required.", code = Http411)
+      return true
 
   # Call the user's callback.
   if looper.callback != nil:
