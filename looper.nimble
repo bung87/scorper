@@ -13,4 +13,4 @@ requires "nim >= 1.5.1"
 requires "https://github.com/status-im/nim-chronos.git"
 
 task test, "Runs the test suite":
-  exec "testament --megatest:off pattern 'tests/*.nim' "
+  exec "testament --megatest:off pattern 'tests/*.nim'"
