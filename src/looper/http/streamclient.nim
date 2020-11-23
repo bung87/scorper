@@ -1,5 +1,5 @@
 import net, strutils, urlly, parseutils, base64, os, streams,
-  math,  httpcore, times, tables, streams, std/monotimes
+  math, random, httpcore, times, tables, streams, std/monotimes
 import asyncnet, chronos, ./futurestream , asyncresponse , httpform
 import nativesockets
 export asyncresponse
@@ -459,7 +459,13 @@ proc readFileSizes(client: AsyncHttpClient,
     let fileSize = getFileSize(entry.content)
     entry.fileSize = fileSize
 
-
+proc getBoundary(p: MultipartData): string =
+  if p == nil or p.entries.len == 0: return
+  while true:
+    result = $rand(int.high)
+    for i, entry in p.entries:
+      if result in entry.content: break
+      elif i == p.entries.high: return
 
 proc format(client: AsyncHttpClient,
             multipart: MultipartData): Future[seq[string]] {.async.} =

@@ -1,5 +1,5 @@
 
-import mimetypes, os, strutils, random, httpcore
+import mimetypes, os, strutils, httpcore
 type
   MultipartEntry* = object
     name*, content*: string
@@ -126,13 +126,6 @@ proc `[]=`*(p: MultipartData, name: string,
   ##     "<html><head></head><body><p>test</p></body></html>")
   p.add(name, file.content, file.name, file.contentType, useStream = false)
 
-proc getBoundary*(p: MultipartData): string =
-  if p == nil or p.entries.len == 0: return
-  while true:
-    result = $rand(int.high)
-    for i, entry in p.entries:
-      if result in entry.content: break
-      elif i == p.entries.high: return
 
 proc format*(entry: MultipartEntry, boundary: string): string =
   result = "--" & boundary & httpNewLine
