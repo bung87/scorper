@@ -12,7 +12,8 @@ type
     hostname*: string
     transp: StreamTransport
     buf: array[1024,char]
-
+    httpParser: MofuParser
+    
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
     callback: AsyncCallback
@@ -63,6 +64,7 @@ proc processRequest(
 ): Future[bool] {.async.} =
 
   request.headers.clear()
+  zeroMem(request.httpParser.headers.addr, request.httpParser.headers.len)
   request.hostname = $request.transp.localAddress
   # receivce untill http header end
   const HeaderSep = @[byte('\c'),byte('\L'),byte('\c'),byte('\L')]
@@ -72,9 +74,8 @@ proc processRequest(
   except TransportIncompleteError:
     return true
   # Headers
-  var mfParser = MofuParser(headers:newSeqOfCap[MofuHeader](64))
-  let headerEnd = mfParser.parseHeader(addr request.buf[0], request.buf.len)
-  case mfParser.getMethod
+  let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
+  case request.httpParser.getMethod
     of "GET": request.meth = HttpGet
     of "POST": request.meth = HttpPost
     of "HEAD": request.meth = HttpHead
@@ -85,11 +86,11 @@ proc processRequest(
     of "CONNECT": request.meth = HttpConnect
     of "TRACE": request.meth = HttpTrace
   try:
-    request.url = parseUrl(mfParser.getPath)
+    request.url = parseUrl(request.httpParser.getPath)
   except ValueError:
     asyncCheck request.respError(Http400)
     return true
-  case mfParser.minor[]:
+  case request.httpParser.minor[]:
     of '0': 
       request.protocol.major = 1
       request.protocol.minor = 0
@@ -98,7 +99,7 @@ proc processRequest(
       request.protocol.minor = 1
     else:
       discard
-  request.headers = mfParser.toHttpHeaders
+  request.headers = request.httpParser.toHttpHeaders
   # Ensure the client isn't trying to DoS us.
   if request.headers.len > headerLimit:
     await request.transp.sendStatus("400 Bad Request")
@@ -165,6 +166,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var req = Request()
   req.headers = newHttpHeaders()
   req.transp = transp
+  req.httpParser = MofuParser(headers: newSeqOfCap[MofuHeader](64))
   while not transp.atEof():
     let retry = await processRequest(
       looper, req
@@ -175,21 +177,27 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
 
 proc serve*(address: string,
             callback: AsyncCallback,
-            flags: set[ServerFlags] = {ReuseAddr}
+            flags: set[ServerFlags] = {ReuseAddr},
+            maxBody = 8388608
             ) {.async.} =
-  var looper = Looper()
-  looper.callback = callback
+  var server = Looper()
+  server.callback = callback
+  server.maxBody = maxBody
   let address = initTAddress(address)
-  let pserver = createStreamServer(address, processClient, flags, child = cast[StreamServer](looper))
-  pserver.start()
-  await pserver.join()
+  server = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
+  server.start()
+  await server.join()
 
-proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback], flags: set[ServerFlags] = {ReuseAddr}): Looper =
+proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
+                flags: set[ServerFlags] = {ReuseAddr},
+                maxBody = 8388608
+                ): Looper =
   new result
   when handler is AsyncCallback:
     result.callback = handler
   elif handler is Router[AsyncCallback]:
     result.router = handler
+  result.maxBody = maxBody
   let address = initTAddress(address)
   result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
 
