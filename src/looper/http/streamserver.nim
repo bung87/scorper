@@ -2,6 +2,7 @@ import chronos
 import httpcore, urlly
 import mofuparser, parseutils, strutils
 import router
+import netunit
 
 type
   Request* = ref object
@@ -179,7 +180,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
 proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
-            maxBody = 8388608
+            maxBody = 8.Mb
             ) {.async.} =
   var server = Looper()
   server.callback = callback
@@ -191,7 +192,7 @@ proc serve*(address: string,
 
 proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
-                maxBody = 8388608
+                maxBody = 8.Mb
                 ): Looper =
   new result
   when handler is AsyncCallback:
