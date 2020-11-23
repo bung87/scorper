@@ -163,7 +163,7 @@ const HEADER_VALUE_TOKEN = [
 
 type
   MofuParser* = ref object
-    httpMethod*, path*, minor*: ptr char
+    httpMethod*, path*,major*, minor*: ptr char
     httpMethodLen*, pathLen*, headerLen*: int
     headers*: seq[MofuHeader]
 
@@ -325,7 +325,7 @@ proc parseHeader*(mhr: MofuParser, req: ptr char, reqLen: int): int =
   buf += 1
   if buf[] != '/': return -1
   buf += 1
-  if buf[] != '1': return -1
+  mhr.major = buf
   buf += 1
   if buf[] != '.': return -1
   buf += 1

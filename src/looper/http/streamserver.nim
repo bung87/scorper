@@ -98,12 +98,17 @@ proc processRequest(
   except ValueError:
     asyncCheck request.respError(Http400)
     return true
-  case request.httpParser.minor[]:
-    of '0': 
-      request.protocol.major = 1
-      request.protocol.minor = 0
+  case request.httpParser.major[]:
     of '1':
       request.protocol.major = 1
+    of '2':
+      request.protocol.major = 2
+    else:
+      discard
+  case request.httpParser.minor[]:
+    of '0': 
+      request.protocol.minor = 0
+    of '1':
       request.protocol.minor = 1
     else:
       discard
