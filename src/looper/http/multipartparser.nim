@@ -115,7 +115,6 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
       of beginTok:
         parser.skipBeginTok
         parser.state = disposition 
-        continue
       of disposition:
         # skip Content-Disposition:
         parser.skipContentDispositionFlag
