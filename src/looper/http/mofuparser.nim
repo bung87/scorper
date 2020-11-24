@@ -504,15 +504,17 @@ when isMainModule:
     var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
     discard mhreq.parseHeader(addr buf[0], buf.len)
   echo "mofuparser:" & $(cpuTime() - old)
-  var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
-  discard mhreq.parseHeader(addr buf[0], buf.len)
-  echo mhreq.getMethod()
-  echo mhreq.getPath()
-  for name, value in mhreq.headersPair:
-    echo name & ": " & value
 
   var a = cast[seq[char]](buf)
   let old2 = cpuTime()
   for i in 0 .. 100000:
     discard parseRequest(a)
   echo "httputils:" & $(cpuTime() - old2)
+
+  var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
+
+  var pdata = "POST /foo HTTP/1.1\r\n" &
+    "Content-Length: 68137\r\n" &
+    "Content-Type: multipart/form-data; boundary=--AaB03x\r\n\r\n" 
+  discard mhreq.parseHeader(addr pdata[0], pdata.len)
+  echo mhreq.toHttpHeaders()

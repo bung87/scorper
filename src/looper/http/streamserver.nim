@@ -4,6 +4,7 @@ import mofuparser, parseutils, strutils
 import router
 import netunit
 import options
+import json
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -24,6 +25,27 @@ type
     maxBody: int
     router: Router[AsyncCallback]
 
+proc `$`*(r: Request): string =
+  var j = newJObject()
+  j["url"] = % $r.url
+  j["method"] = % $r.meth.get
+  j["hostname"] = % r.hostname
+  j["headers"] = %* r.headers.table
+  result = $j
+
+proc parseBody(request: Request) =
+  let contentType:string = request.headers["Content-Type"]
+  let ct = contentType.toLowerAscii
+  case ct:
+    of "application/json": 
+      discard
+    of "application/x-www-form-urlencoded":
+      discard
+    of "text/plain":
+      discard
+    else:
+      # "application/octet-stream"
+      discard
 
 proc addHeaders(msg: var string, headers: HttpHeaders) =
   for k, v in headers:
@@ -138,6 +160,8 @@ proc processRequest(
         if contentLength > looper.maxBody:
           await request.respError(code = Http413)
           return false
+        echo count
+        echo repr request.buf
         try:
           await request.transp.readExactly(addr request.buf[count],contentLength)
         except AsyncStreamIncompleteError:

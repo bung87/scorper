@@ -28,7 +28,6 @@ proc newMultipartData*: MultipartData {.inline.} =
 
 proc `$`*(data: MultipartData): string =
   ## convert MultipartData to string so it's human readable when echo
-  ## see https://github.com/nim-lang/Nim/issues/11863
   const sep = "-".repeat(30)
   for pos, entry in data.entries:
     result.add(sep & center($pos, 3) & sep)

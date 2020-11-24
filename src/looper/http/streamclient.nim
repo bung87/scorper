@@ -46,15 +46,11 @@ proc newProxy*(url: string, auth = ""): Proxy =
 proc sendFile(socket: Socket | AsyncSocket,
               entry: MultipartEntry) {.async.} =
   const chunkSize = 2^18
-  let file =
-    when socket is AsyncSocket: openAsync(entry.content)
-    else: newFileStream(entry.content, fmRead)
-
+  let file = openAsync(entry.content)
   var buffer: string
   while true:
-    buffer =
-      when socket is AsyncSocket: (await read(file, chunkSize)).string
-      else: readStr(file, chunkSize).string
+    buffer = (await read(file, chunkSize)).string
+      
     if buffer.len == 0: break
     await socket.send(buffer)
   file.close()
