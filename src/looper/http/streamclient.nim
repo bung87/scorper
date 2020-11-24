@@ -42,19 +42,6 @@ proc newProxy*(url: string, auth = ""): Proxy =
   ## Constructs a new ``TProxy`` object.
   result = Proxy(url: parseUrl(url), auth: auth)
 
-
-proc sendFile(socket: Socket | AsyncSocket,
-              entry: MultipartEntry) {.async.} =
-  const chunkSize = 2^18
-  let file = openAsync(entry.content)
-  var buffer: string
-  while true:
-    buffer = (await read(file, chunkSize)).string
-      
-    if buffer.len == 0: break
-    await socket.send(buffer)
-  file.close()
-
 proc redirection(status: string): bool =
   const redirectionNRs = ["301", "302", "303", "307", "308"]
   for i in items(redirectionNRs):
@@ -513,7 +500,6 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
     client.parseBodyFut = nil
 
   await newConnection(client, requestUrl)
-
   let newHeaders = client.headers.override(headers)
   if not newHeaders.hasKey("user-agent") and client.userAgent.len > 0:
     newHeaders["User-Agent"] = client.userAgent
