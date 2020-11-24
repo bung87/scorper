@@ -84,21 +84,20 @@ proc form*(request: Request): Future[Form] {.async.} =
       if request.contentType.len > 0 and request.contentType.find("multipart/form-data;") != -1:
         let (index,boundary) = parseBoundary(request.contentType)
         zeroMem(request.buf[0].addr, request.buf.len)
-        var i = 0
         var parser = newMultipartParser(boundary)
         var read = 0
-        while i < request.contentLength:
+        while read < request.contentLength:
           var needRead = min(request.buf.len, request.contentLength - read)
           try:
-            await request.transp.readExactly(addr request.buf[i], needRead)
+            await request.transp.readExactly(addr request.buf[0], needRead)
           except AsyncStreamIncompleteError:
             await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
           var a = request.buf[0].addr
           parser.parse(a, needRead, result)
-          
-          inc i, request.buf.len
-          inc read, needRead
+          read = read + needRead
           zeroMem(request.buf[0].addr, request.buf.len)
+          if parser.state == endTok:
+            break
       else:
         return result
 

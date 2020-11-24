@@ -1,14 +1,15 @@
 
 import httpform
-type MultipartState = enum
-        beginTok, endTok, disposition, content
-type MultipartParser* = ref object
-  beginTok, endTok: string
-  beginTokLen, endTokLen: int
-  state: MultipartState
-  dispositionIndex:int
-  index:int
-  buf: ptr char
+type 
+  MultipartState* = enum
+    beginTok, endTok, disposition, content
+  MultipartParser* = ref object
+    beginTok, endTok: string
+    beginTokLen, endTokLen: int
+    state*: MultipartState
+    dispositionIndex:int
+    index:int
+    buf: ptr char
 
 template `+`[T](p: ptr T, off: int): ptr T =
     cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
@@ -45,15 +46,15 @@ proc skipWhiteSpace(parser:MultipartParser) =
     inc parser.index
     parser.buf += 1
 
-proc isBegin(parser:MultipartParser):bool =
+proc isBegin(parser:MultipartParser):bool{.inline.} =
   result = true
-  for i in 0 ..< parser.beginTokLen:
+  for i in 0 ..< parser.beginTokLen - 2 :
     if (parser.buf + i)[] != parser.beginTok[i]:
       return false
 
-proc isEnd(parser:MultipartParser):bool =
+proc isEnd(parser:MultipartParser):bool {.inline.}=
   result = true
-  for i in 0 ..< parser.endTokLen:
+  for i in 0 ..< parser.endTokLen - 2:
     if (parser.buf + i)[] != parser.endTok[i]:
       return false
 
@@ -96,8 +97,9 @@ proc getFileName(parser:MultipartParser):string =
   parser.buf += 1
 
 proc skipLineEnd(parser:MultipartParser) =
-  inc parser.index,2
-  parser.buf += 2
+  if parser.buf[] == '\c' and (parser.buf + 1)[] == '\l':
+    inc parser.index,2
+    parser.buf += 2
 
 proc skipBeginTok(parser:MultipartParser) =
   parser.index.inc parser.beginTokLen
@@ -106,6 +108,35 @@ proc skipBeginTok(parser:MultipartParser) =
 proc skipEndTok(parser:MultipartParser) =
   parser.index.inc parser.endTokLen
   parser.buf += parser.endTokLen
+
+proc parseParam(parser:MultipartParser){.inline.} =
+  var name:string
+  while parser.buf[] != ':':
+    name.add parser.buf[]
+    parser.buf += 1
+  parser.buf += 1
+  echo "param name:" & name
+  parser.skipWhiteSpace
+  var value:string
+  if parser.buf[] == '"':
+    parser.buf += 1
+    while parser.buf[] != '"':
+      value.add parser.buf[]
+      parser.buf += 1
+    parser.buf += 1
+  else:
+    while parser.buf[] != '\c' and (parser.buf + 1)[] != '\l' and parser.buf[] != ';':
+      if parser.buf[] == '"':
+        parser.buf += 1
+        while parser.buf[] != '"':
+          value.add parser.buf[]
+          parser.buf += 1
+        parser.buf += 1
+      else:
+        value.add parser.buf[]
+        parser.buf += 1
+  echo "value:" & value
+  parser.skipLineEnd
 
 proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
   parser.index = 0
@@ -135,11 +166,9 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
           # content followed
         else:
           # extro meta data
-          discard
-          # var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
-          # let hdrLen = mhreq.headers.parseHeader(parser.buf, 1024)
-          # inc parser.index, hdrLen
-          # parser.skipLineEnd
+          parser.parseParam()
+          parser.skipLineEnd
+          parser.state = content
       of content:
         var content:string
         while true:
@@ -147,14 +176,15 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
             parser.state = endTok
             break
           elif parser.isBegin:
-            parser.skipLineEnd
             parser.state = beginTok
             break
+          elif parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
+            parser.skipLineEnd
+            # go to beginTok or endTok
           else:
             content.add parser.buf[]
             parser.buf += 1
-        parser.skipLineEnd
-        echo "content:",content
+        echo "content:", repr content
       of endTok:
         parser.skipEndTok
         break

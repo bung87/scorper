@@ -206,7 +206,7 @@ template `[]=`[T](p: ptr T, off: int, val: T) =
 
 getCPU()
 
-proc parseHeader(headers: var seq[MofuHeader], buf: var ptr char, bufLen: int): int =
+proc parseHeader*(headers: var seq[MofuHeader], buf: var ptr char, bufLen: int): int =
   var bufStart = buf
   var hdrLen = 0
   while true:
