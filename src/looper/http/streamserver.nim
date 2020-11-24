@@ -5,6 +5,8 @@ import router
 import netunit
 import options
 import json
+import ./multipartparser
+import ./httpform
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -18,12 +20,15 @@ type
     transp: StreamTransport
     buf: array[1024,char]
     httpParser: MofuParser
+    contentLength: int
+    contentType: string
     
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
     callback: AsyncCallback
     maxBody: int
     router: Router[AsyncCallback]
+
 
 proc `$`*(r: Request): string =
   var j = newJObject()
@@ -32,20 +37,6 @@ proc `$`*(r: Request): string =
   j["hostname"] = % r.hostname
   j["headers"] = %* r.headers.table
   result = $j
-
-proc parseBody(request: Request) =
-  let contentType:string = request.headers["Content-Type"]
-  let ct = contentType.toLowerAscii
-  case ct:
-    of "application/json": 
-      discard
-    of "application/x-www-form-urlencoded":
-      discard
-    of "text/plain":
-      discard
-    else:
-      # "application/octet-stream"
-      discard
 
 proc addHeaders(msg: var string, headers: HttpHeaders) =
   for k, v in headers:
@@ -83,6 +74,33 @@ proc respError(req: Request, code: HttpCode): Future[void] {.async.}=
 
 proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}=
   discard await transp.write("HTTP/1.1 " & status & "\c\L\c\L")
+
+
+proc form*(request: Request): Future[Form] {.async.} =
+  case request.contentType:
+    of "application/x-www-form-urlencoded":
+      discard
+    else:
+      if request.contentType.len > 0 and request.contentType.find("multipart/form-data;") != -1:
+        let (index,boundary) = parseBoundary(request.contentType)
+        zeroMem(request.buf[0].addr, request.buf.len)
+        var i = 0
+        var parser = newMultipartParser(boundary)
+        var read = 0
+        while i < request.contentLength:
+          var needRead = min(request.buf.len, request.contentLength - read)
+          try:
+            await request.transp.readExactly(addr request.buf[i], needRead)
+          except AsyncStreamIncompleteError:
+            await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+          var a = request.buf[0].addr
+          parser.parse(a, needRead, result)
+          
+          inc i, request.buf.len
+          inc read, needRead
+          zeroMem(request.buf[0].addr, request.buf.len)
+      else:
+        return result
 
 proc processRequest(
   looper: Looper,
@@ -152,21 +170,16 @@ proc processRequest(
   # - Check for Content-length header
   if unlikely(request.meth.get in MethodNeedsBody):
     if request.headers.hasKey("Content-Length"):
-      var contentLength = 0
-      if parseSaturatedNatural(request.headers["Content-Length"], contentLength) == 0:
+      if parseSaturatedNatural(request.headers["Content-Length"], request.contentLength) == 0:
         await request.resp("Bad Request. Invalid Content-Length.", code = Http400 )
         return true
       else:
-        if contentLength > looper.maxBody:
+        if request.contentLength > looper.maxBody:
           await request.respError(code = Http413)
           return false
-        echo count
-        echo repr request.buf
-        try:
-          await request.transp.readExactly(addr request.buf[count],contentLength)
-        except AsyncStreamIncompleteError:
-          await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
-          return true
+        if request.headers.hasKey("Content-Type"):
+          let contentType:string = request.headers["Content-Type"]
+          request.contentType = contentType.toLowerAscii
     else:
       await request.resp("Content-Length required.", code = Http411)
       return true

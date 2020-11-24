@@ -29,9 +29,9 @@ proc runTest(
   server.close()
   waitFor server.join()
 
-proc testMultipart() {.async.} =
+proc testMultipartLengthZero() {.async.} =
   proc handler(request: Request) {.async.} =
-    echo request
+    discard await request.form()
     await request.resp("Hello World, 200")
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
@@ -39,7 +39,7 @@ proc testMultipart() {.async.} =
       client = newAsyncHttpClient()
     var data = newMultipartData()
     data["author"] = "bung"
-    data["uploaded_file"] = ("README.md", "text/markdown", getCurrentDir() / "README.md")
+    data["uploaded_file"] = ("README.md", "text/markdown",readFile getCurrentDir() / "README.md")
     let clientResponse = await client.post(TestUrl,multipart = data)
     client.close()
 
@@ -52,6 +52,6 @@ proc testMultipart() {.async.} =
     doAssert(response.headers["Content-Length"] == "16")
 
   runTest(handler, request, test)
-waitfor(testMultipart())
+waitfor(testMultipartLengthZero())
 
 echo "OK"

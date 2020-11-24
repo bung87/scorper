@@ -1,16 +1,15 @@
 import net, strutils, urlly, parseutils, base64, os, streams,
   math, random, httpcore, times, tables, streams, std/monotimes
-import asyncnet, chronos, ./futurestream , asyncresponse , httpform
+import asyncnet, chronos, ./futurestream , asyncresponse , multipart
 import nativesockets
 export asyncresponse
-export httpform
+export multipart
 export httpcore except parseHeader # TODO: The ``except`` doesn't work
 
 type
   Proxy* = ref object
     url*: Url
     auth*: string
-
 
 const defUserAgent* = "Nim httpclient/" & NimVersion
 
