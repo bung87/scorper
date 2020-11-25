@@ -83,6 +83,10 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
     await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
   result = parseJson(str)
 
+proc stream*(request: Request): AsyncStreamReader =
+  doAssert request.transp.closed == false
+  newAsyncStreamReader(request.transp)
+
 proc form*(request: Request): Future[Form] {.async.} =
   result = newForm()
   case request.contentType:
