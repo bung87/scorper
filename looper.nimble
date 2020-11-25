@@ -14,3 +14,16 @@ requires "https://github.com/status-im/nim-chronos.git"
 
 task test, "Runs the test suite":
   exec "testament --megatest:off pattern 'tests/*.nim'"
+
+task docs,"a":
+  exec "nim doc --project src/looper.nim"
+
+task ghpage,"gh page":
+  cd "src/htmldocs" 
+  exec "git init"
+  exec "git add ."
+  exec "git config user.name \"bung87\""
+  exec "git config user.email \"crc32@qq.com\""
+  exec "git commit -m \"docs(docs): update gh-pages\""
+  let url = "\"https://bung87@github.com/bung87/looper.git\""
+  exec "git push --force --quiet " & url & " master:gh-pages"

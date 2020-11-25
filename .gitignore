@@ -25,3 +25,4 @@ dnimcache/
 .DS_Store
 *.out
 testresults
+src/htmldocs/
