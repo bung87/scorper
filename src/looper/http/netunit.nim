@@ -1,3 +1,5 @@
 import math
 
-proc Mb*(n: Positive):Positive {.compileTime.} = Positive(8 * pow(1024.0, 2))
+proc Kb*(n: Positive):Positive {.compileTime.} = Positive(n * 1024)
+proc Mb*(n: Positive):Positive {.compileTime.} = Positive(n * 1024 ^ 2)
+proc Gb*(n: Positive):Positive {.compileTime.} = Positive(n * 1024 ^ 3)
