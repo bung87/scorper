@@ -16,6 +16,10 @@ type
 
 proc open*(x:FormFile):File = open(x.filepath)
 
+proc readFile*(x:FormFile): TaintedString {.tags: [ReadIOEffect], gcsafe,
+    locks: 0, raises: [IOError].} =
+  readFile(x.filepath)
+
 proc add*(x: FormData | FormFiles,y: sink ContentDisposition) =
   x.store.add y
 
