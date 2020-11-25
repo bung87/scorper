@@ -29,7 +29,7 @@ proc runTest(
   server.close()
   waitFor server.join()
 
-proc testMultipartLengthZero() {.async.} =
+proc testMultipart() {.async.} =
   proc handler(request: Request) {.async.} =
     let form = await request.form
     doAssert $form is string
@@ -57,6 +57,6 @@ proc testMultipartLengthZero() {.async.} =
     doAssert(response.headers["Content-Length"] == "16")
 
   runTest(handler, request, test)
-waitfor(testMultipartLengthZero())
+waitfor(testMultipart())
 
 echo "OK"
