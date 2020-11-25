@@ -558,6 +558,11 @@ proc request*(client: AsyncHttpClient, url: string,
       result = await client.requestAux(redirectTo, meth, body, headers, multipart)
       lastURL = redirectTo
 
+proc sendJson*(client: AsyncHttpClient, url: string,
+              httpMethod = HttpPost, body = "", headers: HttpHeaders = newHttpHeaders([(key:"Content-Type",val:"application/json")])): Future[AsyncResponse]
+              {.async.} =
+  result = await client.requestAux(url, $httpMethod, body, headers, nil)
+
 proc request*(client: AsyncHttpClient, url: string,
               httpMethod = HttpGet, body = "", headers: HttpHeaders = nil,
               multipart: MultipartData = nil): Future[AsyncResponse]
