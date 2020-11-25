@@ -77,6 +77,7 @@ proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}
 
 
 proc form*(request: Request): Future[Form] {.async.} =
+  result = newForm()
   case request.contentType:
     of "application/x-www-form-urlencoded":
       discard
@@ -93,10 +94,15 @@ proc form*(request: Request): Future[Form] {.async.} =
           except AsyncStreamIncompleteError:
             await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
           var a = request.buf[0].addr
-          parser.parse(a, needRead, result)
+          parser.parse(a, needRead)
           read = read + needRead
           zeroMem(request.buf[0].addr, request.buf.len)
           if parser.state == endTok:
+            for disp in parser.dispositions:
+              if disp.kind == ContentDispositionKind.data:
+                result.data.add disp
+              elif disp.kind == ContentDispositionKind.file:
+                result.files.add disp
             break
       else:
         return result

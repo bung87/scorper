@@ -1,5 +1,5 @@
 
-import httpform
+import streams, os, oids, strformat
 type 
   MultipartState* = enum
     beginTok, endTok, disposition, content
@@ -10,6 +10,24 @@ type
     dispositionIndex:int
     index:int
     buf: ptr char
+    dispositions*: seq[ContentDisposition]
+  ContentDispositionKind* = enum
+    data, file
+  ContentDisposition* = ref object
+    name*:string
+    case kind*:ContentDispositionKind
+      of data:
+        value*:string
+      of file:
+        filename*,contentType*,transferEncoding*:string
+        filepath*:string
+        file:FileStream
+
+proc `$`*(x:ContentDisposition):string =
+  if x.kind == data:
+    result = fmt"""{{"name":"{x.name}", "value": "{x.value}"}}"""
+  elif x.kind == file:
+    result = fmt"""{{"name":"{x.name}", "filename":"{x.filename}", "contentType": "{x.contentType}", "transferEncoding": "{x.transferEncoding}", "filepath": {x.filepath} }}"""
 
 template `+`[T](p: ptr T, off: int): ptr T =
     cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
@@ -39,6 +57,9 @@ proc newMultipartParser*(boundary:string): MultipartParser =
   result.endTok = "--" & boundary & "--\r\n"
   result.beginTokLen = result.beginTok.len
   result.endTokLen = result.endTok.len
+
+proc currentDisposition(parser:MultipartParser):ContentDisposition{.inline.} =
+  parser.dispositions[parser.dispositionIndex]
 
 proc skipWhiteSpace(parser:MultipartParser) =
   # skip possible whitespace between value's fields
@@ -136,9 +157,14 @@ proc parseParam(parser:MultipartParser){.inline.} =
         value.add parser.buf[]
         parser.buf += 1
   echo "value:" & value
+  case name:
+    of "Content-Type":
+      parser.currentDisposition.contentType = value
+    else:
+      discard
   parser.skipLineEnd
 
-proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
+proc parse*(parser:MultipartParser,c:var ptr char,n:int) =
   parser.index = 0
   parser.buf = c
   while parser.index < n:
@@ -157,7 +183,11 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
         if parser.hasMoreField:
           parser.skipWhiteSpace
           var filename = parser.getFileName
+          let filepath = getTempDir() / $genOid()
+          parser.dispositions.add ContentDisposition(kind:file,name:name,filename:filename,filepath:filepath,file:openFileStream( filepath,fmWrite ) )
           echo "filename:",filename
+        else:
+          parser.dispositions.add ContentDisposition(kind:data,name:name)
         parser.skipLineEnd
         echo "name:",name
         if parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
@@ -170,21 +200,30 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int, form: var Form) =
           parser.skipLineEnd
           parser.state = content
       of content:
-        var content:string
         while true:
           if parser.isEnd:
+            if parser.currentDisposition.kind == file:
+              parser.currentDisposition.file.flush
+              parser.currentDisposition.file.close
             parser.state = endTok
             break
           elif parser.isBegin:
+            if parser.currentDisposition.kind == file:
+              parser.currentDisposition.file.flush
+              parser.currentDisposition.file.close
             parser.state = beginTok
+            inc parser.dispositionIndex
             break
           elif parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
             parser.skipLineEnd
             # go to beginTok or endTok
           else:
-            content.add parser.buf[]
-            parser.buf += 1
-        echo "content:", repr content
+            if parser.currentDisposition.kind == data:
+              parser.currentDisposition.value.add parser.buf[]
+              parser.buf += 1
+            elif parser.currentDisposition.kind == file:
+              parser.currentDisposition.file.write(parser.buf[])
+              parser.buf += 1
       of endTok:
         parser.skipEndTok
         break

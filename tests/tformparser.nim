@@ -31,7 +31,12 @@ proc runTest(
 
 proc testMultipartLengthZero() {.async.} =
   proc handler(request: Request) {.async.} =
-    discard await request.form()
+    let form = await request.form
+    doAssert $form is string
+    doAssert form.data["author"] == "bung"
+    let x:FormFile = form.files["uploaded_file"]
+    doAssert x.open().readAll == readFile getCurrentDir() / "README.md"
+    doAssert x.filename == "README.md"
     await request.resp("Hello World, 200")
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
