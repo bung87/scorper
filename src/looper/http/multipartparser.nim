@@ -160,6 +160,8 @@ proc parseParam(parser:MultipartParser){.inline.} =
   case name:
     of "Content-Type":
       parser.currentDisposition.contentType = value
+    of "Transfer-Encoding":
+      parser.currentDisposition.transferEncoding = value
     else:
       discard
   parser.skipLineEnd
