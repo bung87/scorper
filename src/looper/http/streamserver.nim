@@ -75,23 +75,26 @@ proc respError(req: Request, code: HttpCode): Future[void] {.async.}=
 proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}=
   discard await transp.write("HTTP/1.1 " & status & "\c\L\c\L")
 
+proc json*(request: Request): Future[JsonNode] {.async.} =
+  var str: string
+  try:
+    str = await request.transp.readLine(limit = request.contentLength)
+  except AsyncStreamIncompleteError:
+    await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+  result = parseJson(str)
 
 proc form*(request: Request): Future[Form] {.async.} =
   result = newForm()
   case request.contentType:
     of "application/x-www-form-urlencoded":
-      var read = 0
-      while read < request.contentLength:
-        var needRead = min(request.buf.len, request.contentLength - read)
-        try:
-          await request.transp.readExactly(addr request.buf[0], needRead)
-        except AsyncStreamIncompleteError:
-          await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
-        let url = parseUrl "?" & cast[string](request.buf[0 ..< needRead])
-        for (name,value) in url.query:
-          result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:name,value:value)
-        read = read + needRead
-        zeroMem(request.buf[0].addr, request.buf.len)
+      var str: string
+      try:
+        str = await request.transp.readLine(limit = request.contentLength)
+      except AsyncStreamIncompleteError:
+        await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+      let url = parseUrl "?" & str
+      for (name,value) in url.query:
+        result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:name,value:value)
     else:
       if request.contentType.len > 0 and request.contentType.find("multipart/form-data;") != -1:
         let (index,boundary) = parseBoundary(request.contentType)
