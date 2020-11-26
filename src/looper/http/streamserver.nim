@@ -119,7 +119,7 @@ proc form*(request: Request): Future[Form] {.async.} =
           await request.transp.sendStatus("400 Bad Request")
           request.transp.close()
           raise e
-        if parser.state == endTok:
+        if parser.state == boundaryEnd:
           for disp in parser.dispositions:
             if disp.kind == ContentDispositionKind.data:
               result.data.add disp

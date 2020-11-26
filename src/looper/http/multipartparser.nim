@@ -1,4 +1,10 @@
 
+##
+## This module implements a stream http multipart parser
+## depends on chronos StreamTransport
+##
+## Copyright (c) 2020 Bung
+
 import streams, os, oids, strformat
 import chronos
 import parseutils, strutils # parseBoundary
@@ -6,10 +12,10 @@ import constant
 
 type 
   MultipartState* = enum
-    beginTok, endTok,contentEnd, disposition, content
+    boundaryBegin, boundaryEnd, contentEnd, disposition, contentBegin
   MultipartParser* = ref object
-    beginTok, endTok: string
-    beginTokLen, endTokLen: int
+    boundaryBegin, boundaryEnd: string
+    boundaryBeginLen, boundaryEndLen: int
     state*: MultipartState
     dispositionIndex:int
     contentLength:int
@@ -63,11 +69,11 @@ proc parseBoundary*(line: string): tuple[i:int,boundary:string] =
 
 proc newMultipartParser*(boundary:string, transp:StreamTransport, src:ptr array[HttpRequestBufferSize,char], contentLength: int): MultipartParser =
   new result
-  result.state = beginTok
-  result.beginTok = "--" & boundary
-  result.endTok = "--" & boundary & "--"
-  result.beginTokLen = result.beginTok.len
-  result.endTokLen = result.endTok.len
+  result.state = boundaryBegin
+  result.boundaryBegin = "--" & boundary
+  result.boundaryEnd = "--" & boundary & "--"
+  result.boundaryBeginLen = result.boundaryBegin.len
+  result.boundaryEndLen = result.boundaryEnd.len
   result.transp = transp
   result.src = src
   result.buf = src[0].addr
@@ -87,16 +93,16 @@ proc skipWhiteSpace(parser:MultipartParser) =
   if parser.buf[] == ' ':
     parser.buf += 1
 
-proc isBegin(parser:MultipartParser):bool{.inline.} =
+proc isBoundaryBegin(parser:MultipartParser):bool{.inline.} =
   result = true
-  for i in 0 ..< parser.beginTokLen:
-    if (parser.buf + i)[] != parser.beginTok[i]:
+  for i in 0 ..< parser.boundaryBeginLen:
+    if (parser.buf + i)[] != parser.boundaryBegin[i]:
       return false
 
-proc isEnd(parser:MultipartParser):bool {.inline.}=
+proc isBoundaryEnd(parser:MultipartParser):bool {.inline.}=
   result = true
-  for i in 0 ..< parser.endTokLen:
-    if (parser.buf + i)[] != parser.endTok[i]:
+  for i in 0 ..< parser.boundaryEndLen:
+    if (parser.buf + i)[] != parser.boundaryEnd[i]:
       return false
 
 proc skipContentDispositionFlag(parser:MultipartParser) =
@@ -134,13 +140,13 @@ proc skipLineEnd(parser:MultipartParser) =
     parser.buf += 2
 
 proc skipBeginTok(parser:MultipartParser) =
-  parser.buf += parser.beginTokLen
+  parser.buf += parser.boundaryBeginLen
 
 proc validateBoundary(parser:MultipartParser, line: string):bool =
-  line == parser.beginTok
+  line == parser.boundaryBegin
 
 proc skipEndTok(parser:MultipartParser) =
-  parser.buf += parser.endTokLen
+  parser.buf += parser.boundaryEndLen
 
 proc aStr(parser:MultipartParser):string {.inline.}=
   parser.aSlice.b -= 1
@@ -219,10 +225,10 @@ proc readLine(parser:MultipartParser): Future[int] {.async.} =
 proc parse*(parser:MultipartParser) {.async.} =
   while not parser.transp.atEof():
     case parser.state:
-      of beginTok:
-        echo "beginTok state"
+      of boundaryBegin:
+        echo "boundaryBegin state"
         parser.read += await parser.readLine
-        assert parser.isBegin
+        assert parser.isBoundaryBegin
         parser.skipBeginTok
         parser.skipLineEnd
         parser.state = disposition 
@@ -254,7 +260,7 @@ proc parse*(parser:MultipartParser) {.async.} =
         echo "tmp:" & $parser.tmpRead
         if parser.tmpRead == 2:
           parser.skipLineEnd
-          parser.state = content 
+          parser.state = contentBegin 
           # content followed
         else:
           # extro meta data
@@ -269,9 +275,9 @@ proc parse*(parser:MultipartParser) {.async.} =
             parser.parseParam()
           parser.skipLineEnd
           echo "extro meta data handled"
-          parser.state = content
-      of content:
-        echo "content state"
+          parser.state = contentBegin
+      of contentBegin:
+        echo "contentBegin state"
         var needReload = false
         block contentReadLoop:
           while true:
@@ -303,9 +309,9 @@ proc parse*(parser:MultipartParser) {.async.} =
             echo "inner loop end"
       of contentEnd:
         echo "contentEnd state"
-        if parser.remainLen == parser.endTokLen:
-          echo "parser.remainLen == parser.endTokLen"
-          parser.state = endTok
+        if parser.remainLen == parser.boundaryEndLen:
+          echo "parser.remainLen == parser.boundaryEndLen"
+          parser.state = boundaryEnd
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
@@ -313,14 +319,14 @@ proc parse*(parser:MultipartParser) {.async.} =
         parser.tmpRead = await parser.readLine()
         echo "tmp:" & $parser.tmpRead
         parser.read += parser.tmpRead
-        if parser.isEnd:
-          echo "contentEnd isEnd"
+        if parser.isBoundaryEnd:
+          echo "contentEnd isBoundaryEnd"
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
-          parser.state = endTok
-        elif parser.isBegin:
-          echo "contentEnd isBegin"
+          parser.state = boundaryEnd
+        elif parser.isBoundaryBegin:
+          echo "contentEnd isBoundaryBegin"
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
@@ -330,8 +336,8 @@ proc parse*(parser:MultipartParser) {.async.} =
           echo parser.buf[]
           echo (parser.buf + 3)[]
           echo (parser.buf + 4)[]
-      of endTok:
-        echo "endTok state"
+      of boundaryEnd:
+        echo "boundaryEnd state"
         parser.skipEndTok
         break
 
