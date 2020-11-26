@@ -8,12 +8,17 @@ import json
 import ./multipartparser
 import ./httpform
 import constant
+import os
+import mimetypes
+import strformat
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
+let mimeDb = newMimetypes()
+
 type
   Request* = ref object
-    meth*: Option[HttpMethod]
+    meth*: HttpMethod
     headers*: HttpHeaders
     protocol*: tuple[orig: string, major, minor: int]
     url*: Url
@@ -37,7 +42,7 @@ type
 proc `$`*(r: Request): string =
   var j = newJObject()
   j["url"] = % $r.url
-  j["method"] = % $r.meth.get
+  j["method"] = % $r.meth
   j["hostname"] = % r.hostname
   j["headers"] = %* r.headers.table
   result = $j
@@ -78,6 +83,41 @@ proc respError(req: Request, code: HttpCode): Future[void] {.async.}=
 
 proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}=
   discard await transp.write("HTTP/1.1 " & status & "\c\L\c\L")
+
+proc writeFile(request: Request, fname:string, size:int) {.async.} = 
+  var handle = 0
+  var fhandle = open(fname)
+  when defined(windows):
+    handle = int(get_osfhandle(getFileHandle(fhandle)))
+  else:
+    handle = int(getFileHandle(fhandle))
+  discard await request.transp.writeFile(handle, 0'u, size)
+  close(fhandle)
+
+proc sendFile*(request: Request, fname:string) {.async.} = 
+  var (dir, name, ext) = splitFile(fname)
+  let mime = mimeDb.getMimetype(ext) 
+  var size = int(getFileSize(fname))
+  var msg = "HTTP/1.1 " & $Http200 & "\c\L"
+  
+  msg.add("Content-Type: " & mime & "\c\L")
+  msg.add("Content-Length: " & $size & "\c\L\c\L")
+  discard await request.transp.write(msg)
+  await request.writeFile(fname, size)
+
+proc sendAttachment*(request: Request, fname:string) {.async.} = 
+  var (dir, name, ext) = splitFile(fname)
+  let mime = mimeDb.getMimetype(ext) 
+  var size = int(getFileSize(fname))
+  var msg = "HTTP/1.1 " & $Http200 & "\c\L"
+  
+  msg.add("Content-Type: " & mime & "\c\L")
+  msg.add("Content-Length: " & $size & "\c\L")
+  let filename = fname.extractFilename
+  let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
+  msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & httpNewLine & httpNewLine
+  discard await request.transp.write(msg)
+  await request.writeFile(fname, size)
 
 proc json*(request: Request): Future[JsonNode] {.async.} =
   var str: string
@@ -157,18 +197,19 @@ proc processRequest(
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
   request.headers = request.httpParser.toHttpHeaders
   case request.httpParser.getMethod
-    of "GET": request.meth = some HttpGet
-    of "POST": request.meth = some HttpPost
-    of "HEAD": request.meth = some HttpHead
-    of "PUT": request.meth = some HttpPut
-    of "DELETE": request.meth = some HttpDelete
-    of "PATCH": request.meth = some HttpPatch
-    of "OPTIONS": request.meth = some HttpOptions
-    of "CONNECT": request.meth = some HttpConnect
-    of "TRACE": request.meth = some HttpTrace
-  if request.meth.isNone():
-    await request.respError(Http501)
-    return true
+    of "GET": request.meth = HttpGet
+    of "POST": request.meth = HttpPost
+    of "HEAD": request.meth = HttpHead
+    of "PUT": request.meth = HttpPut
+    of "DELETE": request.meth = HttpDelete
+    of "PATCH": request.meth = HttpPatch
+    of "OPTIONS": request.meth = HttpOptions
+    of "CONNECT": request.meth = HttpConnect
+    of "TRACE": request.meth = HttpTrace
+    else:
+      await request.respError(Http501)
+      return true
+
   request.path = request.httpParser.getPath
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)
@@ -195,7 +236,7 @@ proc processRequest(
     request.transp.close()
     return false
 
-  if request.meth.get == HttpPost:
+  if request.meth == HttpPost:
     # Check for Expect header
     if request.headers.hasKey("Expect"):
       if "100-continue" in request.headers["Expect"]:
@@ -205,7 +246,7 @@ proc processRequest(
 
   # Read the body
   # - Check for Content-length header
-  if unlikely(request.meth.get in MethodNeedsBody):
+  if unlikely(request.meth in MethodNeedsBody):
     if request.headers.hasKey("Content-Length"):
       if parseSaturatedNatural(request.headers["Content-Length"], request.contentLength) == 0:
         await request.resp("Bad Request. Invalid Content-Length.", code = Http400 )
@@ -224,7 +265,7 @@ proc processRequest(
   if looper.callback != nil:
     await looper.callback(request)
   elif looper.router != nil:
-    let matched = looper.router.match($request.meth.get, request.url)
+    let matched = looper.router.match($request.meth, request.url)
     if matched.success:
       request.params = matched.route.params[]
       request.query = matched.route.query[]
