@@ -8,12 +8,13 @@ when isMainModule:
     echo req.headers
     echo req.protocol
     echo req.url
+    echo req.params
     let headers = {"Date": "Tue, 29 Apr 2014 23:40:08 GMT",
         "Content-type": "text/plain; charset=utf-8"}
     await req.resp("Hello World", headers.newHttpHeaders())
   
   let r = newRouter[AsyncCallback]()
-  r.addRoute(cb, "get","/")
+  r.addRoute(cb, "get","/{p1}/{p2}")
   let address = "127.0.0.1:8888"
   let flags = {ReuseAddr}
   var server = newLooper(address,r,flags)

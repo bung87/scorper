@@ -17,7 +17,10 @@ type
     headers*: HttpHeaders
     protocol*: tuple[orig: string, major, minor: int]
     url*: Url
+    path*: string # http request path
     hostname*: string
+    params* : Table[string,string]
+    query* : Table[string,string]
     transp: StreamTransport
     buf: array[HttpRequestBufferSize,char]
     httpParser: MofuParser
@@ -166,8 +169,9 @@ proc processRequest(
   if request.meth.isNone():
     await request.respError(Http501)
     return true
+  request.path = request.httpParser.getPath
   try:
-    request.url = parseUrl("http://" & request.hostname & request.httpParser.getPath)
+    request.url = parseUrl("http://" & request.hostname & request.path)
   except ValueError:
     asyncCheck request.respError(Http400)
     return true
@@ -216,13 +220,14 @@ proc processRequest(
     else:
       await request.resp("Content-Length required.", code = Http411)
       return true
-
   # Call the user's callback.
   if looper.callback != nil:
     await looper.callback(request)
   elif looper.router != nil:
-    let matched = looper.router.match($request.meth,request.url)
+    let matched = looper.router.match($request.meth.get, request.url)
     if matched.success:
+      request.params = matched.route.params[]
+      request.query = matched.route.query[]
       await matched.handler(request)
 
   if "upgrade" in request.headers.getOrDefault("connection"):

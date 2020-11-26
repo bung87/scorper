@@ -73,15 +73,15 @@ type
   Router*[H] = ref object ## Container that holds HTTP mappings to handler procs
     verbTrees : CritBitTree[PatternNode[H]]
 
-  RouteArgs* = object ## Arguments extracted from a request while routing it
-    pathArgs* : TableRef[string,string]
-    queryArgs* : TableRef[string,string]
+  Route* = object ## Arguments extracted from a request while routing it
+    params* : TableRef[string,string]
+    query* : TableRef[string,string]
  
   RouteResult*[H] = object ## Encapsulates the results of a routing operation
     case success* : bool:
       of true:
         handler* : H
-        arguments* : RouteArgs
+        route* : Route
       of false:
         discard
 
@@ -146,9 +146,9 @@ proc newRouter*[H](): Router[H] =
 # Rope procedures. A rope is a chain of tokens representing the url
 #
 
-proc ensureCorrectRoute(
+func ensureCorrectRoute(
   path : string
-) : string {.noSideEffect, raises:[MappingError].} =
+) : string {. raises:[MappingError].} =
   ## Verifies that this given path is a valid path, strips trailing slashes, and guarantees leading slashes
   if(not path.allCharsInSet(allowedCharsInPattern)):
     raise newException(MappingError, "Illegal characters occurred in the mapped pattern, please restrict to alphanumerics, or the following: - . _ ~ /")
@@ -162,16 +162,16 @@ proc ensureCorrectRoute(
   if not (result[0] == '/'): #ensure each pattern is relative to root
     result.insert("/")
 
-proc emptyKnotSequence(
+func emptyKnotSequence(
   knotSeq : seq[MapperKnot]
-) : bool {.noSideEffect.} =
+) : bool  =
   ## A knot sequence is empty if it A) contains no elements or B) it contains a single text element with no value
   result = (knotSeq.len == 0 or (knotSeq.len == 1 and knotSeq[0].kind == ptrnText and knotSeq[0].value == ""))
 
-proc generateRope(
+func generateRope(
   pattern : string,
   startIndex : int = 0
-) : seq[MapperKnot] {.noSideEffect, raises: [MappingError].} =
+) : seq[MapperKnot] {. raises: [MappingError].} =
   ## Translates the string form of a pattern into a sequence of MapperKnot objects to be parsed against
   var token : string
   let tokenSize = pattern.parseUntil(token, specialSectionStartChars, startIndex)
@@ -300,11 +300,11 @@ proc chainTree[H](rope : seq[MapperKnot], handler : H) : PatternNode[H] =
   else:
     result.children = @[chainTree(rope[1.. ^1], handler)] #continue the chain
 
-proc merge[H](
+func merge[H](
   node : PatternNode[H],
   rope : seq[MapperKnot],
   handler : H
-) : PatternNode[H] {.noSideEffect, raises: [MappingError].} =
+) : PatternNode[H] {.raises: [MappingError].} =
   ## Merges the given sequence of MapperKnots into the given tree as a new mapping. This does not mutate the given node, instead it will return a new one
   if rope.len == 1: # Terminating knot reached, finish the merge
     result = terminatingPatternNode(node, rope[0], handler)
@@ -327,10 +327,10 @@ proc merge[H](
     else:
       result.children[childIndex] = merge(result.children[childIndex], remainder, handler)
 
-proc contains[H](
+func contains[H](
   node : PatternNode[H],
   rope : seq[MapperKnot]
-) : bool {.noSideEffect.} =
+) : bool =
   ## Determines whether or not merging rope into node will create a mapping conflict
   if rope.len == 0: return
   let knot = rope[0]
@@ -369,13 +369,13 @@ proc contains[H](
 # Mapping procedures
 #
 
-proc addRoute*[H](
+func addRoute*[H](
   router : Router[H],
   handler : H,
   verb: string,
   pattern : string,
   headers : HttpHeaders = nil
-) {.noSideEffect.} =
+) =
   ## Add a new mapping to the given ``Router`` instance
   var rope = generateRope(ensureCorrectRoute(pattern)) # initial rope
 
@@ -399,7 +399,7 @@ proc addRoute*[H](
 # Data extractors and utilities
 #
 
-proc extractParams(query: seq[(string,string)]) : TableRef[string,string] {.noSideEffect.} =
+func extractParams(query: seq[(string,string)]) : TableRef[string,string] =
   result = newTable[string,string]()
   for (k, v) in query:
     result[k] = v
@@ -430,17 +430,16 @@ proc compress*[H](router : Router[H]) =
 # Procedures to match against paths
 #
 
-proc matchTree[H](
+func matchTree[H](
   head : PatternNode[H],
   path : string,
   headers : HttpHeaders,
   pathIndex : int = 0,
-  pathArgs = newTable[string,string]()
-) : RouteResult[H] {.noSideEffect.} =
+  params = newTable[string,string]()
+) : RouteResult[H]  =
   ## Check whether the given path matches the given tree node starting from pathIndex
   var node = head
   var pathIndex = pathIndex
-
   block matching:
     while pathIndex >= 0:
       case node.kind:
@@ -458,15 +457,15 @@ proc matchTree[H](
               pathIndex = path.len
         of ptrnParam:
           if node.isGreedy:
-            pathArgs[node.value] = path[pathIndex.. ^1]
+            params[node.value] = path[pathIndex.. ^1]
             pathIndex = path.len
           else:
             let newPathIndex = path.find(pathSeparator, pathIndex) #skip forward to the next separator
             if newPathIndex == -1:
-              pathArgs[node.value] = path[pathIndex.. ^1]
+              params[node.value] = path[pathIndex.. ^1]
               pathIndex = path.len
             else:
-              pathArgs[node.value] = path[pathIndex..newPathIndex - 1]
+              params[node.value] = path[pathIndex..newPathIndex - 1]
               pathIndex = newPathIndex
         of ptrnStartHeaderConstraint:
           for child in node.children:
@@ -480,12 +479,12 @@ proc matchTree[H](
             )
 
             if childResult.success == true:
-              for key, value in childResult.arguments.pathArgs.pairs:
-                pathArgs[key] = value
+              for key, value in childResult.route.params.pairs:
+                params[key] = value
               return RouteResult[H](
                 success:true,
                 handler:childResult.handler,
-                arguments:RouteArgs(pathArgs:pathArgs)
+                route:Route(params:params)
               )
           return RouteResult[H](success:false)
         of ptrnEndHeaderConstraint:
@@ -493,14 +492,14 @@ proc matchTree[H](
             return RouteResult[H](
               success:true,
               handler:node.handler,
-              arguments:RouteArgs(pathArgs:pathArgs)
+              route:Route(params:params)
             )
 
       if pathIndex == path.len and node.isTerminator: #the path was exhausted and we reached a node that has a handler
         return RouteResult[H](
           success:true,
           handler:node.handler,
-          arguments:RouteArgs(pathArgs:pathArgs)
+          route:Route(params:params)
         )
       elif not node.isLeaf: #there is children remaining, could match against children
         if node.children.len == 1: #optimization for single child that just points the node forward
@@ -508,7 +507,7 @@ proc matchTree[H](
         else: #more than one child
           assert node.children.len != 0
           for child in node.children:
-            result = child.matchTree(path, headers, pathIndex, pathArgs)
+            result = child.matchTree(path, headers, pathIndex, params)
             if result.success == true:
               return
           break matching #none of the children matched, assume no match
@@ -517,31 +516,29 @@ proc matchTree[H](
 
   result = RouteResult[H](success:false)
 
-proc match*[H](
+func match*[H](
   router : Router[H],
   requestMethod : string,
-  requestUri : Url,
+  url : Url,
   requestHeaders : HttpHeaders = newHttpHeaders(),
-) : RouteResult[H] {.noSideEffect.} =
+) : RouteResult[H] =
   ## Find a mapping that matches the given request description
   try:
       let verb = requestMethod.toLowerAscii()
-
       if router.verbTrees.hasKey(verb):
-        result = matchTree(router.verbTrees[verb], ensureCorrectRoute(requestUri.path), requestHeaders)
-
+        result = matchTree(router.verbTrees[verb], ensureCorrectRoute(url.path), requestHeaders)
         if result.success == true:
-          result.arguments.queryArgs = extractParams(requestUri.query)
+          result.route.query = extractParams(url.query)
       else:
         result = RouteResult[H](success:false)
   except MappingError:
     result = RouteResult[H](success:false)
 
-proc match*[H](
+func match*[H](
     router : Router[H],
     requestMethod : HttpMethod,
-    requestUri : Url,
+    url : Url,
     requestHeaders : HttpHeaders = newHttpHeaders(),
 ) : RouteResult[H] {.noSideEffect.} =
     ## Simple wrapper around the regular route function
-    match(router, $requestMethod, requestUri, requestHeaders)
+    match(router, $requestMethod, url, requestHeaders)
