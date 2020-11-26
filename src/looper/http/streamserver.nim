@@ -81,6 +81,13 @@ proc respError(req: Request, code: HttpCode): Future[void] {.async.}=
   msg.add(content)
   discard await req.transp.write(msg)
 
+proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper"): Future[void] {.async.}=
+  ## Responds to the request with the specified ``HttpCode``.
+  var msg = "HTTP/1.1 " & $Http401 & "\c\L"
+  var headers = newHttpHeaders()
+  headers["WWW-Authenticate"] = &"{scheme} realm={realm}"
+  await req.resp( "",headers, Http401)
+
 proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}=
   discard await transp.write("HTTP/1.1 " & status & "\c\L\c\L")
 
