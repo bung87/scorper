@@ -5,7 +5,7 @@ author        = "bung87"
 description   = "Another web framework written in Nim"
 license       = "MIT"
 srcDir        = "src"
-
+skipDirs      = @["tests","examples"]
 
 # Dependencies
 

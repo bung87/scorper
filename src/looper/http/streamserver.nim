@@ -105,7 +105,20 @@ proc form*(request: Request): Future[Form] {.async.} =
         let (index, boundary ) = parseBoundary(request.contentType)
         zeroMem(request.buf[0].addr,HttpRequestBufferSize)
         var parser = newMultipartParser(boundary, request.transp, request.buf.addr, request.contentLength)
-        await parser.parse()
+        try:
+          await parser.parse()
+        except TransportIncompleteError as e:
+          await request.transp.sendStatus("400 Bad Request")
+          request.transp.close()
+          raise e
+        except TransportLimitError as e:
+          await request.transp.sendStatus("400 Bad Request. " & "Buffer Limit Exceeded")
+          request.transp.close()
+          raise e
+        except CatchableError as e:
+          await request.transp.sendStatus("400 Bad Request")
+          request.transp.close()
+          raise e
         if parser.state == endTok:
           for disp in parser.dispositions:
             if disp.kind == ContentDispositionKind.data:
@@ -130,6 +143,13 @@ proc processRequest(
     count = await request.transp.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
   except TransportIncompleteError:
     return true
+  except TransportLimitError:
+    await request.transp.sendStatus("400 Bad Request. " & "Buffer Limit Exceeded")
+    request.transp.close()
+    return false
+  except CatchableError as e:
+    echo e.msg
+    echo "CatchableError error"
   # Headers
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
   request.headers = request.httpParser.toHttpHeaders

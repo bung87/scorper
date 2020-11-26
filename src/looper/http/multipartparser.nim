@@ -6,8 +6,7 @@ import constant
 
 type 
   MultipartState* = enum
-    beginTok, endTok,contentEnd, disposition, content,
-    # beginOrEnd
+    beginTok, endTok,contentEnd, disposition, content
   MultipartParser* = ref object
     beginTok, endTok: string
     beginTokLen, endTokLen: int
@@ -15,6 +14,7 @@ type
     dispositionIndex:int
     contentLength:int
     transp:StreamTransport
+    tmpRead:int
     read:int
     buf: ptr char
     src: ptr array[HttpRequestBufferSize,char]
@@ -183,19 +183,18 @@ proc parse*(parser:MultipartParser) {.async.} =
   while not parser.transp.atEof():
     case parser.state:
       of beginTok:
-        echo "beginTok"
+        echo "beginTok state"
         parser.read += await parser.readLine
         assert parser.isBegin
         parser.skipBeginTok
         parser.skipLineEnd
-        echo "skipBeginTok"
         parser.state = disposition 
       of disposition:
         # skip Content-Disposition:
         echo "disposition state"
-        let tmp2 = await parser.readLine
-        parser.read += tmp2
-        echo "tmp:" & $tmp2
+        parser.tmpRead = await parser.readLine
+        parser.read += parser.tmpRead
+        echo "tmp:" & $parser.tmpRead
         parser.skipContentDispositionFlag
         parser.skipWhiteSpace
         # skip form-data;
@@ -212,10 +211,10 @@ proc parse*(parser:MultipartParser) {.async.} =
           parser.dispositions.add ContentDisposition(kind:data,name:name)
         parser.skipLineEnd
         echo "name:",name
-        let tmp = await parser.readLine
-        parser.read += tmp
-        echo "tmp:" & $tmp
-        if tmp == 2:
+        parser.tmpRead = await parser.readLine
+        parser.read += parser.tmpRead
+        echo "tmp:" & $parser.tmpRead
+        if parser.tmpRead == 2:
           parser.skipLineEnd
           parser.state = content 
           # content followed
@@ -224,9 +223,9 @@ proc parse*(parser:MultipartParser) {.async.} =
           parser.parseParam()
           parser.skipLineEnd
           while true:
-            let tmp = await parser.readLine
-            parser.read += tmp
-            if tmp == 2:
+            parser.tmpRead = await parser.readLine
+            parser.read += parser.tmpRead
+            if parser.tmpRead == 2:
               parser.skipLineEnd
               break
             parser.parseParam()
@@ -240,9 +239,9 @@ proc parse*(parser:MultipartParser) {.async.} =
           while true:
             try:
               echo "start readLine"
-              let tmp = await parser.readLine()
-              echo "tmp:" & $tmp
-              parser.read += tmp
+              parser.tmpRead = await parser.readLine()
+              echo "tmp:" & $parser.tmpRead
+              parser.read += parser.tmpRead
               echo "end readLine"
               needReload = false
             except AsyncStreamLimitError:
@@ -250,14 +249,14 @@ proc parse*(parser:MultipartParser) {.async.} =
               needReload = true
             while true: # handle char
               if parser.isEnd:
-                echo "isEnd"
+                echo "handle char isEnd"
                 if parser.currentDisposition.kind == file:
                   parser.currentDisposition.file.flush
                   parser.currentDisposition.file.close
                 parser.state = endTok
                 break contentReadLoop
               elif parser.isBegin:
-                echo "isBegin"
+                echo "handle char isBegin"
                 if parser.currentDisposition.kind == file:
                   parser.currentDisposition.file.flush
                   parser.currentDisposition.file.close
@@ -268,9 +267,9 @@ proc parse*(parser:MultipartParser) {.async.} =
                 # content end
                 parser.skipLineEnd
                 echo parser.dispositions
-                echo "line end"
-                break 
-                # go to beginTok or endTok
+                echo "content end"
+                parser.state = contentEnd
+                break contentReadLoop 
               else:
                 if parser.currentDisposition.kind == data:
                   parser.currentDisposition.value.add parser.buf[]
@@ -279,28 +278,25 @@ proc parse*(parser:MultipartParser) {.async.} =
                   parser.currentDisposition.file.write(parser.buf[])
                   parser.buf += 1
             echo "inner loop end"
-            parser.state = contentEnd
-            break contentReadLoop
       of contentEnd:
+        echo "contentEnd state"
         if parser.remainLen == parser.endTokLen:
           parser.state = endTok
           if parser.currentDisposition.kind == file:
             # parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
           break
-        let tmp = await parser.readLine()
-        echo "tmp:" & $tmp
-        echo parser.isEnd
-        echo parser.isBegin
-        parser.read += tmp
+        parser.tmpRead = await parser.readLine()
+        echo "tmp:" & $parser.tmpRead
+        parser.read += parser.tmpRead
         if parser.isEnd:
-          echo "isEnd"
+          echo "contentEnd isEnd"
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
           parser.state = endTok
         elif parser.isBegin:
-          echo "isBegin"
+          echo "contentEnd isBegin"
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
@@ -311,7 +307,7 @@ proc parse*(parser:MultipartParser) {.async.} =
           echo (parser.buf + 3)[]
           echo (parser.buf + 4)[]
       of endTok:
-        echo "endTok"
+        echo "endTok state"
         parser.skipEndTok
         break
 

@@ -14,20 +14,20 @@ const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Looper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void])  =
+    test: proc (response: AsyncResponse, body: string): Future[void]) {.async.}  =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
   var server = newLooper(address, handler, flags)
   server.start()
   let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+    response = await(request(server))
+    body = await(response.readBody())
 
-  waitFor test(response, body)
+  await test(response, body)
   server.stop()
   server.close()
-  waitFor server.join()
+  await server.join()
 
 proc testMultipart() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -56,7 +56,7 @@ proc testMultipart() {.async.} =
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 waitfor(testMultipart())
 
 echo "OK"
