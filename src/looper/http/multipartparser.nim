@@ -29,7 +29,7 @@ type
       of data:
         value*:string
       of file:
-        filename*,contentType*,transferEncoding*:string
+        filename*,contentType*,contentDescription*,contentLength*,transferEncoding*:string
         filepath*:string
         file:FileStream
 
@@ -172,7 +172,6 @@ proc parseParam(parser:MultipartParser){.inline.} =
   # Content-Type, Content-Description, Content-Length, Transfer-Encoding
   parser.resetSlices
   while parser.buf[] != ':':
-    # name.add parser.buf[]
     parser.buf += 1
     parser.aSlice.b += 1
   parser.takeASlice
@@ -183,7 +182,6 @@ proc parseParam(parser:MultipartParser){.inline.} =
     parser.buf += 1
     parser.incBSlice
     while parser.buf[] != '"':
-      # value.add parser.buf[]
       parser.buf += 1
       parser.bSlice.b += 1
     parser.buf += 1
@@ -194,13 +192,11 @@ proc parseParam(parser:MultipartParser){.inline.} =
         parser.buf += 1
         parser.incBSlice
         while parser.buf[] != '"':
-          # value.add parser.buf[]
           parser.buf += 1
           parser.bSlice.b += 1
         parser.buf += 1
         parser.incBSlice
       else:
-        # value.add parser.buf[]
         parser.buf += 1
         parser.bSlice.b += 1
   case parser.aStr:
@@ -209,6 +205,10 @@ proc parseParam(parser:MultipartParser){.inline.} =
       parser.currentDisposition.contentType = parser.bStr
     of "Transfer-Encoding":
       parser.currentDisposition.transferEncoding = parser.bStr
+    of "Content-Description":
+      parser.currentDisposition.contentDescription = parser.bStr
+    of "Content-Length":
+      parser.currentDisposition.contentLength = parser.bStr
     else:
       discard
 
