@@ -229,6 +229,8 @@ proc processRequest(
       request.params = matched.route.params[]
       request.query = matched.route.query[]
       await matched.handler(request)
+    else:
+      await request.respError(Http404)
 
   if "upgrade" in request.headers.getOrDefault("connection"):
     return false
