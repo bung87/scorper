@@ -7,6 +7,7 @@ import options
 import json
 import ./multipartparser
 import ./httpform
+import constant
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -18,7 +19,7 @@ type
     url*: Url
     hostname*: string
     transp: StreamTransport
-    buf: array[1024,char]
+    buf: array[HttpRequestBufferSize,char]
     httpParser: MofuParser
     contentLength: int
     contentType: string
@@ -100,28 +101,17 @@ proc form*(request: Request): Future[Form] {.async.} =
       for (name,value) in url.query:
         result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:name,value:value)
     else:
-      if request.contentType.len > 0 and request.contentType.find("multipart/form-data;") != -1:
-        let (index,boundary) = parseBoundary(request.contentType)
-        zeroMem(request.buf[0].addr, request.buf.len)
-        var parser = newMultipartParser(boundary)
-        var read = 0
-        while read < request.contentLength:
-          var needRead = min(request.buf.len, request.contentLength - read)
-          try:
-            await request.transp.readExactly(addr request.buf[0], needRead)
-          except AsyncStreamIncompleteError:
-            await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
-          var a = request.buf[0].addr
-          parser.parse(a, needRead)
-          read = read + needRead
-          zeroMem(request.buf[0].addr, request.buf.len)
-          if parser.state == endTok:
-            for disp in parser.dispositions:
-              if disp.kind == ContentDispositionKind.data:
-                result.data.add disp
-              elif disp.kind == ContentDispositionKind.file:
-                result.files.add disp
-            break
+      if request.contentType.len > 0:
+        let (index, boundary ) = parseBoundary(request.contentType)
+        zeroMem(request.buf[0].addr,HttpRequestBufferSize)
+        var parser = newMultipartParser(boundary, request.transp, request.buf.addr, request.contentLength)
+        await parser.parse()
+        if parser.state == endTok:
+          for disp in parser.dispositions:
+            if disp.kind == ContentDispositionKind.data:
+              result.data.add disp
+            elif disp.kind == ContentDispositionKind.file:
+              result.files.add disp
       else:
         return result
 

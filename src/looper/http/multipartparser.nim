@@ -1,15 +1,23 @@
 
 import streams, os, oids, strformat
+import chronos
+import parseutils, strutils # parseBoundary
+import constant
+
 type 
   MultipartState* = enum
-    beginTok, endTok, disposition, content
+    beginTok, endTok,contentEnd, disposition, content,
+    # beginOrEnd
   MultipartParser* = ref object
     beginTok, endTok: string
     beginTokLen, endTokLen: int
     state*: MultipartState
     dispositionIndex:int
-    index:int
+    contentLength:int
+    transp:StreamTransport
+    read:int
     buf: ptr char
+    src: ptr array[HttpRequestBufferSize,char]
     dispositions*: seq[ContentDisposition]
   ContentDispositionKind* = enum
     data, file
@@ -35,28 +43,39 @@ template `+`[T](p: ptr T, off: int): ptr T =
 template `+=`[T](p: ptr T, off: int) =
   p = p + off
 
-import parseutils, strutils
-
 proc parseBoundary*(line: string): tuple[i:int,boundary:string] = 
   # retrieve boundary from Content-Type
   const Flag = "multipart/form-data;"
-  const FlagLen = Flag.len
+  # const FlagLen = Flag.len
+  const BoundaryFlag = "boundary="
   result.i = line.find(Flag)
   if result.i > -1:
     if line.find('"',result.i ) == -1:
-      let j = line.find('=',result.i )
+      let j = line.find(BoundaryFlag,result.i )
       if j != -1:
-        result.boundary = line[j + 1 ..< line.len]
+        result.boundary = line[j + BoundaryFlag.len  ..< line.len]
     else:
-      result.boundary = captureBetween(line,'"','"',result.i + FlagLen)
+      let j = line.find(BoundaryFlag,result.i )
+      if j != -1:
+        result.boundary = captureBetween(line,'"','"',j + BoundaryFlag.len)
 
-proc newMultipartParser*(boundary:string): MultipartParser =
+proc newMultipartParser*(boundary:string, transp:StreamTransport, src:ptr array[HttpRequestBufferSize,char], contentLength: int): MultipartParser =
   new result
   result.state = beginTok
-  result.beginTok = "--" & boundary & "\r\n"
-  result.endTok = "--" & boundary & "--\r\n"
+  result.beginTok = "--" & boundary
+  result.endTok = "--" & boundary & "--"
   result.beginTokLen = result.beginTok.len
   result.endTokLen = result.endTok.len
+  result.transp = transp
+  result.src = src
+  result.buf = src[0].addr
+  result.contentLength = contentLength
+
+proc remainLen(parser:MultipartParser):int =
+  parser.contentLength - parser.read
+
+proc needReadLen(parser: MultipartParser): int =
+  min(parser.remainLen, HttpRequestBufferSize)
 
 proc currentDisposition(parser:MultipartParser):ContentDisposition{.inline.} =
   parser.dispositions[parser.dispositionIndex]
@@ -64,70 +83,60 @@ proc currentDisposition(parser:MultipartParser):ContentDisposition{.inline.} =
 proc skipWhiteSpace(parser:MultipartParser) =
   # skip possible whitespace between value's fields
   if parser.buf[] == ' ':
-    inc parser.index
     parser.buf += 1
 
 proc isBegin(parser:MultipartParser):bool{.inline.} =
   result = true
-  for i in 0 ..< parser.beginTokLen - 2 :
+  for i in 0 ..< parser.beginTokLen:
     if (parser.buf + i)[] != parser.beginTok[i]:
       return false
 
 proc isEnd(parser:MultipartParser):bool {.inline.}=
   result = true
-  for i in 0 ..< parser.endTokLen - 2:
+  for i in 0 ..< parser.endTokLen:
     if (parser.buf + i)[] != parser.endTok[i]:
       return false
 
 proc skipContentDispositionFlag(parser:MultipartParser) =
   const ContentDispoitionFlagLen = "Content-Disposition:".len
-  parser.index.inc ContentDispoitionFlagLen
   parser.buf += ContentDispoitionFlagLen
 
 proc skipFormDataFlag(parser:MultipartParser) =
   const FormDataFlagLen = "form-data;".len
-  parser.index.inc FormDataFlagLen
   parser.buf += FormDataFlagLen
 
 proc getName(parser:MultipartParser):string =
   # skip name="
-  inc parser.index, 6
   parser.buf += 6
   while parser.buf[] != '"':
     result.add parser.buf[]
-    inc parser.index
     parser.buf += 1
-  inc parser.index
   parser.buf += 1
 
 proc hasMoreField(parser:MultipartParser):bool = 
   result = parser.buf[] == ';'
   if result:
-    inc parser.index
     parser.buf += 1
 
 proc getFileName(parser:MultipartParser):string =
   # skip filename="
-  inc parser.index, 10
   parser.buf += 10
   while parser.buf[] != '"':
     result.add parser.buf[]
-    inc parser.index
     parser.buf += 1
-  inc parser.index
   parser.buf += 1
 
 proc skipLineEnd(parser:MultipartParser) =
   if parser.buf[] == '\c' and (parser.buf + 1)[] == '\l':
-    inc parser.index,2
     parser.buf += 2
 
 proc skipBeginTok(parser:MultipartParser) =
-  parser.index.inc parser.beginTokLen
   parser.buf += parser.beginTokLen
 
+proc validateBoundary(parser:MultipartParser, line: string):bool =
+  line == parser.beginTok
+
 proc skipEndTok(parser:MultipartParser) =
-  parser.index.inc parser.endTokLen
   parser.buf += parser.endTokLen
 
 proc parseParam(parser:MultipartParser){.inline.} =
@@ -159,23 +168,34 @@ proc parseParam(parser:MultipartParser){.inline.} =
   echo "value:" & value
   case name:
     of "Content-Type":
+      echo "parser.dispositionIndex:" & $parser.dispositionIndex
       parser.currentDisposition.contentType = value
     of "Transfer-Encoding":
       parser.currentDisposition.transferEncoding = value
     else:
       discard
-  parser.skipLineEnd
 
-proc parse*(parser:MultipartParser,c:var ptr char,n:int) =
-  parser.index = 0
-  parser.buf = c
-  while parser.index < n:
+proc readLine(parser:MultipartParser): Future[int] {.async.} =
+  result = await parser.transp.readUntil(parser.src[0].addr, sep = @[byte('\c'),byte('\l')], nbytes = parser.needReadLen)
+  parser.buf = parser.src[0].addr
+
+proc parse*(parser:MultipartParser) {.async.} =
+  while not parser.transp.atEof():
     case parser.state:
       of beginTok:
+        echo "beginTok"
+        parser.read += await parser.readLine
+        assert parser.isBegin
         parser.skipBeginTok
+        parser.skipLineEnd
+        echo "skipBeginTok"
         parser.state = disposition 
       of disposition:
         # skip Content-Disposition:
+        echo "disposition state"
+        let tmp2 = await parser.readLine
+        parser.read += tmp2
+        echo "tmp:" & $tmp2
         parser.skipContentDispositionFlag
         parser.skipWhiteSpace
         # skip form-data;
@@ -192,7 +212,10 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int) =
           parser.dispositions.add ContentDisposition(kind:data,name:name)
         parser.skipLineEnd
         echo "name:",name
-        if parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
+        let tmp = await parser.readLine
+        parser.read += tmp
+        echo "tmp:" & $tmp
+        if tmp == 2:
           parser.skipLineEnd
           parser.state = content 
           # content followed
@@ -200,33 +223,95 @@ proc parse*(parser:MultipartParser,c:var ptr char,n:int) =
           # extro meta data
           parser.parseParam()
           parser.skipLineEnd
+          while true:
+            let tmp = await parser.readLine
+            parser.read += tmp
+            if tmp == 2:
+              parser.skipLineEnd
+              break
+            parser.parseParam()
+          parser.skipLineEnd
+          echo "extro meta data handled"
           parser.state = content
       of content:
-        while true:
-          if parser.isEnd:
-            if parser.currentDisposition.kind == file:
-              parser.currentDisposition.file.flush
-              parser.currentDisposition.file.close
-            parser.state = endTok
-            break
-          elif parser.isBegin:
-            if parser.currentDisposition.kind == file:
-              parser.currentDisposition.file.flush
-              parser.currentDisposition.file.close
-            parser.state = beginTok
-            inc parser.dispositionIndex
-            break
-          elif parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
-            parser.skipLineEnd
-            # go to beginTok or endTok
-          else:
-            if parser.currentDisposition.kind == data:
-              parser.currentDisposition.value.add parser.buf[]
-              parser.buf += 1
-            elif parser.currentDisposition.kind == file:
-              parser.currentDisposition.file.write(parser.buf[])
-              parser.buf += 1
+        echo "content state"
+        var needReload = false
+        block contentReadLoop:
+          while true:
+            try:
+              echo "start readLine"
+              let tmp = await parser.readLine()
+              echo "tmp:" & $tmp
+              parser.read += tmp
+              echo "end readLine"
+              needReload = false
+            except AsyncStreamLimitError:
+              echo "needReload = true"
+              needReload = true
+            while true: # handle char
+              if parser.isEnd:
+                echo "isEnd"
+                if parser.currentDisposition.kind == file:
+                  parser.currentDisposition.file.flush
+                  parser.currentDisposition.file.close
+                parser.state = endTok
+                break contentReadLoop
+              elif parser.isBegin:
+                echo "isBegin"
+                if parser.currentDisposition.kind == file:
+                  parser.currentDisposition.file.flush
+                  parser.currentDisposition.file.close
+                inc parser.dispositionIndex
+                parser.state = disposition
+                break contentReadLoop
+              elif parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
+                # content end
+                parser.skipLineEnd
+                echo parser.dispositions
+                echo "line end"
+                break 
+                # go to beginTok or endTok
+              else:
+                if parser.currentDisposition.kind == data:
+                  parser.currentDisposition.value.add parser.buf[]
+                  parser.buf += 1
+                elif parser.currentDisposition.kind == file:
+                  parser.currentDisposition.file.write(parser.buf[])
+                  parser.buf += 1
+            echo "inner loop end"
+            parser.state = contentEnd
+            break contentReadLoop
+      of contentEnd:
+        if parser.remainLen == parser.endTokLen:
+          parser.state = endTok
+          if parser.currentDisposition.kind == file:
+            # parser.currentDisposition.file.flush
+            parser.currentDisposition.file.close
+          break
+        let tmp = await parser.readLine()
+        echo "tmp:" & $tmp
+        echo parser.isEnd
+        echo parser.isBegin
+        parser.read += tmp
+        if parser.isEnd:
+          echo "isEnd"
+          if parser.currentDisposition.kind == file:
+            parser.currentDisposition.file.flush
+            parser.currentDisposition.file.close
+          parser.state = endTok
+        elif parser.isBegin:
+          echo "isBegin"
+          if parser.currentDisposition.kind == file:
+            parser.currentDisposition.file.flush
+            parser.currentDisposition.file.close
+          inc parser.dispositionIndex
+          parser.state = disposition
+        else:
+          echo parser.buf[]
+          echo (parser.buf + 3)[]
+          echo (parser.buf + 4)[]
       of endTok:
+        echo "endTok"
         parser.skipEndTok
         break
 

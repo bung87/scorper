@@ -22,7 +22,7 @@ proc runTest(
   waitFor test(response, body)
   server.stop()
   server.close()
-  waitFor server.join()
+  waitFor server.join()1
 
 proc testUrlEncoded() {.async.} =
   proc handler(request: Request) {.async.} =
