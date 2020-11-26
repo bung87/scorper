@@ -3,7 +3,7 @@ import looper
 when isMainModule:
   type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   proc cb(req: Request) {.async.} =
-    await req.sendFile(currentSourcePath)
+    await req.sendAttachment(currentSourcePath)
   
   let r = newRouter[AsyncCallback]()
   r.addRoute(cb, "get","/send_attachment")
