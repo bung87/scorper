@@ -10,6 +10,9 @@ import chronos
 import parseutils, strutils # parseBoundary
 import constant
 
+const ContentDispoitionFlagLen = "Content-Disposition:".len
+const FormDataFlagLen = "form-data;".len
+
 type 
   MultipartState* = enum
     boundaryBegin, boundaryEnd, contentEnd, disposition, contentBegin
@@ -83,16 +86,16 @@ proc newMultipartParser*(boundary:string, transp:StreamTransport, src:ptr array[
   result.buf = src[0].addr
   result.contentLength = contentLength
 
-proc remainLen(parser:MultipartParser):int =
+proc remainLen(parser:MultipartParser):int {.inline.} =
   parser.contentLength - parser.read
 
-proc needReadLen(parser: MultipartParser): int =
+proc needReadLen(parser: MultipartParser): int {.inline.} =
   min(parser.remainLen, HttpRequestBufferSize)
 
 proc currentDisposition(parser:MultipartParser):ContentDisposition{.inline.} =
   parser.dispositions[parser.dispositionIndex]
 
-proc skipWhiteSpace(parser:MultipartParser) =
+proc skipWhiteSpace(parser:MultipartParser) {.inline.} =
   # skip possible whitespace between value's fields
   if parser.buf[] == ' ':
     parser.buf += 1
@@ -109,47 +112,24 @@ proc isBoundaryEnd(parser:MultipartParser):bool {.inline.}=
     if (parser.buf + i)[] != parser.boundaryEnd[i]:
       return false
 
-proc skipContentDispositionFlag(parser:MultipartParser) =
+proc skipContentDispositionFlag(parser:MultipartParser) {.inline.} =
   # Content-Disposition (case senstitive)
-  const ContentDispoitionFlagLen = "Content-Disposition:".len
   parser.buf += ContentDispoitionFlagLen
 
 proc skipFormDataFlag(parser:MultipartParser) =
-  const FormDataFlagLen = "form-data;".len
   parser.buf += FormDataFlagLen
 
-proc getName(parser:MultipartParser):string =
-  # skip name="
-  parser.buf += 6
-  while parser.buf[] != '"':
-    result.add parser.buf[]
-    parser.buf += 1
-  parser.buf += 1
-
-proc hasMoreField(parser:MultipartParser):bool = 
-  result = parser.buf[] == ';'
-  if result:
-    parser.buf += 1
-
-proc getFileName(parser:MultipartParser):string =
-  # skip filename="
-  parser.buf += 10
-  while parser.buf[] != '"':
-    result.add parser.buf[]
-    parser.buf += 1
-  parser.buf += 1
-
-proc skipLineEnd(parser:MultipartParser) =
+proc skipLineEnd(parser:MultipartParser) {.inline.} =
   if parser.buf[] == '\c' and (parser.buf + 1)[] == '\l':
     parser.buf += 2
 
-proc skipBeginTok(parser:MultipartParser) =
+proc skipBeginTok(parser:MultipartParser) {.inline.} =
   parser.buf += parser.boundaryBeginLen
 
 proc validateBoundary(parser:MultipartParser, line: string):bool =
   line == parser.boundaryBegin
 
-proc skipEndTok(parser:MultipartParser) =
+proc skipEndTok(parser:MultipartParser) {.inline.} =
   parser.buf += parser.boundaryEndLen
 
 proc aStr(parser:MultipartParser):string {.inline.}=
@@ -164,22 +144,46 @@ proc takeASlice(parser:MultipartParser) {.inline.} =
   parser.bSlice.a = parser.aSlice.b 
   parser.bSlice.b = parser.aSlice.b 
 
-proc incBSlice(parser:MultipartParser) {.inline.} =
-  inc parser.bSlice.a
-  inc parser.bSlice.b
+proc incBSlice(parser:MultipartParser, n:int = 1) {.inline.} =
+  inc parser.bSlice.a,n
+  inc parser.bSlice.b,n
 
 proc resetSlices(parser:MultipartParser) {.inline.} =
   parser.aSlice = default(Slice[int])
   parser.bSlice = default(Slice[int])
 
-proc skipWhiteSpaceAndIncBSlice(parser:MultipartParser) =
+proc skipWhiteSpaceAndIncBSlice(parser:MultipartParser) {.inline.} =
   # skip possible whitespace between value's fields
   if parser.buf[] == ' ':
     parser.buf += 1
     parser.incBSlice
 
+proc processName(parser:MultipartParser) {.inline.} =
+  # skip name="
+  parser.buf += 6
+  parser.incBSlice 6
+  while parser.buf[] != '"':
+    parser.buf += 1
+    parser.bSlice.b += 1
+  parser.buf += 1
+
+proc hasMoreField(parser:MultipartParser):bool {.inline.} = 
+  result = parser.buf[] == ';'
+  if result:
+    parser.buf += 1
+
+proc processFileName(parser:MultipartParser) =
+  # skip filename="
+  parser.buf += 10
+  parser.incBSlice 10
+  while parser.buf[] != '"':
+    parser.buf += 1
+    parser.bSlice.b += 1
+  parser.buf += 1
+
 proc parseParam(parser:MultipartParser){.inline.} =
   # Content-Type, Content-Description, Content-Length, Transfer-Encoding
+  debug "dispositionIndex:" & $parser.dispositionIndex
   parser.resetSlices
   while parser.buf[] != ':':
     parser.buf += 1
@@ -211,6 +215,7 @@ proc parseParam(parser:MultipartParser){.inline.} =
         parser.bSlice.b += 1
   case parser.aStr:
     of "Content-Type":
+      debug parser.currentDisposition.kind
       parser.currentDisposition.contentType = parser.bStr
     of "Transfer-Encoding":
       parser.currentDisposition.transferEncoding = parser.bStr
@@ -242,22 +247,31 @@ proc parse*(parser:MultipartParser) {.async.} =
         parser.tmpRead = await parser.readLine
         parser.read += parser.tmpRead
         debug "tmp:" & $parser.tmpRead
+        parser.resetSlices
         parser.skipContentDispositionFlag
-        parser.skipWhiteSpace
+        parser.incBSlice ContentDispoitionFlagLen
+        parser.skipWhiteSpaceAndIncBSlice
         # skip form-data;
         parser.skipFormDataFlag
-        parser.skipWhiteSpace
-        var name = parser.getName
+        parser.incBSlice FormDataFlagLen
+        parser.skipWhiteSpaceAndIncBSlice
+        parser.processName
         if parser.hasMoreField:
-          parser.skipWhiteSpace
-          var filename = parser.getFileName
-          let filepath = getTempDir() / $genOid()
-          parser.dispositions.add ContentDisposition(kind:file,name:name,filename:filename,filepath:filepath,file:openFileStream( filepath,fmWrite ) )
-          debug "filename:",filename
+          var disposition = ContentDisposition(kind:file)
+          disposition.name = parser.bStr
+          parser.incBSlice # for end quote
+          parser.bSlice.a = parser.bSlice.b
+          parser.incBSlice # for ;
+          parser.incBSlice # next pos
+          parser.skipWhiteSpaceAndIncBSlice
+          parser.processFileName
+          disposition.filename = parser.bStr
+          disposition.filepath = getTempDir() / $genOid()
+          disposition.file = openFileStream( disposition.filepath ,fmWrite )
+          parser.dispositions.add disposition
         else:
-          parser.dispositions.add ContentDisposition(kind:data,name:name)
+          parser.dispositions.add ContentDisposition(kind:data,name: parser.bStr)
         parser.skipLineEnd
-        debug "name:",name
         parser.tmpRead = await parser.readLine
         parser.read += parser.tmpRead
         debug "tmp:" & $parser.tmpRead
