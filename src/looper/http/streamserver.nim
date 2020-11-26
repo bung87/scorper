@@ -24,6 +24,7 @@ type
     url*: Url
     path*: string # http request path
     hostname*: string
+    ip*: string
     params* : Table[string,string]
     query* : Table[string,string]
     transp: StreamTransport
@@ -185,7 +186,7 @@ proc processRequest(
 
   request.headers.clear()
   zeroMem(request.httpParser.headers.addr, request.httpParser.headers.len)
-  request.hostname = $request.transp.localAddress
+  
   # receivce untill http header end
   const HeaderSep = @[byte('\c'),byte('\L'),byte('\c'),byte('\L')]
   var count:int
@@ -309,6 +310,8 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var req = Request()
   req.headers = newHttpHeaders()
   req.transp = transp
+  req.hostname = $req.transp.localAddress
+  req.ip = $req.transp.remoteAddress
   req.httpParser = MofuParser(headers: newSeqOfCap[MofuHeader](64))
   while not transp.atEof():
     let retry = await processRequest(
