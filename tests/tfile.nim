@@ -2,10 +2,9 @@
 import ./looper/http/streamserver
 import ./looper/http/streamclient
 import httpcore,chronos
-import json
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
-
+const source = staticRead(currentSourcePath)
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Looper): Future[AsyncResponse],
@@ -24,27 +23,25 @@ proc runTest(
   server.close()
   waitFor server.join()
 
-proc testJson() {.async.} =
+proc testSendFIle() {.async.} =
   proc handler(request: Request) {.async.} =
-    let j = await request.json()
-    await request.resp($j)
+    await request.sendFile(currentSourcePath)
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
     
-    let clientResponse = await client.sendJson(TestUrl,body = """{ "name": "Nim", "age": 12 }""")
+    let clientResponse = await client.request(TestUrl)
     client.close()
 
     return clientResponse
 
   proc test(response: AsyncResponse, body: string) {.async.} =
     doAssert(response.code == Http200)
-    var s:string
-    toUgly(s,parseJson("""{ "name": "Nim", "age": 12 }""") )
-    doAssert(body == s)
+    let body = await response.readBody
+    doAssert body == source
 
   runTest(handler, request, test)
-waitfor(testJson())
+waitfor(testSendFIle())
 
 echo "OK"
