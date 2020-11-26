@@ -288,7 +288,6 @@ proc parse*(parser:MultipartParser) {.async.} =
             echo "needReload:" & $needReload
             if needReload == false:
               # read content complete
-              # parser.buf += parser.tmpRead - 2
               if parser.currentDisposition.kind == data:
                 parser.currentDisposition.value = cast[string](parser.src[0 ..< parser.tmpRead - 2])
               elif parser.currentDisposition.kind == file:
@@ -297,33 +296,18 @@ proc parse*(parser:MultipartParser) {.async.} =
               break contentReadLoop 
             else:
               # read partial content
-              # parser.buf += parser.tmpRead
               if parser.currentDisposition.kind == data:
                 parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead])
               elif parser.currentDisposition.kind == file:
                 parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead)
-            # while true: # handle char
-            #   if parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
-            #     # content end
-            #     parser.skipLineEnd
-            #     echo parser.dispositions
-            #     echo "content end"
-            #     parser.state = contentEnd
-            #     break contentReadLoop 
-            #   else:
-            #     if parser.currentDisposition.kind == data:
-            #       parser.currentDisposition.value.add parser.buf[]
-            #       parser.buf += 1
-            #     elif parser.currentDisposition.kind == file:
-            #       parser.currentDisposition.file.write(parser.buf[])
-            #       parser.buf += 1
             echo "inner loop end"
       of contentEnd:
         echo "contentEnd state"
         if parser.remainLen == parser.endTokLen:
+          echo "parser.remainLen == parser.endTokLen"
           parser.state = endTok
           if parser.currentDisposition.kind == file:
-            # parser.currentDisposition.file.flush
+            parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
           break
         parser.tmpRead = await parser.readLine()
