@@ -195,6 +195,9 @@ proc processRequest(
     echo "CatchableError error"
   # Headers
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
+  if headerEnd == -1:
+    await request.respError(Http400)
+    return true
   request.headers = request.httpParser.toHttpHeaders
   case request.httpParser.getMethod
     of "GET": request.meth = HttpGet
@@ -211,6 +214,7 @@ proc processRequest(
       return true
 
   request.path = request.httpParser.getPath
+  
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)
   except ValueError:

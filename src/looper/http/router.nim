@@ -11,7 +11,7 @@ export urlly, tables
 #
 
 const pathSeparator = '/'
-const allowedCharsInUrl = {'a'..'z', 'A'..'Z', '0'..'9', '-', '.', '_', '~', pathSeparator}
+const allowedCharsInUrl = {'a'..'z', 'A'..'Z', '0'..'9', '-', '.', '_', '~','%', pathSeparator}
 const wildcard = '*'
 const startParam = '{'
 const endParam = '}'
@@ -457,15 +457,15 @@ func matchTree[H](
               pathIndex = path.len
         of ptrnParam:
           if node.isGreedy:
-            params[node.value] = path[pathIndex.. ^1]
+            params[node.value] = decodeUrlComponent path[pathIndex.. ^1]
             pathIndex = path.len
           else:
             let newPathIndex = path.find(pathSeparator, pathIndex) #skip forward to the next separator
             if newPathIndex == -1:
-              params[node.value] = path[pathIndex.. ^1]
+              params[node.value] = decodeUrlComponent path[pathIndex.. ^1]
               pathIndex = path.len
             else:
-              params[node.value] = path[pathIndex..newPathIndex - 1]
+              params[node.value] = decodeUrlComponent path[pathIndex..newPathIndex - 1]
               pathIndex = newPathIndex
         of ptrnStartHeaderConstraint:
           for child in node.children:

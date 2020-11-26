@@ -5,7 +5,7 @@ import ./looper/http/router
 import httpcore,chronos
 import tables
 
-const TestUrl = "http://127.0.0.1:64124/foo/ba?q=qux"
+const TestUrl = "http://127.0.0.1:64124/basic/foo/ba?q=qux"
 type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
 
 proc runTest(
@@ -16,7 +16,8 @@ proc runTest(
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
   let r = newRouter[AsyncCallback]()
-  r.addRoute(handler, "get","/{p1}/{p2}")
+  r.addRoute(handler, "get","/basic/{p1}/{p2}")
+  r.addRoute(handler, "get","/code/{codex}")
   var server = newLooper(address, r, flags)
   server.start()
   let
@@ -28,7 +29,7 @@ proc runTest(
   server.close()
   waitFor server.join()
 
-proc testJson() {.async.} =
+proc testParams() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.resp($request.params & $request.query)
 
@@ -47,6 +48,48 @@ proc testJson() {.async.} =
     doAssert(body == $p & $q)
 
   runTest(handler, request, test)
-waitfor(testJson())
+
+proc testParamEncode() {.async.} =
+  proc handler(request: Request) {.async.} =
+    doAssert request.params["codex"] == "ß"
+    await request.resp("")
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      codeUrl = "http://127.0.0.1:64124/code/%C3%9F"
+      clientResponse = await client.request(codeUrl)
+    client.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.code == Http200)
+
+  runTest(handler, request, test)
+
+proc testParamRaw() {.async.} =
+  proc handler(request: Request) {.async.} =
+    doAssert request.params["code"] == "ß"
+    await request.resp("")
+
+  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+      codeUrl = "http://127.0.0.1:64124/code/ß"
+      clientResponse = await client.request(codeUrl)
+    client.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.code == Http400)
+
+  runTest(handler, request, test)
+
+waitfor(testParams())
+waitfor(testParamEncode())
+waitfor(testParamRaw())
+
 
 echo "OK"
