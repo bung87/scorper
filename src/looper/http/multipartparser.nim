@@ -15,6 +15,8 @@ type
     contentLength:int
     transp:StreamTransport
     tmpRead:int
+    aSlice:Slice[int] # store name,value pair indexes
+    bSlice:Slice[int]
     read:int
     buf: ptr char
     src: ptr array[HttpRequestBufferSize,char]
@@ -98,6 +100,7 @@ proc isEnd(parser:MultipartParser):bool {.inline.}=
       return false
 
 proc skipContentDispositionFlag(parser:MultipartParser) =
+  # Content-Disposition (case senstitive)
   const ContentDispoitionFlagLen = "Content-Disposition:".len
   parser.buf += ContentDispoitionFlagLen
 
@@ -139,39 +142,73 @@ proc validateBoundary(parser:MultipartParser, line: string):bool =
 proc skipEndTok(parser:MultipartParser) =
   parser.buf += parser.endTokLen
 
-proc parseParam(parser:MultipartParser){.inline.} =
-  var name:string
-  while parser.buf[] != ':':
-    name.add parser.buf[]
+proc aStr(parser:MultipartParser):string {.inline.}=
+  parser.aSlice.b -= 1
+  cast[string](parser.src[parser.aSlice])
+
+proc bStr(parser:MultipartParser):string {.inline.}=
+  parser.bSlice.b -= 1
+  cast[string](parser.src[parser.bSlice])
+
+proc takeASlice(parser:MultipartParser) {.inline.} =
+  parser.bSlice.a = parser.aSlice.b 
+  parser.bSlice.b = parser.aSlice.b 
+
+proc incBSlice(parser:MultipartParser) {.inline.} =
+  inc parser.bSlice.a
+  inc parser.bSlice.b
+
+proc resetSlices(parser:MultipartParser) {.inline.} =
+  parser.aSlice = default(Slice[int])
+  parser.bSlice = default(Slice[int])
+
+proc skipWhiteSpaceAndIncBSlice(parser:MultipartParser) =
+  # skip possible whitespace between value's fields
+  if parser.buf[] == ' ':
     parser.buf += 1
+    parser.incBSlice
+
+proc parseParam(parser:MultipartParser){.inline.} =
+  # Content-Type, Content-Description, Content-Length, Transfer-Encoding
+  parser.resetSlices
+  while parser.buf[] != ':':
+    # name.add parser.buf[]
+    parser.buf += 1
+    parser.aSlice.b += 1
+  parser.takeASlice
   parser.buf += 1
-  echo "param name:" & name
-  parser.skipWhiteSpace
-  var value:string
+  parser.incBSlice
+  parser.skipWhiteSpaceAndIncBSlice
   if parser.buf[] == '"':
     parser.buf += 1
+    parser.incBSlice
     while parser.buf[] != '"':
-      value.add parser.buf[]
+      # value.add parser.buf[]
       parser.buf += 1
+      parser.bSlice.b += 1
     parser.buf += 1
+    parser.incBSlice
   else:
     while parser.buf[] != '\c' and (parser.buf + 1)[] != '\l' and parser.buf[] != ';':
       if parser.buf[] == '"':
         parser.buf += 1
+        parser.incBSlice
         while parser.buf[] != '"':
-          value.add parser.buf[]
+          # value.add parser.buf[]
           parser.buf += 1
+          parser.bSlice.b += 1
         parser.buf += 1
+        parser.incBSlice
       else:
-        value.add parser.buf[]
+        # value.add parser.buf[]
         parser.buf += 1
-  echo "value:" & value
-  case name:
+        parser.bSlice.b += 1
+  case parser.aStr:
     of "Content-Type":
       echo "parser.dispositionIndex:" & $parser.dispositionIndex
-      parser.currentDisposition.contentType = value
+      parser.currentDisposition.contentType = parser.bStr
     of "Transfer-Encoding":
-      parser.currentDisposition.transferEncoding = value
+      parser.currentDisposition.transferEncoding = parser.bStr
     else:
       discard
 
@@ -190,6 +227,7 @@ proc parse*(parser:MultipartParser) {.async.} =
         parser.skipLineEnd
         parser.state = disposition 
       of disposition:
+        # https://www.ietf.org/rfc/rfc1806.txt
         # skip Content-Disposition:
         echo "disposition state"
         parser.tmpRead = await parser.readLine
@@ -247,36 +285,38 @@ proc parse*(parser:MultipartParser) {.async.} =
             except AsyncStreamLimitError:
               echo "needReload = true"
               needReload = true
-            while true: # handle char
-              if parser.isEnd:
-                echo "handle char isEnd"
-                if parser.currentDisposition.kind == file:
-                  parser.currentDisposition.file.flush
-                  parser.currentDisposition.file.close
-                parser.state = endTok
-                break contentReadLoop
-              elif parser.isBegin:
-                echo "handle char isBegin"
-                if parser.currentDisposition.kind == file:
-                  parser.currentDisposition.file.flush
-                  parser.currentDisposition.file.close
-                inc parser.dispositionIndex
-                parser.state = disposition
-                break contentReadLoop
-              elif parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
-                # content end
-                parser.skipLineEnd
-                echo parser.dispositions
-                echo "content end"
-                parser.state = contentEnd
-                break contentReadLoop 
-              else:
-                if parser.currentDisposition.kind == data:
-                  parser.currentDisposition.value.add parser.buf[]
-                  parser.buf += 1
-                elif parser.currentDisposition.kind == file:
-                  parser.currentDisposition.file.write(parser.buf[])
-                  parser.buf += 1
+            echo "needReload:" & $needReload
+            if needReload == false:
+              # read content complete
+              # parser.buf += parser.tmpRead - 2
+              if parser.currentDisposition.kind == data:
+                parser.currentDisposition.value = cast[string](parser.src[0 ..< parser.tmpRead - 2])
+              elif parser.currentDisposition.kind == file:
+                parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - 2)
+              parser.state = contentEnd
+              break contentReadLoop 
+            else:
+              # read partial content
+              # parser.buf += parser.tmpRead
+              if parser.currentDisposition.kind == data:
+                parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead])
+              elif parser.currentDisposition.kind == file:
+                parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead)
+            # while true: # handle char
+            #   if parser.buf[] == '\c' and  (parser.buf + 1)[] == '\l':
+            #     # content end
+            #     parser.skipLineEnd
+            #     echo parser.dispositions
+            #     echo "content end"
+            #     parser.state = contentEnd
+            #     break contentReadLoop 
+            #   else:
+            #     if parser.currentDisposition.kind == data:
+            #       parser.currentDisposition.value.add parser.buf[]
+            #       parser.buf += 1
+            #     elif parser.currentDisposition.kind == file:
+            #       parser.currentDisposition.file.write(parser.buf[])
+            #       parser.buf += 1
             echo "inner loop end"
       of contentEnd:
         echo "contentEnd state"
