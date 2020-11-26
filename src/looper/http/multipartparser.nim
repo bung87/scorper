@@ -51,6 +51,10 @@ template `+`[T](p: ptr T, off: int): ptr T =
 template `+=`[T](p: ptr T, off: int) =
   p = p + off
 
+template debug(a:varargs[untyped]) =
+  when defined(DebugMultipartParser):
+    echo a
+
 proc parseBoundary*(line: string): tuple[i:int,boundary:string] = 
   # retrieve boundary from Content-Type
   const Flag = "multipart/form-data;"
@@ -207,7 +211,6 @@ proc parseParam(parser:MultipartParser){.inline.} =
         parser.bSlice.b += 1
   case parser.aStr:
     of "Content-Type":
-      echo "parser.dispositionIndex:" & $parser.dispositionIndex
       parser.currentDisposition.contentType = parser.bStr
     of "Transfer-Encoding":
       parser.currentDisposition.transferEncoding = parser.bStr
@@ -226,7 +229,7 @@ proc parse*(parser:MultipartParser) {.async.} =
   while not parser.transp.atEof():
     case parser.state:
       of boundaryBegin:
-        echo "boundaryBegin state"
+        debug "boundaryBegin state"
         parser.read += await parser.readLine
         assert parser.isBoundaryBegin
         parser.skipBeginTok
@@ -235,10 +238,10 @@ proc parse*(parser:MultipartParser) {.async.} =
       of disposition:
         # https://www.ietf.org/rfc/rfc1806.txt
         # skip Content-Disposition:
-        echo "disposition state"
+        debug "disposition state"
         parser.tmpRead = await parser.readLine
         parser.read += parser.tmpRead
-        echo "tmp:" & $parser.tmpRead
+        debug "tmp:" & $parser.tmpRead
         parser.skipContentDispositionFlag
         parser.skipWhiteSpace
         # skip form-data;
@@ -250,14 +253,14 @@ proc parse*(parser:MultipartParser) {.async.} =
           var filename = parser.getFileName
           let filepath = getTempDir() / $genOid()
           parser.dispositions.add ContentDisposition(kind:file,name:name,filename:filename,filepath:filepath,file:openFileStream( filepath,fmWrite ) )
-          echo "filename:",filename
+          debug "filename:",filename
         else:
           parser.dispositions.add ContentDisposition(kind:data,name:name)
         parser.skipLineEnd
-        echo "name:",name
+        debug "name:",name
         parser.tmpRead = await parser.readLine
         parser.read += parser.tmpRead
-        echo "tmp:" & $parser.tmpRead
+        debug "tmp:" & $parser.tmpRead
         if parser.tmpRead == 2:
           parser.skipLineEnd
           parser.state = contentBegin 
@@ -274,24 +277,24 @@ proc parse*(parser:MultipartParser) {.async.} =
               break
             parser.parseParam()
           parser.skipLineEnd
-          echo "extro meta data handled"
+          debug "extro meta data handled"
           parser.state = contentBegin
       of contentBegin:
-        echo "contentBegin state"
+        debug "contentBegin state"
         var needReload = false
         block contentReadLoop:
           while true:
             try:
-              echo "start readLine"
+              debug "start readLine"
               parser.tmpRead = await parser.readLine()
-              echo "tmp:" & $parser.tmpRead
+              debug "tmp:" & $parser.tmpRead
               parser.read += parser.tmpRead
-              echo "end readLine"
+              debug "end readLine"
               needReload = false
             except AsyncStreamLimitError:
-              echo "needReload = true"
+              debug "needReload = true"
               needReload = true
-            echo "needReload:" & $needReload
+            debug "needReload:" & $needReload
             if needReload == false:
               # read content complete
               if parser.currentDisposition.kind == data:
@@ -306,38 +309,38 @@ proc parse*(parser:MultipartParser) {.async.} =
                 parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead])
               elif parser.currentDisposition.kind == file:
                 parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead)
-            echo "inner loop end"
+            debug "inner loop end"
       of contentEnd:
-        echo "contentEnd state"
+        debug "contentEnd state"
         if parser.remainLen == parser.boundaryEndLen:
-          echo "parser.remainLen == parser.boundaryEndLen"
+          debug "parser.remainLen == parser.boundaryEndLen"
           parser.state = boundaryEnd
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
           break
         parser.tmpRead = await parser.readLine()
-        echo "tmp:" & $parser.tmpRead
+        debug "tmp:" & $parser.tmpRead
         parser.read += parser.tmpRead
         if parser.isBoundaryEnd:
-          echo "contentEnd isBoundaryEnd"
+          debug "contentEnd isBoundaryEnd"
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
           parser.state = boundaryEnd
         elif parser.isBoundaryBegin:
-          echo "contentEnd isBoundaryBegin"
+          debug "contentEnd isBoundaryBegin"
           if parser.currentDisposition.kind == file:
             parser.currentDisposition.file.flush
             parser.currentDisposition.file.close
           inc parser.dispositionIndex
           parser.state = disposition
         else:
-          echo parser.buf[]
-          echo (parser.buf + 3)[]
-          echo (parser.buf + 4)[]
+          debug parser.buf[]
+          debug (parser.buf + 3)[]
+          debug (parser.buf + 4)[]
       of boundaryEnd:
-        echo "boundaryEnd state"
+        debug "boundaryEnd state"
         parser.skipEndTok
         break
 
