@@ -12,8 +12,8 @@ type
   HttpCode* = distinct range[0 .. 599]
 
   HttpVersion* = enum
-    HttpVer11,
-    HttpVer10
+    HttpVer11 = "HTTP/1.1",
+    HttpVer10 = "HTTP/1.0"
 
   HttpMethod* = enum ## the requested HttpMethod
     HttpHead,        ## Asks for the response identical to the one that would
@@ -329,10 +329,12 @@ func is5xx*(code: HttpCode): bool {.inline.} =
 func `$`*(httpMethod: HttpMethod): string =
   return (system.`$`(httpMethod))[4 .. ^1].toUpperAscii()
 
-proc generateHeaders*( code: HttpCode = Http200, headers: HttpHeaders,
+proc generateHeaders*( headers: HttpHeaders,
+                       code: HttpCode = Http200,
+                       ver:HttpVersion = HttpVer11
                      ): string =
   # generate meta line and headers
-  result = "HTTP/1.1 " & $code & CRLF
+  result = $ver & " " & $code & CRLF
   for key, val in headers:
     add(result, key & ": " & val & CRLF)
 

@@ -69,41 +69,39 @@ proc httpDate*(): string {.inline.} =
   result = utc(now()).httpDate()
 
 proc resp*(req: Request, content: string,
-              headers: HttpHeaders = nil, code: HttpCode = Http200): Future[void] {.async.}=
+              headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``, headers and
   ## content.
- 
-  var msg = "HTTP/1.1 " & $code & "\c\L"
-
-  if headers != nil:
-    msg.addHeaders(headers)
-
   # If the headers did not contain a Content-Length use our own
-  if headers.isNil() or not headers.hasKey("Content-Length"):
-    msg.add("Content-Length: ")
-    # this particular way saves allocations:
-    msg.addInt content.len
-    msg.add "\c\L"
-
-  msg.add "\c\L"
+  if not headers.hasKey("Content-Length"):
+    headers["Content-Length"] = $(content.len)
+  if not headers.hasKey("Date"):
+    headers["Date"] = httpDate()
+  var msg = generateHeaders(headers, code)
   msg.add(content)
   discard await req.transp.write(msg)
 
-proc respError(req: Request, code: HttpCode): Future[void] {.async.}=
+proc respError(req: Request, code: HttpCode, detail:string = ""): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
-  let content = $code
-  var msg = "HTTP/1.1 " & content & "\c\L"
-
-  msg.add("Content-Length: " & $content.len & "\c\L\c\L")
-  msg.add(content)
+  var headers = newHttpHeaders()
+  headers["Date"] = httpDate()
+  let detailLen = detail.len
+  var content:string
+  if detailLen == 0:
+    content = $code
+    headers["Content-Length"] = $content.len
+  else:
+    headers["Content-Length"] = $detailLen
+  var msg = generateHeaders(headers, code)
+  if detailLen == 0: msg.add(content) else: msg.add(detail)
   discard await req.transp.write(msg)
 
 proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper"): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
-  var msg = "HTTP/1.1 " & $Http401 & "\c\L"
   var headers = newHttpHeaders()
   headers["WWW-Authenticate"] = &"{scheme} realm={realm}"
-  await req.resp( "",headers, Http401)
+  let msg = generateHeaders(headers, Http401)
+  discard await req.transp.write(msg)
 
 proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}=
   discard await transp.write("HTTP/1.1 " & status & "\c\L\c\L")
@@ -146,11 +144,12 @@ proc sendFile*(request: Request, fname:string) {.async.} =
   var (dir, name, ext) = splitFile(fname)
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
-  var msg = "HTTP/1.1 " & $Http200 & "\c\L"
-  msg.add("Date: " & httpDate() & "\c\L")
-  msg.add("Last-Modified: " & httpDate(info.get.lastWriteTime) & "\c\L")
-  msg.add("Content-Type: " & mime & "\c\L")
-  msg.add("Content-Length: " & $size & "\c\L\c\L")
+  var headers = newHttpHeaders()
+  headers["Date"] = httpDate()
+  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
+  headers["Content-Type"] = mime
+  headers["Content-Length"] = $size
+  var msg = generateHeaders(headers,Http200)
   discard await request.transp.write(msg)
   await request.writeFile(fname, size)
 
@@ -161,11 +160,12 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
   var (dir, name, ext) = splitFile(fname)
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
-  var msg = "HTTP/1.1 " & $Http200 & "\c\L"
-  msg.add("Date: " & httpDate() & "\c\L")
-  msg.add("Last-Modified: " & httpDate(info.get.lastWriteTime) & "\c\L")
-  msg.add("Content-Type: " & mime & "\c\L")
-  msg.add("Content-Length: " & $size & "\c\L")
+  var headers = newHttpHeaders()
+  headers["Date"] = httpDate()
+  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
+  headers["Content-Type"] = mime
+  headers["Content-Length"] = $size
+  var msg = generateHeaders(headers,Http200)
   let filename = fname.extractFilename
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
   msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & CRLF & CRLF
