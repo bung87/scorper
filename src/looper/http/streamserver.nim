@@ -11,6 +11,7 @@ import constant
 import os
 import mimetypes
 import strformat
+import times
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -51,6 +52,15 @@ proc `$`*(r: Request): string =
 proc addHeaders(msg: var string, headers: HttpHeaders) =
   for k, v in headers:
     msg.add(k & ": " & v & "\c\L")
+
+proc httpDate*(datetime: DateTime): string =
+  ## Returns ``datetime`` formated as HTTP full date (RFC-822).
+  ## ``Note``: ``datetime`` must be in UTC/GMT zone.
+  result = datetime.format("ddd, dd MMM yyyy HH:mm:ss") & " GMT"
+
+proc httpDate*(): string {.inline.} =
+  ## Returns current datetime formatted as HTTP full date (RFC-822).
+  result = utc(now()).httpDate()
 
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = nil, code: HttpCode = 200.HttpCode): Future[void] {.async.}=
@@ -102,10 +112,30 @@ proc writeFile(request: Request, fname:string, size:int) {.async.} =
   discard await request.transp.writeFile(handle, 0'u, size)
   close(fhandle)
 
+proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async.} =
+  let info = getFileInfo(fname)
+  if fpOthersRead notin info.permissions:
+    await request.respError(Http403)
+    return none(FileInfo)
+  if request.headers.hasKey("If-Modified-Since"):
+    var ifModifiedSince: Time
+    try:
+      ifModifiedSince = parseTime(request.headers["If-Modified-Since"][0 ..< 25], "ddd, dd MMM yyyy HH:mm:ss", utc())
+    except:
+      await request.respError(Http400)
+      return none(FileInfo)
+    if info.lastWriteTime == ifModifiedSince:
+      await request.transp.sendStatus($Http304)
+      return none(FileInfo)
+  return some(info)
+
 proc sendFile*(request: Request, fname:string) {.async.} = 
+  let info = await fileGuard(request, fname)
+  if not info.isSome():
+    return 
   var (dir, name, ext) = splitFile(fname)
   let mime = request.server.mimeDb.getMimetype(ext) 
-  var size = int(getFileSize(fname))
+  var size = int(info.get.size)
   var msg = "HTTP/1.1 " & $Http200 & "\c\L"
   
   msg.add("Content-Type: " & mime & "\c\L")
@@ -114,9 +144,12 @@ proc sendFile*(request: Request, fname:string) {.async.} =
   await request.writeFile(fname, size)
 
 proc sendAttachment*(request: Request, fname:string) {.async.} = 
+  let info = await fileGuard(request, fname)
+  if not info.isSome():
+    return
   var (dir, name, ext) = splitFile(fname)
   let mime = request.server.mimeDb.getMimetype(ext) 
-  var size = int(getFileSize(fname))
+  var size = int(info.get.size)
   var msg = "HTTP/1.1 " & $Http200 & "\c\L"
   
   msg.add("Content-Type: " & mime & "\c\L")
