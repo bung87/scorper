@@ -41,7 +41,7 @@ proc getDefaultSSL(): SslContext =
 
 proc newProxy*(url: string, auth = ""): Proxy =
   ## Constructs a new ``TProxy`` object.
-  result = Proxy(url: parseUrl(url), auth: auth)
+  result = Proxy(url: parseUrl(url)[], auth: auth)
 
 proc redirection(status: string): bool =
   const redirectionNRs = ["301", "302", "303", "307", "308"]
@@ -59,7 +59,7 @@ proc getNewLocation(lastURL: string, headers: HttpHeaders): string =
     parsed.path = r.path
     parsed.query = r.query
     parsed.fragment = r.fragment
-    result = $parsed
+    result = $ parsed[]
 
 proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
                      proxy: Proxy): string =
@@ -366,7 +366,7 @@ proc parseResponse(client: AsyncHttpClient,
 
 proc newConnection(client: AsyncHttpClient,
                    url: Url) {.async.} =
-  if client.currentURL == nil or client.currentURL.hostname != url.hostname or
+  if client.currentURL == default(Url) or client.currentURL.hostname != url.hostname or
       client.currentURL.scheme != url.scheme or
       client.currentURL.port != url.port or
       (not client.connected):
@@ -485,7 +485,7 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
                 multipart: MultipartData = nil): Future[AsyncResponse]
                 {.async.} =
   # Helper that actually makes the request. Does not handle redirects.
-  let requestUrl = parseUrl(url)
+  let requestUrl = parseUrl(url)[]
   if requestUrl.scheme == "":
     raise newException(ValueError, "No uri scheme supplied.")
 

@@ -10,7 +10,7 @@
 import strutils
 
 type
-  Url* = ref object
+  Url* = object
     scheme*, username*, password*: string
     hostname*, port*, path*, fragment*: string
     query*: seq[(string, string)]
@@ -59,10 +59,10 @@ func decodeUrlComponent*(s: string): string =
         result.add s[i]
     inc i
 
-func parseUrl*(s: string): Url =
+func parseUrl*(s: string): ref Url =
   ## Parses a URL or a URL into the Url object.
   var s = s
-  var url = Url()
+  var url = new Url
 
   let hasFragment = s.rfind('#')
   if hasFragment != -1:

@@ -272,7 +272,7 @@ proc processRequest(
   request.path = request.httpParser.getPath
   
   try:
-    request.url = parseUrl("http://" & request.hostname & request.path)
+    request.url = parseUrl("http://" & request.hostname & request.path)[]
   except ValueError:
     asyncCheck request.respError(Http400)
     return true
