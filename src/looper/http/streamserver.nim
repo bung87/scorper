@@ -12,6 +12,7 @@ import os
 import mimetypes
 import strformat
 import times
+import ./httpdate
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -50,24 +51,6 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
-proc addHeaders(msg: var string, headers: HttpHeaders) =
-  for k, v in headers:
-    msg.add(k & ": " & v & CRLF)
-
-proc httpDate*(datetime: DateTime): string =
-  ## Returns ``datetime`` formated as HTTP full date (RFC-822).
-  ## ``Note``: ``datetime`` must be in UTC/GMT zone.
-  result = datetime.format("ddd, dd MMM yyyy HH:mm:ss") & " GMT"
-
-proc httpDate*(t: Time): string =
-  ## Returns ``datetime`` formated as HTTP full date (RFC-822).
-  ## ``Note``: ``datetime`` must be in UTC/GMT zone.
-  result = t.format("ddd, dd MMM yyyy HH:mm:ss",utc()) & " GMT"
-
-proc httpDate*(): string {.inline.} =
-  ## Returns current datetime formatted as HTTP full date (RFC-822).
-  result = utc(now()).httpDate()
-
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``, headers and
@@ -81,19 +64,24 @@ proc resp*(req: Request, content: string,
   msg.add(content)
   discard await req.transp.write(msg)
 
-proc respError(req: Request, code: HttpCode, detail:string = ""): Future[void] {.async.}=
+proc respError*(req: Request, code: HttpCode, detail:string ): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
   var headers = newHttpHeaders()
   headers["Date"] = httpDate()
   let detailLen = detail.len
-  var content:string
-  if detailLen == 0:
-    content = $code
-    headers["Content-Length"] = $content.len
-  else:
-    headers["Content-Length"] = $detailLen
+  headers["Content-Length"] = $detailLen
   var msg = generateHeaders(headers, code)
-  if detailLen == 0: msg.add(content) else: msg.add(detail)
+  msg.add(detail)
+  discard await req.transp.write(msg)
+
+proc respError*(req: Request, code: HttpCode): Future[void] {.async.}=
+  ## Responds to the request with the specified ``HttpCode``.
+  var headers = newHttpHeaders()
+  headers["Date"] = httpDate()
+  let content = $code
+  headers["Content-Length"] = $content.len
+  var msg = generateHeaders(headers, code)
+  msg.add(content)
   discard await req.transp.write(msg)
 
 proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper"): Future[void] {.async.}=
@@ -103,8 +91,11 @@ proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper"): Future[vo
   let msg = generateHeaders(headers, Http401)
   discard await req.transp.write(msg)
 
-proc sendStatus(transp: StreamTransport, status: string): Future[void] {.async.}=
-  discard await transp.write("HTTP/1.1 " & status & "\c\L\c\L")
+proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.}=
+  discard await request.transp.write($ver & " " & $code & CRLF & CRLF)
+
+proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.}=
+  discard await request.transp.write($ver & " " & $code.int & msg & CRLF & CRLF)
 
 proc writeFile(request: Request, fname:string, size:int) {.async.} = 
   var handle = 0
@@ -131,7 +122,7 @@ proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async
       await request.respError(Http400)
       return none(FileInfo)
     if info.lastWriteTime == ifModifiedSince:
-      await request.transp.sendStatus($Http304)
+      await request.respStatus(Http304)
       return none(FileInfo)
   return some(info)
 
@@ -174,12 +165,12 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
 
 proc serveStatic*(request: Request) {.async.} =
   if request.meth != HttpGet:
-    await request.respError(Http501)
+    await request.respError(Http405)
     return
   let relPath = request.url.path.relativePath(request.prefix)
   let absPath =  absolutePath(os.getEnv("StaticDir") / relPath)
-  if not absPath.existsFile:
-    await request.respError( Http404)
+  if not absPath.fileExists:
+    await request.respError(Http404)
     return
   await request.sendFile(absPath)
 
@@ -187,8 +178,9 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
   var str: string
   try:
     str = await request.transp.readLine(limit = request.contentLength)
-  except AsyncStreamIncompleteError:
-    await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+  except AsyncStreamIncompleteError as e:
+    await request.respStatus(Http400, ContentLengthMismatch)
+    raise e
   result = parseJson(str)
 
 proc stream*(request: Request): AsyncStreamReader =
@@ -202,8 +194,9 @@ proc form*(request: Request): Future[Form] {.async.} =
       var str: string
       try:
         str = await request.transp.readLine(limit = request.contentLength)
-      except AsyncStreamIncompleteError:
-        await request.resp("Bad Request. Content-Length does not match actual.", code = Http400)
+      except AsyncStreamIncompleteError as e:
+        await request.respStatus(Http400, ContentLengthMismatch)
+        raise e
       let url = parseUrl "?" & str
       for (name,value) in url.query:
         result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:name,value:value)
@@ -215,15 +208,15 @@ proc form*(request: Request): Future[Form] {.async.} =
         try:
           await parser.parse()
         except TransportIncompleteError as e:
-          await request.transp.sendStatus("400 Bad Request")
+          await request.respStatus(Http400)
           request.transp.close()
           raise e
         except TransportLimitError as e:
-          await request.transp.sendStatus("400 Bad Request. " & "Buffer Limit Exceeded")
+          await request.respStatus(Http400, BufferLimitExceeded)
           request.transp.close()
           raise e
         except CatchableError as e:
-          await request.transp.sendStatus("400 Bad Request")
+          await request.respStatus(Http400, BufferLimitExceeded)
           request.transp.close()
           raise e
         if parser.state == boundaryEnd:
@@ -251,7 +244,7 @@ proc processRequest(
   except TransportIncompleteError:
     return true
   except TransportLimitError:
-    await request.transp.sendStatus("400 Bad Request. " & "Buffer Limit Exceeded")
+    await request.respStatus(Http400, BufferLimitExceeded)
     request.transp.close()
     return false
   except CatchableError as e:
@@ -303,26 +296,26 @@ proc processRequest(
     # Check for Expect header
     if request.headers.hasKey("Expect"):
       if "100-continue" in request.headers["Expect"]:
-        await request.transp.sendStatus("100 Continue")
+        await request.respStatus(Http400)
       else:
-        await request.transp.sendStatus("417 Expectation Failed")
+        await request.respStatus(Http417)
 
   # Read the body
   # - Check for Content-length header
   if unlikely(request.meth in MethodNeedsBody):
     if request.headers.hasKey("Content-Length"):
       if parseSaturatedNatural(request.headers["Content-Length"], request.contentLength) == 0:
-        await request.resp("Bad Request. Invalid Content-Length.", code = Http400 )
+        await request.respStatus(Http400, "Invalid Content-Length.")
         return true
       else:
         if request.contentLength > looper.maxBody:
-          await request.respError(code = Http413)
+          await request.respStatus(Http413)
           return false
         if request.headers.hasKey("Content-Type"):
           let contentType:string = request.headers["Content-Type"]
           request.contentType = contentType.toLowerAscii
     else:
-      await request.resp("Content-Length required.", code = Http411)
+      await request.respStatus(Http411)
       return true
   # Call the user's callback.
   if looper.callback != nil:

@@ -331,7 +331,7 @@ func `$`*(httpMethod: HttpMethod): string =
 
 proc generateHeaders*( headers: HttpHeaders,
                        code: HttpCode = Http200,
-                       ver:HttpVersion = HttpVer11
+                       ver: HttpVersion = HttpVer11
                      ): string =
   # generate meta line and headers
   result = $ver & " " & $code & CRLF
