@@ -1,16 +1,3 @@
-#
-#
-#            Nim's Runtime Library
-#        (c) Copyright 2016 Dominik Picheta
-#
-#    See the file "copying.txt", included in this
-#    distribution, for details about the copyright.
-#
-
-## Contains functionality shared between the ``httpclient`` and
-## ``asynchttpserver`` modules.
-##
-## Unstable API.
 
 import tables, strutils, parseutils
 
