@@ -1,4 +1,4 @@
-import httpcore, strutils
+import ./httpcore, strutils
 import ./futurestream
 import times
 import chronos

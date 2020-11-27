@@ -1,4 +1,4 @@
-import macros, bitops, httpcore
+import macros, bitops, ./httpcore
 import .. / private / SIMD / cpu_type
 
 macro getCPU: untyped =

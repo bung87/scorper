@@ -2,7 +2,7 @@
 import ./looper/http/streamserver
 import ./looper/http/streamclient
 import ./looper/http/router
-import httpcore,chronos
+import ./looper/http/httpcore,chronos
 import tables
 
 const TestUrl = "http://127.0.0.1:64124/basic/foo/ba?q=qux"

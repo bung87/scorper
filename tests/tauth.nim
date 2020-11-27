@@ -2,7 +2,7 @@
 import ./looper/http/streamserver
 import ./looper/http/streamclient
 import ./looper/http/router
-import httpcore,chronos
+import ./looper/http/httpcore,chronos
 import tables
 import strformat
 import base64

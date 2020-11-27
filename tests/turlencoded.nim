@@ -2,7 +2,7 @@
 import ./looper/http/streamserver
 import ./looper/http/streamclient
 import ./looper/http/httpform
-import httpcore,chronos
+import ./looper/http/httpcore,chronos
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 

@@ -1,5 +1,5 @@
 import net, strutils, urlly, parseutils, base64, os, streams,
-  math, random, httpcore, times, tables, streams, std/monotimes
+  math, random, ./httpcore, times, tables, streams, std/monotimes
 import asyncnet, chronos, ./futurestream , asyncresponse , multipart
 import nativesockets
 export asyncresponse

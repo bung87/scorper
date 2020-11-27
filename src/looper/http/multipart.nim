@@ -1,5 +1,5 @@
 
-import mimetypes, os, strutils, httpcore
+import mimetypes, os, strutils, ./httpcore
 import httpform
 type
   MultipartEntry* = object

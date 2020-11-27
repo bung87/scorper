@@ -1,5 +1,5 @@
 import chronos
-import httpcore, urlly
+import ./httpcore, urlly
 import mofuparser, parseutils, strutils
 import router
 import netunit

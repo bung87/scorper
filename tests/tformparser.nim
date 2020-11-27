@@ -3,7 +3,7 @@ import ./looper/http/streamserver
 import ./looper/http/streamclient
 import ./looper/http/httpform
 import ./looper/http/multipartparser
-import httpcore,chronos,os
+import ./looper/http/httpcore,chronos,os
 
 let Sample = """multipart/form-data;boundary="sample_boundary""""
 
