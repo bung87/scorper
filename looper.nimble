@@ -3,7 +3,7 @@
 version       = "0.1.0"
 author        = "bung87"
 description   = "Another web framework written in Nim"
-license       = "MIT"
+license       = "Apache License 2.0"
 srcDir        = "src"
 skipDirs      = @["tests","examples"]
 

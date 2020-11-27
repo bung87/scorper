@@ -18,3 +18,7 @@ build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 - [x] Parse JSON lazyly.  
 - [ ] Parse JSON streamingly.  
 - [ ] Better error control flow.  
+
+## License  
+
+Apache License 2.0
