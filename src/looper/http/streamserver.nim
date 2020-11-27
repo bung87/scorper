@@ -97,10 +97,10 @@ proc writeFile(request: Request, fname:string, size:int) {.async.} =
   discard await request.transp.writeFile(handle, 0'u, size)
   close(fhandle)
 
-proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async.} =
+proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
   # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
-  let info = getFileInfo(fname)
+  let info = getFileInfo(filepath)
   if fpOthersRead notin info.permissions:
     await request.respError(Http403)
     return none(FileInfo)
@@ -116,13 +116,13 @@ proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async
       return none(FileInfo)
   return some(info)
 
-proc sendFile*(request: Request, fname:string) {.async.} = 
+proc sendFile*(request: Request, filepath:string) {.async.} = 
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
-  let info = await fileGuard(request, fname)
+  let info = await fileGuard(request, filepath)
   if not info.isSome():
     return 
-  var (dir, name, ext) = splitFile(fname)
+  var (dir, name, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
   var headers = genericHeaders()
@@ -131,13 +131,13 @@ proc sendFile*(request: Request, fname:string) {.async.} =
   headers["Content-Length"] = $size
   var msg = generateHeaders(headers,Http200)
   discard await request.transp.write(msg)
-  await request.writeFile(fname, size)
+  await request.writeFile(filepath, size)
 
-proc sendAttachment*(request: Request, fname:string) {.async.} = 
-  let info = await fileGuard(request, fname)
+proc sendAttachment*(request: Request, filepath:string, asName: string = "") {.async.} = 
+  let info = await fileGuard(request, filepath)
   if not info.isSome():
     return
-  var (dir, name, ext) = splitFile(fname)
+  var (dir, name, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
   var headers = genericHeaders()
@@ -145,11 +145,11 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
   headers["Content-Type"] = mime
   headers["Content-Length"] = $size
   var msg = generateHeaders(headers,Http200)
-  let filename = fname.extractFilename
+  let filename = if asName.len == 0: filepath.extractFilename else: asName
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
   msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & CRLF & CRLF
   discard await request.transp.write(msg)
-  await request.writeFile(fname, size)
+  await request.writeFile(filepath, size)
 
 proc serveStatic*(request: Request) {.async.} =
   if request.meth != HttpGet:
