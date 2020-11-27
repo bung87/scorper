@@ -113,6 +113,8 @@ proc writeFile(request: Request, fname:string, size:int) {.async.} =
   close(fhandle)
 
 proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async.} =
+  # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
+  # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
   let info = getFileInfo(fname)
   if fpOthersRead notin info.permissions:
     await request.respError(Http403)
@@ -130,6 +132,7 @@ proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async
   return some(info)
 
 proc sendFile*(request: Request, fname:string) {.async.} = 
+  # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   let info = await fileGuard(request, fname)
   if not info.isSome():
     return 
