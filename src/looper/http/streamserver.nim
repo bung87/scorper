@@ -40,6 +40,7 @@ proc `$`*(r: Request): string =
   result = $j
 
 proc genericHeaders():HttpHeaders = 
+  # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   result = newHttpHeaders()
   result["Date"] = httpDate()
 
@@ -117,7 +118,7 @@ proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.as
   return some(info)
 
 proc sendFile*(request: Request, filepath:string) {.async.} = 
-  # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
+  ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   let info = await fileGuard(request, filepath)
   if not info.isSome():
@@ -128,6 +129,22 @@ proc sendFile*(request: Request, filepath:string) {.async.} =
   var headers = genericHeaders()
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   headers["Content-Type"] = mime
+  headers["Content-Length"] = $size
+  var msg = generateHeaders(headers,Http200)
+  discard await request.transp.write(msg)
+  await request.writeFile(filepath, size)
+
+proc sendDownload*(request: Request, filepath:string) {.async.} = 
+  ## send file directly without mime type , downloaded file name same as original
+  # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
+  let info = await fileGuard(request, filepath)
+  if not info.isSome():
+    return 
+  var (dir, name, ext) = splitFile(filepath)
+  var size = int(info.get.size)
+  var headers = genericHeaders()
+  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
+  headers["Content-Type"] = "application/x-download"
   headers["Content-Length"] = $size
   var msg = generateHeaders(headers,Http200)
   discard await request.transp.write(msg)
