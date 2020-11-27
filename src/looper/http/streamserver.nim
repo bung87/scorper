@@ -1,18 +1,7 @@
 import chronos
-import ./httpcore, urlly
 import mofuparser, parseutils, strutils
-import router
-import netunit
-import options
-import json
-import ./multipartparser
-import ./httpform
-import constant
-import os
-import mimetypes
-import strformat
-import times
-import ./httpdate
+import multipartparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
+import std / [os,options,strformat,times,mimetypes,json ]
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
