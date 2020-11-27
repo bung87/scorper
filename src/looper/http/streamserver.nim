@@ -367,9 +367,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   req.ip = $req.transp.remoteAddress
   req.httpParser = MofuParser(headers: newSeqOfCap[MofuHeader](64))
   while not transp.atEof():
-    let retry = await processRequest(
-      looper, req
-    )
+    let retry = await processRequest(looper, req)
     if not retry: 
       transp.close
       break
