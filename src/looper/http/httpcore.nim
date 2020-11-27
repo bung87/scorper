@@ -94,7 +94,7 @@ func toTitleCase(s: string): string =
     result[i] = if upper: toUpperAscii(s[i]) else: toLowerAscii(s[i])
     upper = s[i] == '-'
 
-func toCaseInsensitive(headers: HttpHeaders, s: string): string {.inline.} =
+func toCaseInsensitive*(headers: HttpHeaders, s: string): string {.inline.} =
   return toTitleCase(s)
 
 func newHttpHeaders*(): HttpHeaders =
@@ -160,13 +160,20 @@ proc `[]=`*(headers: HttpHeaders, key: string, value: seq[string]) =
   else:
     headers.table.del(headers.toCaseInsensitive(key))
 
+template hasKeyOrPut*(headers: HttpHeaders, key: string, body) =
+  let tKey = headers.toCaseInsensitive(key)
+  let hasKey = headers.table.hasKey(tKey)
+  if not hasKey:
+    headers.table[tKey] = @[body]
+
 proc add*(headers: HttpHeaders, key, value: string) =
   ## Adds the specified value to the specified key. Appends to any existing
   ## values associated with the key.
-  if not headers.table.hasKey(headers.toCaseInsensitive(key)):
-    headers.table[headers.toCaseInsensitive(key)] = @[value]
+  let tKey = headers.toCaseInsensitive(key)
+  if not headers.table.hasKey(tKey):
+    headers.table[tKey] = @[value]
   else:
-    headers.table[headers.toCaseInsensitive(key)].add(value)
+    headers.table[tKey].add(value)
 
 proc del*(headers: HttpHeaders, key: string) =
   ## Deletes the header entries associated with ``key``

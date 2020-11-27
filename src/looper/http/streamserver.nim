@@ -59,10 +59,10 @@ proc resp*(req: Request, content: string,
   ## Responds to the request with the specified ``HttpCode``, headers and
   ## content.
   # If the headers did not contain a Content-Length use our own
-  if not headers.hasKey("Content-Length"):
-    headers["Content-Length"] = $(content.len)
-  if not headers.hasKey("Date"):
-    headers["Date"] = httpDate()
+  headers.hasKeyOrPut("Content-Length"):
+    $(content.len)
+  headers.hasKeyOrPut("Date"):
+    httpDate()
   var msg = generateHeaders(headers, code)
   msg.add(content)
   discard await req.transp.write(msg)
