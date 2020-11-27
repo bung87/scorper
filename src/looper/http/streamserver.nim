@@ -58,6 +58,11 @@ proc httpDate*(datetime: DateTime): string =
   ## ``Note``: ``datetime`` must be in UTC/GMT zone.
   result = datetime.format("ddd, dd MMM yyyy HH:mm:ss") & " GMT"
 
+proc httpDate*(t: Time): string =
+  ## Returns ``datetime`` formated as HTTP full date (RFC-822).
+  ## ``Note``: ``datetime`` must be in UTC/GMT zone.
+  result = t.format("ddd, dd MMM yyyy HH:mm:ss",utc()) & " GMT"
+
 proc httpDate*(): string {.inline.} =
   ## Returns current datetime formatted as HTTP full date (RFC-822).
   result = utc(now()).httpDate()
@@ -133,6 +138,7 @@ proc fileGuard(request: Request, fname:string): Future[Option[FileInfo]] {.async
 
 proc sendFile*(request: Request, fname:string) {.async.} = 
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
+  # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   let info = await fileGuard(request, fname)
   if not info.isSome():
     return 
@@ -140,7 +146,8 @@ proc sendFile*(request: Request, fname:string) {.async.} =
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
   var msg = "HTTP/1.1 " & $Http200 & "\c\L"
-  
+  msg.add("Date: " & httpDate() & "\c\L")
+  msg.add("Last-Modified: " & httpDate(info.get.lastWriteTime) & "\c\L")
   msg.add("Content-Type: " & mime & "\c\L")
   msg.add("Content-Length: " & $size & "\c\L\c\L")
   discard await request.transp.write(msg)
@@ -154,7 +161,8 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
   var msg = "HTTP/1.1 " & $Http200 & "\c\L"
-  
+  msg.add("Date: " & httpDate() & "\c\L")
+  msg.add("Last-Modified: " & httpDate(info.get.lastWriteTime) & "\c\L")
   msg.add("Content-Type: " & mime & "\c\L")
   msg.add("Content-Length: " & $size & "\c\L")
   let filename = fname.extractFilename
