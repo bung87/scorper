@@ -6,6 +6,8 @@ export asyncresponse
 export multipart
 export httpcore except parseHeader # TODO: The ``except`` doesn't work
 
+const headerLimit = 10_000
+
 type
   Proxy* = ref object
     url*: Url
@@ -81,28 +83,28 @@ proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
     result.add($modifiedUrl)
 
   # HTTP/1.1\c\l
-  result.add(" HTTP/1.1" & httpNewLine)
+  result.add(" HTTP/1.1" & CRLF)
 
   # Host header.
   if not headers.hasKey("Host"):
     if requestUrl.port == "":
-      add(result, "Host: " & requestUrl.hostname & httpNewLine)
+      add(result, "Host: " & requestUrl.hostname & CRLF)
     else:
-      add(result, "Host: " & requestUrl.hostname & ":" & requestUrl.port & httpNewLine)
+      add(result, "Host: " & requestUrl.hostname & ":" & requestUrl.port & CRLF)
 
   # Connection header.
   if not headers.hasKey("Connection"):
-    add(result, "Connection: Keep-Alive" & httpNewLine)
+    add(result, "Connection: Keep-Alive" & CRLF)
 
   # Proxy auth header.
   if not proxy.isNil and proxy.auth != "":
     let auth = base64.encode(proxy.auth)
-    add(result, "Proxy-Authorization: basic " & auth & httpNewLine)
+    add(result, "Proxy-Authorization: basic " & auth & CRLF)
 
   for key, val in headers:
-    add(result, key & ": " & val & httpNewLine)
+    add(result, key & ": " & val & CRLF)
 
-  add(result, httpNewLine)
+  add(result, CRLF)
 
 type
   ProgressChangedProc*[ReturnType] =
@@ -458,9 +460,9 @@ proc format(client: AsyncHttpClient,
 
   var length: int64
   for entry in multipart.entries:
-    result.add(format(entry, bound) & httpNewLine)
+    result.add(format(entry, bound) & CRLF)
     if entry.isFile:
-      length += entry.fileSize + httpNewLine.len
+      length += entry.fileSize + CRLF.len
 
   result.add "--" & bound & "--"
 
@@ -519,7 +521,7 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
         await client.transp.sendFile(entry)
       else:
         discard await client.transp.write(entry.content)
-      buffer.add httpNewLine
+      buffer.add CRLF
     # send the rest and the last boundary
     discard await client.transp.write(buffer & data[^1])
   elif body.len > 0:

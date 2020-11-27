@@ -128,10 +128,10 @@ proc `[]=`*(p: MultipartData, name: string,
 
 
 proc format*(entry: MultipartEntry, boundary: string): string =
-  result = "--" & boundary & httpNewLine
+  result = "--" & boundary & CRLF
   result.add("Content-Disposition: form-data; name=\"" & entry.name & "\"")
   if entry.isFile:
-    result.add("; filename=\"" & entry.filename & "\"" & httpNewLine)
-    result.add("Content-Type: " & entry.contentType & httpNewLine)
+    result.add("; filename=\"" & entry.filename & "\"" & CRLF)
+    result.add("Content-Type: " & entry.contentType & CRLF)
   else:
-    result.add(httpNewLine & httpNewLine & entry.content)
+    result.add(CRLF & CRLF & entry.content)

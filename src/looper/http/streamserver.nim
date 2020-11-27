@@ -69,7 +69,7 @@ proc httpDate*(): string {.inline.} =
   result = utc(now()).httpDate()
 
 proc resp*(req: Request, content: string,
-              headers: HttpHeaders = nil, code: HttpCode = 200.HttpCode): Future[void] {.async.}=
+              headers: HttpHeaders = nil, code: HttpCode = Http200): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``, headers and
   ## content.
  
@@ -168,7 +168,7 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
   msg.add("Content-Length: " & $size & "\c\L")
   let filename = fname.extractFilename
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
-  msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & httpNewLine & httpNewLine
+  msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & CRLF & CRLF
   discard await request.transp.write(msg)
   await request.writeFile(fname, size)
 
@@ -298,11 +298,6 @@ proc processRequest(
       request.protocol.minor = 1
     else:
       discard
-  # Ensure the client isn't trying to DoS us.
-  if request.headers.len > headerLimit:
-    await request.transp.sendStatus("400 Bad Request")
-    request.transp.close()
-    return false
 
   if request.meth == HttpPost:
     # Check for Expect header

@@ -17,7 +17,6 @@ import tables, strutils, parseutils
 type
   HttpHeaders* = ref object
     table*: TableRef[string, seq[string]]
-    isTitleCase: bool
 
   HttpHeaderValues* = distinct seq[string]
 
@@ -99,8 +98,8 @@ const
   Http504* = HttpCode(504)
   Http505* = HttpCode(505)
 
-const httpNewLine* = "\c\L"
-const headerLimit* = 10_000
+const CRLF* = "\c\L"
+# const headerLimit* = 10_000
 
 func toTitleCase(s: string): string =
   result = newString(len(s))
@@ -110,22 +109,20 @@ func toTitleCase(s: string): string =
     upper = s[i] == '-'
 
 func toCaseInsensitive(headers: HttpHeaders, s: string): string {.inline.} =
-  return if headers.isTitleCase: toTitleCase(s) else: toLowerAscii(s)
+  return toTitleCase(s)
 
-func newHttpHeaders*(titleCase=false): HttpHeaders =
+func newHttpHeaders*(): HttpHeaders =
   ## Returns a new ``HttpHeaders`` object. if ``titleCase`` is set to true,
   ## headers are passed to the server in title case (e.g. "Content-Length")
   new result
   result.table = newTable[string, seq[string]]()
-  result.isTitleCase = titleCase
 
 func newHttpHeaders*(keyValuePairs:
-    openArray[tuple[key: string, val: string]], titleCase=false): HttpHeaders =
+    openArray[tuple[key: string, val: string]]): HttpHeaders =
   ## Returns a new ``HttpHeaders`` object from an array. if ``titleCase`` is set to true,
   ## headers are passed to the server in title case (e.g. "Content-Length")
   new result
   result.table = newTable[string, seq[string]]()
-  result.isTitleCase = titleCase
 
   for pair in keyValuePairs:
     let key = result.toCaseInsensitive(pair.key)
@@ -346,6 +343,15 @@ func is5xx*(code: HttpCode): bool {.inline.} =
 func `$`*(httpMethod: HttpMethod): string =
   return (system.`$`(httpMethod))[4 .. ^1].toUpperAscii()
 
+proc generateHeaders*( code: HttpCode = Http200, headers: HttpHeaders,
+                     ): string =
+  result = "HTTP/1.1 " & $code & "\c\L"
+  result.add ' '
+  for key, val in headers:
+    add(result, key & ": " & val & CRLF)
+
+  add(result, CRLF)
+
 when isMainModule:
   var test = newHttpHeaders()
   test["Connection"] = @["Upgrade", "Close"]
@@ -365,7 +371,7 @@ when isMainModule:
   doAssert parseHeader("foobar:") == ("foobar", @[""])
 
   block: # test title case
-    var testTitleCase = newHttpHeaders(titleCase=true)
+    var testTitleCase = newHttpHeaders()
     testTitleCase.add("content-length", "1")
     doAssert testTitleCase.hasKey("Content-Length")
     for key, val in testTitleCase:
