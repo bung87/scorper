@@ -14,8 +14,6 @@ import strformat
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
-let mimeDb = newMimetypes()
-
 type
   Request* = ref object
     meth*: HttpMethod
@@ -32,12 +30,14 @@ type
     httpParser: MofuParser
     contentLength: int
     contentType: string
+    server: Looper
     
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
     callback: AsyncCallback
     maxBody: int
     router: Router[AsyncCallback]
+    mimeDb: MimeDB 
 
 
 proc `$`*(r: Request): string =
@@ -104,7 +104,7 @@ proc writeFile(request: Request, fname:string, size:int) {.async.} =
 
 proc sendFile*(request: Request, fname:string) {.async.} = 
   var (dir, name, ext) = splitFile(fname)
-  let mime = mimeDb.getMimetype(ext) 
+  let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(getFileSize(fname))
   var msg = "HTTP/1.1 " & $Http200 & "\c\L"
   
@@ -115,7 +115,7 @@ proc sendFile*(request: Request, fname:string) {.async.} =
 
 proc sendAttachment*(request: Request, fname:string) {.async.} = 
   var (dir, name, ext) = splitFile(fname)
-  let mime = mimeDb.getMimetype(ext) 
+  let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(getFileSize(fname))
   var msg = "HTTP/1.1 " & $Http200 & "\c\L"
   
@@ -308,6 +308,7 @@ proc processRequest(
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var looper = cast[Looper](server)
   var req = Request()
+  req.server = looper
   req.headers = newHttpHeaders()
   req.transp = transp
   req.hostname = $req.transp.localAddress
@@ -327,6 +328,7 @@ proc serve*(address: string,
             maxBody = 8.Mb
             ) {.async.} =
   var server = Looper()
+  server.mimeDb = newMimetypes()
   server.callback = callback
   server.maxBody = maxBody
   let address = initTAddress(address)
@@ -339,6 +341,7 @@ proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
                 maxBody = 8.Mb
                 ): Looper =
   new result
+  result.mimeDb = newMimetypes()
   when handler is AsyncCallback:
     result.callback = handler
   elif handler is Router[AsyncCallback]:
