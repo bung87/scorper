@@ -42,7 +42,6 @@ type
     router: Router[AsyncCallback]
     mimeDb: MimeDB 
 
-
 proc `$`*(r: Request): string =
   var j = newJObject()
   j["url"] = % $r.url
@@ -50,6 +49,10 @@ proc `$`*(r: Request): string =
   j["hostname"] = % r.hostname
   j["headers"] = %* r.headers.table
   result = $j
+
+proc genericHeaders():HttpHeaders = 
+  result = newHttpHeaders()
+  result["Date"] = httpDate()
 
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
@@ -66,8 +69,7 @@ proc resp*(req: Request, content: string,
 
 proc respError*(req: Request, code: HttpCode, detail:string ): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
-  var headers = newHttpHeaders()
-  headers["Date"] = httpDate()
+  var headers = genericHeaders()
   let detailLen = detail.len
   headers["Content-Length"] = $detailLen
   var msg = generateHeaders(headers, code)
@@ -76,8 +78,7 @@ proc respError*(req: Request, code: HttpCode, detail:string ): Future[void] {.as
 
 proc respError*(req: Request, code: HttpCode): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
-  var headers = newHttpHeaders()
-  headers["Date"] = httpDate()
+  var headers = genericHeaders()
   let content = $code
   headers["Content-Length"] = $content.len
   var msg = generateHeaders(headers, code)
@@ -86,16 +87,16 @@ proc respError*(req: Request, code: HttpCode): Future[void] {.async.}=
 
 proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper"): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
-  var headers = newHttpHeaders()
+  var headers = genericHeaders()
   headers["WWW-Authenticate"] = &"{scheme} realm={realm}"
   let msg = generateHeaders(headers, Http401)
   discard await req.transp.write(msg)
 
 proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.}=
-  discard await request.transp.write($ver & " " & $code & CRLF & CRLF)
+  discard await request.transp.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
 
 proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.}=
-  discard await request.transp.write($ver & " " & $code.int & msg & CRLF & CRLF)
+  discard await request.transp.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
 
 proc writeFile(request: Request, fname:string, size:int) {.async.} = 
   var handle = 0
@@ -135,8 +136,7 @@ proc sendFile*(request: Request, fname:string) {.async.} =
   var (dir, name, ext) = splitFile(fname)
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
-  var headers = newHttpHeaders()
-  headers["Date"] = httpDate()
+  var headers = genericHeaders()
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   headers["Content-Type"] = mime
   headers["Content-Length"] = $size
@@ -151,8 +151,7 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
   var (dir, name, ext) = splitFile(fname)
   let mime = request.server.mimeDb.getMimetype(ext) 
   var size = int(info.get.size)
-  var headers = newHttpHeaders()
-  headers["Date"] = httpDate()
+  var headers = genericHeaders()
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   headers["Content-Type"] = mime
   headers["Content-Length"] = $size
