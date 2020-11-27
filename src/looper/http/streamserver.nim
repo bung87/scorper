@@ -1,3 +1,10 @@
+
+##
+## This module implements a stream http server
+## depends on chronos
+##
+## Copyright (c) 2020 Bung
+
 import chronos
 import mofuparser, parseutils, strutils
 import multipartparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
