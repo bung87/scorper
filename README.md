@@ -10,7 +10,7 @@ build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 
 ## Todos  
 
-[x] Parse htttp request streamingly.  
+[x] Parse http request streamingly.  
 [x] Parse form streamingly and lazyly.  
 [x] Send file and attachement streamingly.  
 [x] Http Basic auth.  
