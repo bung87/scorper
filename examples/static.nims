@@ -1,0 +1,1 @@
+putEnv("StaticDir",".")

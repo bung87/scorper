@@ -32,6 +32,7 @@ type
     contentLength: int
     contentType: string
     server: Looper
+    prefix: string
     
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
@@ -170,6 +171,17 @@ proc sendAttachment*(request: Request, fname:string) {.async.} =
   msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & httpNewLine & httpNewLine
   discard await request.transp.write(msg)
   await request.writeFile(fname, size)
+
+proc serveStatic*(request: Request) {.async.} =
+  if request.meth != HttpGet:
+    await request.respError(Http501)
+    return
+  let relPath = request.url.path.relativePath(request.prefix)
+  let absPath =  absolutePath(os.getEnv("StaticDir") / relPath)
+  if not absPath.existsFile:
+    await request.respError( Http404)
+    return
+  await request.sendFile(absPath)
 
 proc json*(request: Request): Future[JsonNode] {.async.} =
   var str: string
@@ -325,6 +337,7 @@ proc processRequest(
     if matched.success:
       request.params = matched.route.params[]
       request.query = matched.route.query[]
+      request.prefix = matched.route.prefix
       await matched.handler(request)
     else:
       await request.respError(Http404)

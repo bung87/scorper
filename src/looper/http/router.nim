@@ -76,6 +76,7 @@ type
   Route* = object ## Arguments extracted from a request while routing it
     params* : TableRef[string,string]
     query* : TableRef[string,string]
+    prefix* : string
  
   RouteResult*[H] = object ## Encapsulates the results of a routing operation
     case success* : bool:
@@ -440,8 +441,10 @@ func matchTree[H](
   ## Check whether the given path matches the given tree node starting from pathIndex
   var node = head
   var pathIndex = pathIndex
+  var prefix = path[0 ..< pathIndex]
   block matching:
     while pathIndex >= 0:
+      prefix = path[0 ..< pathIndex]
       case node.kind:
         of ptrnText:
           if path.continuesWith(node.value, pathIndex):
@@ -484,7 +487,7 @@ func matchTree[H](
               return RouteResult[H](
                 success:true,
                 handler:childResult.handler,
-                route:Route(params:params)
+                route:Route(params:params, prefix:prefix)
               )
           return RouteResult[H](success:false)
         of ptrnEndHeaderConstraint:
@@ -492,14 +495,14 @@ func matchTree[H](
             return RouteResult[H](
               success:true,
               handler:node.handler,
-              route:Route(params:params)
+              route:Route(params:params,prefix:prefix)
             )
 
       if pathIndex == path.len and node.isTerminator: #the path was exhausted and we reached a node that has a handler
         return RouteResult[H](
           success:true,
           handler:node.handler,
-          route:Route(params:params)
+          route:Route(params:params,prefix:prefix)
         )
       elif not node.isLeaf: #there is children remaining, could match against children
         if node.children.len == 1: #optimization for single child that just points the node forward
