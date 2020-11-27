@@ -10,11 +10,11 @@ build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 
 ## Todos  
 
-[x] Parse http request streamingly.  
-[x] Parse form streamingly and lazyly.  
-[x] Send file and attachement streamingly.  
-[x] Http Basic auth.  
-[x] Serve static files (env:StaticDir)
-[x] Parse JSON lazyly. 
-[ ] Parse JSON streamingly.  
-[ ] Better error control flow.  
+- [x] Parse http request streamingly.  
+- [x] Parse form streamingly and lazyly.  
+- [x] Send file and attachement streamingly.  
+- [x] Http Basic auth.  
+- [x] Serve static files (env:StaticDir)  
+- [x] Parse JSON lazyly.  
+- [ ] Parse JSON streamingly.  
+- [ ] Better error control flow.  
