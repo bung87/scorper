@@ -99,7 +99,6 @@ const
   Http505* = HttpCode(505)
 
 const CRLF* = "\c\L"
-# const headerLimit* = 10_000
 
 func toTitleCase(s: string): string =
   result = newString(len(s))
@@ -345,8 +344,8 @@ func `$`*(httpMethod: HttpMethod): string =
 
 proc generateHeaders*( code: HttpCode = Http200, headers: HttpHeaders,
                      ): string =
-  result = "HTTP/1.1 " & $code & "\c\L"
-  result.add ' '
+  # generate meta line and headers
+  result = "HTTP/1.1 " & $code & CRLF
   for key, val in headers:
     add(result, key & ": " & val & CRLF)
 

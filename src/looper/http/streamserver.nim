@@ -52,7 +52,7 @@ proc `$`*(r: Request): string =
 
 proc addHeaders(msg: var string, headers: HttpHeaders) =
   for k, v in headers:
-    msg.add(k & ": " & v & "\c\L")
+    msg.add(k & ": " & v & CRLF)
 
 proc httpDate*(datetime: DateTime): string =
   ## Returns ``datetime`` formated as HTTP full date (RFC-822).
