@@ -75,7 +75,7 @@ type
 
   Route* = object ## Arguments extracted from a request while routing it
     params* : TableRef[string,string]
-    query* : TableRef[string,string]
+    # query* : TableRef[string,string]
     prefix* : string
  
   RouteResult*[H] = object ## Encapsulates the results of a routing operation
@@ -530,8 +530,8 @@ func match*[H](
       let verb = requestMethod.toLowerAscii()
       if router.verbTrees.hasKey(verb):
         result = matchTree(router.verbTrees[verb], ensureCorrectRoute(url.path), requestHeaders)
-        if result.success == true:
-          result.route.query = extractParams(url.query)
+        # if result.success == true:
+        #   result.route.query = extractParams(url.query)
       else:
         result = RouteResult[H](success:false)
   except MappingError:

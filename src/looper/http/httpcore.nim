@@ -236,7 +236,7 @@ func parseHeader*(line: string): tuple[key: string, value: seq[string]] =
   else:
     result.value = @[]
 
-func `==`*(protocol: tuple[orig: string, major, minor: int],
+func `==`*(protocol: tuple[major, minor: int],
            ver: HttpVersion): bool =
   let major =
     case ver

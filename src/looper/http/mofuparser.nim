@@ -481,6 +481,10 @@ proc toHttpHeaders*(mhr: MofuParser): HttpHeaders =
 
   return hds.newHttpHeaders
 
+proc toHttpHeaders*(mhr: MofuParser , headers: var HttpHeaders) =
+  for hd in mhr.headersPair:
+    headers[hd.name] = hd.value
+
 when isMainModule:
   import times,httputils
 

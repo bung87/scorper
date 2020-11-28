@@ -16,13 +16,13 @@ type
   Request* = ref object
     meth*: HttpMethod
     headers*: HttpHeaders
-    protocol*: tuple[orig: string, major, minor: int]
+    protocol*: tuple[major, minor: int]
     url*: Url
     path*: string # http request path
     hostname*: string
     ip*: string
     params* : Table[string,string]
-    query* : Table[string,string]
+    query* : seq[(string, string)]
     transp: StreamTransport
     buf: array[HttpRequestBufferSize,char]
     httpParser: MofuParser
@@ -274,7 +274,7 @@ proc processRequest(
   if headerEnd == -1:
     await request.respError(Http400)
     return true
-  request.headers = request.httpParser.toHttpHeaders
+  request.httpParser.toHttpHeaders(request.headers)
   case request.httpParser.getMethod
     of "GET": request.meth = HttpGet
     of "POST": request.meth = HttpPost
@@ -342,7 +342,7 @@ proc processRequest(
     let matched = looper.router.match($request.meth, request.url)
     if matched.success:
       request.params = matched.route.params[]
-      request.query = matched.route.query[]
+      shallowCopy(request.query, request.url.query)
       request.prefix = matched.route.prefix
       await matched.handler(request)
     else:

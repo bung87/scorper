@@ -31,7 +31,7 @@ proc runTest(
 
 proc testParams() {.async.} =
   proc handler(request: Request) {.async.} =
-    await request.resp($request.params & $request.query)
+    await request.resp($request.params & $request.query.toTable)
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
@@ -45,6 +45,7 @@ proc testParams() {.async.} =
     doAssert(response.code == Http200)
     let p = {"p1": "foo","p2": "ba"}.toTable
     let q = {"q": "qux"}.toTable
+    echo body
     doAssert(body == $p & $q)
 
   runTest(handler, request, test)
