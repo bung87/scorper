@@ -324,8 +324,7 @@ proc processRequest(
           await request.respStatus(Http413)
           return false
         if request.headers.hasKey("Content-Type"):
-          let contentType:string = request.headers["Content-Type"]
-          request.contentType = contentType.toLowerAscii
+          request.contentType = request.headers["Content-Type"]
     else:
       await request.respStatus(Http411)
       return true
