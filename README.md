@@ -24,6 +24,7 @@ const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32)
 - [x] Http Basic auth.  
 - [x] Serve static files (env:StaticDir)  
 - [x] Parse JSON lazyly.  
+- [x] cookies module.  
 - [ ] Parse JSON streamingly.  
 - [ ] Better error control flow.  
 
