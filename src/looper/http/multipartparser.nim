@@ -14,6 +14,8 @@ const ContentDispoitionFlagLen = "Content-Disposition:".len
 const FormDataFlagLen = "form-data;".len
 
 type 
+  BoundaryMissingError* = object of CatchableError
+  BoundaryInvalidError * = object of CatchableError
   MultipartState* = enum
     boundaryBegin, boundaryEnd, contentEnd, disposition, contentBegin
   MultipartParser* = ref object
@@ -60,19 +62,25 @@ template debug(a:varargs[untyped]) =
 
 proc parseBoundary*(line: string): tuple[i:int,boundary:string] = 
   # retrieve boundary from Content-Type
+  # consists of 1 to 70 characters 
+  # https://tools.ietf.org/html/rfc7578#section-4.1
   const Flag = "multipart/form-data;"
   # const FlagLen = Flag.len
   const BoundaryFlag = "boundary="
   result.i = line.find(Flag)
   if result.i > -1:
     if line.find('"',result.i ) == -1:
-      let j = line.find(BoundaryFlag,result.i )
-      if j != -1:
-        result.boundary = line[j + BoundaryFlag.len  ..< line.len]
+      result.i = line.find(BoundaryFlag,result.i )
+      if result.i != -1:
+        result.boundary = line[result.i + BoundaryFlag.len  ..< line.len]
     else:
-      let j = line.find(BoundaryFlag,result.i )
-      if j != -1:
-        result.boundary = captureBetween(line,'"','"',j + BoundaryFlag.len)
+      result.i = line.find(BoundaryFlag,result.i )
+      if result.i != -1:
+        result.boundary = captureBetween(line,'"','"',result.i + BoundaryFlag.len)
+  if result.i == -1:
+    raise newException(BoundaryMissingError,"Boundary missing")
+  elif result.boundary.len == 0 or result.boundary.len > 70:
+    raise newException(BoundaryInvalidError,"Boundary invalid")
 
 proc newMultipartParser*(boundary:string, transp:StreamTransport, src:ptr array[HttpRequestBufferSize,char], contentLength: int): MultipartParser =
   new result
@@ -127,6 +135,11 @@ proc skipBeginTok(parser:MultipartParser) {.inline.} =
   parser.buf += parser.boundaryBeginLen
 
 proc validateBoundary(parser:MultipartParser, line: string):bool =
+  # https://tools.ietf.org/html/rfc2046#section-5.1
+  # NOTE TO IMPLEMENTORS:  Boundary string comparisons must compare the
+  # boundary value with the beginning of each candidate line.  An exact
+  # match of the entire candidate line is not required; it is sufficient
+  # that the boundary appear in its entirety following the CRLF.
   line == parser.boundaryBegin
 
 proc skipEndTok(parser:MultipartParser) {.inline.} =

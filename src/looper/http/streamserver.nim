@@ -214,9 +214,16 @@ proc form*(request: Request): Future[Form] {.async.} =
         result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:name,value:value)
     else:
       if request.contentType.len > 0:
-        let (index, boundary ) = parseBoundary(request.contentType)
-        zeroMem(request.buf[0].addr,HttpRequestBufferSize)
-        var parser = newMultipartParser(boundary, request.transp, request.buf.addr, request.contentLength)
+        var parsed:tuple[i:int,boundary:string]
+        try:
+          parsed = parseBoundary(request.contentType)
+        except BoundaryMissingError as e:
+          await request.respError(Http400, e.msg)
+          raise e
+        except BoundaryInvalidError as e:
+          await request.respError(Http400, e.msg)
+          raise e
+        var parser = newMultipartParser(parsed.boundary, request.transp, request.buf.addr, request.contentLength)
         try:
           await parser.parse()
         except TransportIncompleteError as e:
