@@ -7,7 +7,7 @@ type
                                 ## subject to change.
     queue: Deque[T]
     finished: bool
-    cb: proc () {.closure, gcsafe.}
+    cb: proc (arg: pointer = nil) {.closure, gcsafe.}
 
 proc newFutureStream*[T](fromProc = "unspecified"): FutureStream[T] =
   ## Create a new ``FutureStream``. This future's callback is activated when
@@ -45,7 +45,7 @@ proc `callback=`*[T](future: FutureStream[T],
   ##
   ## If the future stream already has data or is finished then ``cb`` will be
   ## called immediately.
-  proc named() = cb(future)
+  proc named(arg: pointer = nil) = cb(future)
   future.cb = named
   if future.queue.len > 0 or future.finished:
     callSoon(future.cb)

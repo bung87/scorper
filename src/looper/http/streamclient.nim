@@ -132,6 +132,7 @@ type
     getBody: bool         ## When `false`, the body is never read in requestAux.
     bodyStream: FutureStream[string]
     parseBodyFut: Future[void]
+    buf: array[net.BufferSize,char]
 
 proc sendFile(transp: StreamTransport, fname:string) {.async.} = 
   var handle = 0
@@ -200,24 +201,22 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
               keep: bool): Future[int] {.async.} =
   ## Ensures that all the data requested is read and returned.
   var readLen = 0
-  var buf: array[net.BufferSize,char]
-  while true:
+  
+  while not client.transp.atEof():
     if size == readLen: break
 
     let remainingSize = size - readLen
     let sizeToRecv = min(remainingSize, net.BufferSize)
-    
-    await client.transp.readExactly(buf[0].addr, sizeToRecv)
-    let data = cast[string]( buf[0 ..< sizeToRecv])
-    if data == "":
+    try:
+      await client.transp.readExactly(client.buf[0].addr, sizeToRecv)
+    except TransportIncompleteError:
       client.close()
-      break # We've been disconnected.
 
-    readLen.inc(data.len)
+    readLen.inc(sizeToRecv)
     if keep:
-      await client.bodyStream.write(data)
+      await client.bodyStream.write(cast[string](client.buf[0 ..< sizeToRecv]))
 
-    await reportProgress(client, data.len)
+    await reportProgress(client, sizeToRecv)
 
   return readLen
 
@@ -325,14 +324,14 @@ proc parseResponse(client: AsyncHttpClient,
       break
     if not parsedStatus:
       # Parse HTTP version info and status code.
-      var le = skipIgnoreCase(line, "HTTP/", linei)
+      var le = skip(line, "HTTP/", linei)
       if le <= 0:
         httpError("invalid http version, `" & line & "`")
       inc(linei, le)
-      le = skipIgnoreCase(line, "1.1", linei)
+      le = skip(line, "1.1", linei)
       if le > 0: result.version = "1.1"
       else:
-        le = skipIgnoreCase(line, "1.0", linei)
+        le = skip(line, "1.0", linei)
         if le <= 0: httpError("unsupported http version")
         result.version = "1.0"
       inc(linei, le)
@@ -405,7 +404,7 @@ proc newConnection(client: AsyncHttpClient,
           raise getCurrentException()
 
     # If need to CONNECT through proxy
-    if url.scheme == "https" and not client.proxy.isNil:
+    if isSsl and not client.proxy.isNil:
       when defined(ssl):
         # Pass only host:port for CONNECT
         var connectUrl = initUrl()
@@ -440,8 +439,7 @@ proc readFileSizes(client: AsyncHttpClient,
       continue
 
     # TODO: look into making getFileSize work with async
-    let fileSize = getFileSize(entry.content)
-    entry.fileSize = fileSize
+    entry.fileSize = getFileSize(entry.content)
 
 proc getBoundary(p: MultipartData): string =
   if p == nil or p.entries.len == 0: return
@@ -663,33 +661,49 @@ proc patchContent*(client: AsyncHttpClient, url: string, body = "",
   let resp = await patch(client, url, body, multipart)
   return await responseContent(resp)
 
-# proc downloadFileEx(client: AsyncHttpClient,
-#                     url, filename: string): Future[void] {.async.} =
-#   ## Downloads ``url`` and saves it to ``filename``.
-#   client.getBody = false
-#   let resp = await client.get(url)
+proc writeFromStream*(f: File, fs: FutureStream[string]) {.async.} =
+  ## Reads data from the specified future stream until it is completed.
+  ## The data which is read is written to the file immediately and
+  ## freed from memory.
+  ##
+  ## This procedure is perfect for saving streamed data to a file without
+  ## wasting memory.
+  while true:
+    let (hasValue, value) = await fs.read()
+    if hasValue:
+      # await f.write(value)
+      f.write(value)
+    else:
+      break
 
-#   client.bodyStream = newFutureStream[string]("downloadFile")
-#   var file = openAsync(filename, fmWrite)
-#   # Let `parseBody` write response data into client.bodyStream in the
-#   # background.
-#   asyncCheck parseBody(client, resp.headers, resp.version)
-#   # The `writeFromStream` proc will complete once all the data in the
-#   # `bodyStream` has been written to the file.
-#   await file.writeFromStream(client.bodyStream)
-#   file.close()
+proc downloadFileEx(client: AsyncHttpClient,
+                    url, filename: string): Future[void] {.async.} =
+  ## Downloads ``url`` and saves it to ``filename``.
+  client.getBody = false
+  let resp = await client.get(url)
 
-#   if resp.code.is4xx or resp.code.is5xx:
-#     raise newException(HttpRequestError, resp.status)
+  client.bodyStream = newFutureStream[string]("downloadFile")
+  # var file = openAsync(filename, fmWrite)
+  var file = open(filename, fmWrite)
+  # Let `parseBody` write response data into client.bodyStream in the
+  # background.
+  asyncCheck parseBody(client, resp.headers, resp.version)
+  # The `writeFromStream` proc will complete once all the data in the
+  # `bodyStream` has been written to the file.
+  await file.writeFromStream(client.bodyStream)
+  file.close()
 
-# proc downloadFile*(client: AsyncHttpClient, url: string,
-#                    filename: string): Future[void] =
-#   result = newFuture[void]("downloadFile")
-#   try:
-#     result = downloadFileEx(client, url, filename)
-#   except Exception as exc:
-#     result.fail(exc)
-#   finally:
-#     result.addCallback(
-#       proc () {.closure, gcsafe.} = client.getBody = true
-#     )
+  if resp.code.is4xx or resp.code.is5xx:
+    raise newException(HttpRequestError, resp.status)
+
+proc downloadFile*(client: AsyncHttpClient, url: string,
+                   filename: string): Future[void] =
+  result = newFuture[void]("downloadFile")
+  try:
+    result = downloadFileEx(client, url, filename)
+  except Exception as exc:
+    result.fail(exc)
+  finally:
+    result.addCallback(
+      proc (arg: pointer = nil) {.closure, gcsafe.} = client.getBody = true
+    )
