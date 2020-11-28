@@ -12,7 +12,8 @@ build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 
 ``` nim 
 const HttpRequestBufferSize* {.intdefine.} = 1.Kb
-const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32) # 32 is sizeof MofuHeader
+const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32) 
+# 32 is sizeof MofuHeader
 ```
 
 ## Todos  
