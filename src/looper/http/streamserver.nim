@@ -248,6 +248,7 @@ proc processRequest(
   request.headers.clear()
   
   # receivce untill http header end
+  # note: headers field name is case-insensitive, field value is case sensitive
   const HeaderSep = @[byte('\c'),byte('\L'),byte('\c'),byte('\L')]
   var count:int
   try:
