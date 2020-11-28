@@ -8,6 +8,13 @@ build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 
 `looper` current stage is proving my idea.  
 
+## Compile flags  
+
+``` nim 
+const HttpRequestBufferSize* {.intdefine.} = 1.Kb
+const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32) # 32 is sizeof MofuHeader
+```
+
 ## Todos  
 
 - [x] Parse http request streamingly.  
