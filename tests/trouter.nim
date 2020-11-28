@@ -2,7 +2,7 @@
 import ./looper/http/streamserver
 import ./looper/http/streamclient
 import ./looper/http/router
-import ./looper/http/httpcore,chronos
+import ./looper/http/httpcore, chronos
 import tables
 
 const TestUrl = "http://127.0.0.1:64124/basic/foo/ba?q=qux"
@@ -11,13 +11,13 @@ type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Looper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void])  =
+    test: proc (response: AsyncResponse, body: string): Future[void]) =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
   let r = newRouter[AsyncCallback]()
-  r.addRoute(handler, "get","/basic/{p1}/{p2}")
-  r.addRoute(handler, "get","/code/{codex}")
+  r.addRoute(handler, "get", "/basic/{p1}/{p2}")
+  r.addRoute(handler, "get", "/code/{codex}")
   var server = newLooper(address, r, flags)
   server.start()
   let
@@ -43,7 +43,7 @@ proc testParams() {.async.} =
 
   proc test(response: AsyncResponse, body: string) {.async.} =
     doAssert(response.code == Http200)
-    let p = {"p1": "foo","p2": "ba"}.toTable
+    let p = {"p1": "foo", "p2": "ba"}.toTable
     let q = {"q": "qux"}.toTable
     echo body
     doAssert(body == $p & $q)

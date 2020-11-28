@@ -115,12 +115,22 @@ proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.as
   if request.headers.hasKey("If-Modified-Since"):
     var ifModifiedSince: Time
     try:
-      ifModifiedSince = parseTime(request.headers["If-Modified-Since"][0 ..< 25], "ddd, dd MMM yyyy HH:mm:ss", utc())
+      ifModifiedSince = parseTime(request.headers["If-Modified-Since"],HttpDateFormat, utc())
     except:
       await request.respError(Http400)
       return none(FileInfo)
     if info.lastWriteTime == ifModifiedSince:
       await request.respStatus(Http304)
+      return none(FileInfo)
+  elif request.headers.hasKey("If-Unmodified-Since"):
+    var ifUnModifiedSince: Time
+    try:
+      ifUnModifiedSince = parseTime(request.headers["If-Unmodified-Since"],HttpDateFormat, utc())
+    except:
+      await request.respError(Http400)
+      return none(FileInfo)
+    if info.lastWriteTime > ifUnModifiedSince:
+      await request.respStatus(Http412)
       return none(FileInfo)
   return some(info)
 

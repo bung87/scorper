@@ -34,6 +34,7 @@ type
                      ## TCP/IP tunnel, usually used for proxies.
     HttpPatch        ## Applies partial modifications to a resource.
 
+const HttpDateFormat* = "ddd',' dd MMM yyyy HH:mm:ss 'GMT'"
 
 const
   Http100* = HttpCode(100)
