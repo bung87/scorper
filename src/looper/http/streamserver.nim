@@ -26,7 +26,7 @@ type
     transp: StreamTransport
     buf: array[HttpRequestBufferSize,char]
     httpParser: MofuParser
-    contentLength: int
+    contentLength: BiggestUInt # as RFC no limit
     contentType: string
     server: Looper
     prefix: string
@@ -199,7 +199,7 @@ proc serveStatic*(request: Request) {.async.} =
 proc json*(request: Request): Future[JsonNode] {.async.} =
   var str: string
   try:
-    str = await request.transp.readLine(limit = request.contentLength)
+    str = await request.transp.readLine(limit = request.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await request.respStatus(Http400, ContentLengthMismatch)
     raise e
@@ -215,7 +215,7 @@ proc form*(request: Request): Future[Form] {.async.} =
     of "application/x-www-form-urlencoded":
       var str: string
       try:
-        str = await request.transp.readLine(limit = request.contentLength)
+        str = await request.transp.readLine(limit = request.contentLength.int)
       except AsyncStreamIncompleteError as e:
         await request.respStatus(Http400, ContentLengthMismatch)
         raise e
@@ -233,7 +233,7 @@ proc form*(request: Request): Future[Form] {.async.} =
         except BoundaryInvalidError as e:
           await request.respError(Http400, e.msg)
           raise e
-        var parser = newMultipartParser(parsed.boundary, request.transp, request.buf.addr, request.contentLength)
+        var parser = newMultipartParser(parsed.boundary, request.transp, request.buf.addr, request.contentLength.int)
         try:
           await parser.parse()
         except TransportIncompleteError as e:
@@ -333,15 +333,16 @@ proc processRequest(
   # - Check for Content-length header
   if unlikely(request.meth in MethodNeedsBody):
     if request.headers.hasKey("Content-Length"):
-      if parseSaturatedNatural(request.headers["Content-Length"], request.contentLength) == 0:
+      try:
+        discard parseBiggestUInt(request.headers["Content-Length"], request.contentLength)
+      except ValueError:
         await request.respStatus(Http400, "Invalid Content-Length.")
         return true
-      else:
-        if request.contentLength > looper.maxBody:
-          await request.respStatus(Http413)
-          return false
-        if request.headers.hasKey("Content-Type"):
-          request.contentType = request.headers["Content-Type"]
+      if request.contentLength.int > looper.maxBody:
+        await request.respStatus(Http413)
+        return false
+      if request.headers.hasKey("Content-Type"):
+        request.contentType = request.headers["Content-Type"]
     else:
       await request.respStatus(Http411)
       return true
