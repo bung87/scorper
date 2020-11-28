@@ -1,5 +1,6 @@
 import macros, bitops, ./httpcore
 import .. / private / SIMD / cpu_type
+import constant
 
 macro getCPU: untyped =
   let CPU = $getCPUType()
@@ -161,15 +162,15 @@ const HEADER_VALUE_TOKEN = [
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 ]
 
+type   
+  MofuHeader* = object
+    name*, value: ptr char
+    nameLen*, valueLen*: int
 type
   MofuParser* = ref object
     httpMethod*, path*,major*, minor*: ptr char
     httpMethodLen*, pathLen*, headerLen*: int
-    headers*: seq[MofuHeader]
-
-  MofuHeader* = object
-    name*, value: ptr char
-    nameLen*, valueLen*: int
+    headers*: array[HttpHeadersLength, MofuHeader]
 
   MofuChunk* = ref object
     state: ChunkState
@@ -206,11 +207,10 @@ template `[]=`[T](p: ptr T, off: int, val: T) =
 
 getCPU()
 
-proc parseHeader*(headers: var seq[MofuHeader], buf: var ptr char, bufLen: int): int =
+proc parseHeader*(headers: var array[HttpHeadersLength, MofuHeader], buf: var ptr char, bufLen: int): int =
   var bufStart = buf
   var hdrLen = 0
   while true:
-    var header = MofuHeader()
     case buf[]:
       of '\0':
         return -1
@@ -248,8 +248,8 @@ proc parseHeader*(headers: var seq[MofuHeader], buf: var ptr char, bufLen: int):
             if not HEADER_NAME_TOKEN[buf[].int].bool: return -1
           buf += 1
 
-        header.name = start
-        header.nameLen = bufEnd - start
+        headers[hdrLen].name = start
+        headers[hdrLen].nameLen = bufEnd - start
 
         # HEADER VALUE CHECK
         var bufLen = bufLen - (buf - bufStart)
@@ -263,9 +263,8 @@ proc parseHeader*(headers: var seq[MofuHeader], buf: var ptr char, bufLen: int):
               return -1
           buf += 1
 
-        header.value = start
-        header.valueLen = buf - start - 1
-        headers.add header
+        headers[hdrLen].value = start
+        headers[hdrLen].valueLen = buf - start - 1
         inc hdrLen
 
   return hdrLen
@@ -500,8 +499,9 @@ when isMainModule:
     "\r\ltest=hoge"
 
   let old = cpuTime()
+  var mhreq = MofuParser()
   for i in 0 .. 100000:
-    var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
+    
     discard mhreq.parseHeader(addr buf[0], buf.len)
   echo "mofuparser:" & $(cpuTime() - old)
 
@@ -510,8 +510,6 @@ when isMainModule:
   for i in 0 .. 100000:
     discard parseRequest(a)
   echo "httputils:" & $(cpuTime() - old2)
-
-  var mhreq = MofuParser(headers:newSeqOfCap[MofuHeader](64))
 
   var pdata = "POST /foo HTTP/1.1\r\n" &
     "Content-Length: 68137\r\n" &

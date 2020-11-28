@@ -246,7 +246,6 @@ proc processRequest(
 ): Future[bool] {.async.} =
 
   request.headers.clear()
-  zeroMem(request.httpParser.headers.addr, request.httpParser.headers.len)
   
   # receivce untill http header end
   const HeaderSep = @[byte('\c'),byte('\L'),byte('\c'),byte('\L')]
@@ -370,7 +369,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   req.transp = transp
   req.hostname = $req.transp.localAddress
   req.ip = $req.transp.remoteAddress
-  req.httpParser = MofuParser(headers: newSeqOfCap[MofuHeader](64))
+  req.httpParser = MofuParser()
   while not transp.atEof():
     let retry = await processRequest(looper, req)
     if not retry: 
