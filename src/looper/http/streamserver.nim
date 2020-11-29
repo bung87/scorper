@@ -329,6 +329,9 @@ proc processRequest(
       request.protocol.minor = 1
     else:
       discard
+  if request.protocol == HttpVer20:
+    await request.respStatus(Http505)
+    return false
 
   if request.meth == HttpPost:
     # Check for Expect header

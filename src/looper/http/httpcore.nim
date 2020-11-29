@@ -14,6 +14,7 @@ type
   HttpVersion* = enum
     HttpVer11 = "HTTP/1.1",
     HttpVer10 = "HTTP/1.0"
+    HttpVer20 = "HTTP/2.0"
 
   HttpMethod* = enum ## the requested HttpMethod
     HttpHead,        ## Asks for the response identical to the one that would
@@ -242,10 +243,12 @@ func `==`*(protocol: tuple[major, minor: int],
   let major =
     case ver
     of HttpVer11, HttpVer10: 1
+    of HttpVer20: 2
   let minor =
     case ver
     of HttpVer11: 1
     of HttpVer10: 0
+    of HttpVer20: 0
   result = protocol.major == major and protocol.minor == minor
 
 func contains*(methods: set[HttpMethod], x: string): bool =
