@@ -11,7 +11,21 @@ type BearerValidator* = ref object
   validateScope:proc (request: Request, scope:string): Future[tuple[success:bool,content:string]] {.closure, gcsafe.}
   validateToken:proc (request: Request, accessToken:string): Future[tuple[success:bool,content:string]] {.closure, gcsafe.}
 
+type BearerAccessTokenResponse* = ref object
+  access_token: string
+  expires_in:string
+  refresh_token:string
+  token_type:string
+
+proc newBearerAccessTokenResponse*(access_token:string,expires_in:int,refresh_token:string):BearerAccessTokenResponse =
+  new result
+  result.access_token = access_token
+  result.expires_in = expires_in
+  result.refresh_token = refresh_token
+  result.token_type = "Bearer"
+
 proc bearer*(request:Request, validator: BearerValidator): Future[bool] {.async.} =
+  # https://tools.ietf.org/html/rfc6750
   var accessToken:string
   var accessScope:string
   if request.meth == HttpGet:
@@ -42,12 +56,6 @@ proc bearer*(request:Request, validator: BearerValidator): Future[bool] {.async.
     headers["Content-Type"] = "application/json"
     headers["Cache-Control"] = "no-store"
     headers["Pragma"] = "no-cache"
-    # let j = %* {
-    #    "access_token":"mF_9.B5f-4.1JqM",
-    #    "token_type":"Bearer",
-    #    "expires_in":3600,
-    #    "refresh_token":"tGzv3JOkF0XG5Qx2TlKWIA"
-    #  }
     await request.resp( r2.content ,headers = headers)
     return true
 
