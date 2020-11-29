@@ -31,6 +31,10 @@ const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32)
 - [ ] Parse JSON streamingly.  
 - [ ] Better error control flow.  
 
+## Limitations  
+
+the `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructions  
+
 ## License  
 
 Apache License 2.0
