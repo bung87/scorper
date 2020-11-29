@@ -9,7 +9,7 @@ skipDirs      = @["tests","examples"]
 
 # Dependencies
 
-requires "nim >= 1.5.1"
+requires "nim >= 1.2.0"
 requires "https://github.com/status-im/nim-chronos.git"
 
 task test, "Runs the test suite":
