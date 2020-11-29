@@ -237,7 +237,12 @@ proc parseParam(parser:MultipartParser){.inline.} =
       discard
 
 proc readLine(parser:MultipartParser): Future[int] {.async.} =
-  result = await parser.transp.readUntil(parser.src[0].addr, sep = @[byte('\c'),byte('\l')], nbytes = parser.needReadLen)
+  try:
+    result = await parser.transp.readUntil(parser.src[0].addr, sep = @[byte('\c'),byte('\l')], nbytes = parser.needReadLen)
+  except TransportLimitError:
+    # TODO this exception need to be recoverable
+    # or chronos provide api readLineInto that silently fails
+    return result
   parser.buf = parser.src[0].addr
 
 proc parse*(parser:MultipartParser) {.async.} =
