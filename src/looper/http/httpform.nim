@@ -36,9 +36,11 @@ func `[]`*(x: FormData | FormFiles, key: string): seq[ContentDisposition] =
   filter(x.store, proc(y: ContentDisposition): bool = y.name == key)
 
 converter toString*(values: seq[ContentDisposition]): string =
-  doAssert values[0].kind == ContentDispositionKind.data
-  return values[0].value
+  for v in values:
+    if v.kind == ContentDispositionKind.data:
+      return v.value
 
 converter toFormFile*(values: seq[ContentDisposition]): FormFile =
-  var v = values[0]
-  return FormFile(filename:v.filename,filepath:v.filepath,contentType:v.contentType)
+  for v in values:
+    if v.kind == ContentDispositionKind.file:
+      return FormFile(filename:v.filename,filepath:v.filepath,contentType:v.contentType)
