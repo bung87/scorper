@@ -41,4 +41,4 @@ converter toString*(values: seq[ContentDisposition]): string =
 
 converter toFormFile*(values: seq[ContentDisposition]): FormFile =
   var v = values[0]
-  return FormFile(filename:v.filename,filepath:v.filepath,contentType:v.contentType,transferEncoding:v.transferEncoding)
+  return FormFile(filename:v.filename,filepath:v.filepath,contentType:v.contentType)

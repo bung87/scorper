@@ -8,7 +8,7 @@
 import chronos
 import mofuparser, parseutils, strutils
 import multipartparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
-import std / [os,options,strformat,times,mimetypes,json ]
+import std / [os,options,strformat,times,mimetypes,json,sequtils ]
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -83,11 +83,15 @@ proc respError*(req: Request, code: HttpCode): Future[void] {.async.}=
   msg.add(content)
   discard await req.transp.write(msg)
 
-proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper"): Future[void] {.async.}=
+proc pairParam(x:tuple[key:string,value:string]): string =
+    result = x[0] & '=' & '"' & x[1] &  '"'
+
+proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper", params:seq[tuple[key:string,value:string]] = @[],code = Http401): Future[void] {.async.}=
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
-  headers["WWW-Authenticate"] = &"{scheme} realm={realm}"
-  let msg = generateHeaders(headers, Http401)
+  let extro = if params.len > 0 : "," & params.map( pairParam).join(",") else: ""
+  headers["WWW-Authenticate"] = &"{scheme} realm={realm}" & extro
+  let msg = generateHeaders(headers, code)
   discard await req.transp.write(msg)
 
 proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.}=
@@ -218,7 +222,7 @@ proc form*(request: Request): Future[Form] {.async.} =
       var str: string
       try:
         str = await request.transp.readLine(limit = min(request.contentLength.int,request.server.maxBody ))
-      except:
+      except Exception as e:
         await request.respStatus(Http400)
         raise e
       for pairStr in str.split('&'):
