@@ -213,15 +213,23 @@ proc form*(request: Request): Future[Form] {.async.} =
   result = newForm()
   case request.contentType:
     of "application/x-www-form-urlencoded":
+      # TODO also be streamingly
       var str: string
       try:
-        str = await request.transp.readLine(limit = request.contentLength.int)
-      except AsyncStreamIncompleteError as e:
-        await request.respStatus(Http400, ContentLengthMismatch)
+        str = await request.transp.readLine(limit = min(request.contentLength.int,request.server.maxBody ))
+      except:
+        await request.respStatus(Http400)
         raise e
-      let url = parseUrl "?" & str
-      for (name,value) in url.query:
-        result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:name,value:value)
+      for pairStr in str.split('&'):
+        let pair = pairStr.split('=', 1)
+        let kv =
+          if pair.len == 2:
+            (decodeUrlComponent(pair[0]), decodeUrlComponent(pair[1]))
+          elif pair.len == 1:
+            (decodeUrlComponent(pair[0]), "")
+          else:
+            ("", "")
+        result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:kv[0],value:kv[1])
     else:
       if request.contentType.len > 0:
         var parsed:tuple[i:int,boundary:string]
