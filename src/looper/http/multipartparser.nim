@@ -40,15 +40,14 @@ type
       of data:
         value*:string
       of file:
-        filename*,contentType*,contentDescription*,contentLength*,transferEncoding*:string
-        filepath*:string
+        filename*, filepath*, contentType*, contentDescription*, contentLength*:string
         file:FileStream
 
 proc `$`*(x:ContentDisposition):string =
   if x.kind == data:
     result = fmt"""{{"name":"{x.name}", "value": "{x.value}"}}"""
   elif x.kind == file:
-    result = fmt"""{{"name":"{x.name}", "filename":"{x.filename}", "contentType": "{x.contentType}", "transferEncoding": "{x.transferEncoding}", "filepath": {x.filepath} }}"""
+    result = fmt"""{{"name":"{x.name}", "filename":"{x.filename}", "contentType": "{x.contentType}", "filepath": {x.filepath} }}"""
 
 template `+`[T](p: ptr T, off: int): ptr T =
     cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
@@ -230,8 +229,6 @@ proc parseParam(parser:MultipartParser){.inline.} =
     of "Content-Type":
       debug parser.currentDisposition.kind
       parser.currentDisposition.contentType = parser.bStr
-    of "Transfer-Encoding":
-      parser.currentDisposition.transferEncoding = parser.bStr
     of "Content-Description":
       parser.currentDisposition.contentDescription = parser.bStr
     of "Content-Length":
