@@ -50,6 +50,7 @@ proc genericHeaders():HttpHeaders =
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   result = newHttpHeaders()
   result["Date"] = httpDate()
+  result["X-Frame-Options"] = "SAMEORIGIN"
 
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
