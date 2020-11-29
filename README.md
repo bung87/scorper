@@ -1,15 +1,15 @@
-# looper  [![Build Status](travis)](https://travis-ci.org/bung87/looper)  
+# Looper  [![Build Status](travis)](https://travis-ci.org/bung87/Looper)  
 
 
-[travis]: https://travis-ci.org/bung87/looper.svg?branch=master
+[travis]: https://travis-ci.org/bung87/Looper.svg?branch=master
 
 Another web framework written in Nim  
 
 build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
 
-`looper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
+`Looper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
 
-`looper` current stage is proving my idea.  
+`Looper` current stage is proving my idea.  
 
 ## Compile flags  
 
