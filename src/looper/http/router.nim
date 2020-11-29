@@ -5,19 +5,19 @@ import critbits
 import urlly
 import tables
 export urlly, tables
-
+import urlrfc
 #
 # Type Declarations
 #
 
 const pathSeparator = '/'
-const allowedCharsInUrl = {'a'..'z', 'A'..'Z', '0'..'9', '-', '.', '_', '~','%', pathSeparator}
+
 const wildcard = '*'
 const startParam = '{'
 const endParam = '}'
 const greedyIndicator = '$'
 const specialSectionStartChars = {pathSeparator, wildcard, startParam}
-const allowedCharsInPattern = allowedCharsInUrl + {wildcard, startParam, endParam, greedyIndicator}
+const allowedCharsInPattern = URL_pchar + { pathSeparator, wildcard, startParam, endParam, greedyIndicator}
 
 
 type

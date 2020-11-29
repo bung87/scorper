@@ -1,0 +1,92 @@
+import constant
+import chronos
+
+type
+  UrlEncodedParserState* = enum
+    nameBegin, nameEnd, valueBegin,valueEnd, allEnd
+  UrlEncodedParser* = ref object
+    buf: ptr char
+    src: ptr array[HttpRequestBufferSize,char]
+    transp:StreamTransport
+    contentLength: int
+    read: int
+    state*: UrlEncodedParserState
+    aSlice:Slice[int] # store name,value pair indexes
+    bSlice:Slice[int]
+    tmpRead:int
+
+proc remainLen(parser:UrlEncodedParser):int {.inline.} =
+  parser.contentLength - parser.read
+
+proc needReadLen(parser: UrlEncodedParser): int {.inline.} =
+  min(parser.remainLen, HttpRequestBufferSize)
+
+proc readLine(parser:UrlEncodedParser): Future[int] {.async.} =
+  result = await parser.transp.readUntil(parser.src[0].addr, sep = @[byte('\c'),byte('\l')], nbytes = parser.needReadLen)
+  parser.buf = parser.src[0].addr
+
+template `+`[T](p: ptr T, off: int): ptr T =
+    cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
+
+template `+=`[T](p: ptr T, off: int) =
+  p = p + off
+
+proc resetSlices(parser:UrlEncodedParser) {.inline.} =
+  parser.aSlice = default(Slice[int])
+  parser.bSlice = default(Slice[int])
+
+proc aStr(parser:UrlEncodedParser):string {.inline.}=
+  parser.aSlice.b -= 1
+  cast[string](parser.src[parser.aSlice])
+
+proc bStr(parser:UrlEncodedParser):string {.inline.}=
+  parser.bSlice.b -= 1
+  cast[string](parser.src[parser.bSlice])
+
+template debug(a:varargs[untyped]) =
+  when defined(DebugUrlEncodedParser):
+    echo a
+
+proc processChar(parser:UrlEncodedParser, o:var seq[tuple[key, value: TaintedString]]) =
+  var name,value:string
+  while true:
+    case parser.state:
+      of nameBegin:
+        debug "nameBegin"
+        while parser.buf[] != '=':
+          parser.buf += 1
+          inc parser.aSlice.b
+        parser.state = nameEnd
+      of nameEnd:
+        parser.bSlice.a = parser.aSlice.b + 1
+        parser.bSlice.b = parser.aSlice.b + 1
+        name = parser.aStr
+        debug "name:" & name
+        if parser.buf[] == '=':
+          parser.buf += 1
+          parser.state = valueBegin
+      of valueBegin:
+        while parser.buf[] notin {'&','\c','\l'}:
+          parser.buf += 1
+          inc parser.bSlice.b
+        parser.aSlice.a = parser.bSlice.b + 1
+        parser.aSlice.b = parser.bSlice.b + 1
+        parser.state = valueEnd
+      of valueEnd:
+        value = parser.bStr
+        debug "value:" & value
+        o.add (key:name,value:value)
+        if parser.buf[] == '&':
+          parser.buf += 1
+          parser.state = nameBegin
+        else:
+          parser.state = allEnd
+      of allEnd:
+        break
+
+proc parse*(parser:UrlEncodedParser):Future[seq[tuple[key, value: TaintedString]]] {.async.} =
+  while not parser.transp.atEof():
+    parser.tmpRead = await parser.readLine
+    if parser.tmpRead == 2:
+      break
+    parser.processChar(result)
