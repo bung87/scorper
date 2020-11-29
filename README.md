@@ -1,4 +1,7 @@
-# looper  
+# looper  [![Build Status](travis)](https://travis-ci.org/bung87/looper)  
+
+
+[travis]: https://travis-ci.org/bung87/looper.svg?branch=master
 
 Another web framework written in Nim  
 
