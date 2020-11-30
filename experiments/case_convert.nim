@@ -19,10 +19,8 @@ import strutils, times
 # 1 .. 9 = 49 .. 57
 # - 45
 # _ 95
-echo cast[uint8]('1')
-var a = '1'
-let b = cast[char](cast[uint8](a) xor 0b0010_0000'u8)
-echo repr b
+
+const AllAllowed = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!#$%&\'*+-./^_`|~" & "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 block toupper:
   var h: char
@@ -52,11 +50,9 @@ for i in 1 .. 100_000:
 var r2 = cpuTime() - t1
 echo "CPU time toLowerAscii ", r2
 doAssert r1 < r2
-echo $(r1 / r2 * 100) & "%"
+echo "xor ver time consuming is about " & $( (r1 / r2) * 100) & "%" & " of toLowerAscii"
 
 const All = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;?@[\\]^_`{|}~ \t\n\r\x0b\x0c"
-
-const AllAllowed = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!#$%&\'*+-./^_`|~" & "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 block strtoLowerAscii:
   var t3 = cpuTime()
@@ -65,7 +61,16 @@ block strtoLowerAscii:
     for c in All:
       e = toLowerAscii(c)
   var t4 = cpuTime() - t3
-  echo "CPU time string toLowerAscii ", t4
+  echo "CPU time string strtoLowerAscii ", t4
+
+block strtoUpperAscii:
+  var t3 = cpuTime()
+  var e: char
+  for i in 1 .. 100_000:
+    for c in All:
+      e = toUpperAscii(c)
+  var t4 = cpuTime() - t3
+  echo "CPU time string strtoUpperAscii ", t4
 
 block strxorLower:
   var t3 = cpuTime()
