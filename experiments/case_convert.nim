@@ -62,20 +62,34 @@ block strtoLowerAscii:
   var t3 = cpuTime()
   var e: char
   for i in 1 .. 100_000:
-    for c in AllAllowed:
+    for c in All:
       e = toLowerAscii(c)
   var t4 = cpuTime() - t3
   echo "CPU time string toLowerAscii ", t4
 
-block strxor:
+block strxorLower:
   var t3 = cpuTime()
   var e: char
   for i in 1 .. 100_000:
-    for c in AllAllowed:
-      if likely c.isAlphaAscii:
+    for c in All:
+      if c in {'A' .. 'Z'}:
+      # if c >= 'A' and c <= 'Z' :
         e = cast[char](cast[uint8](c) xor 0b0010_0000'u8)
       else:
         e = c
   var t4 = cpuTime() - t3
-  echo "CPU time string strxor ", t4
-# just use toLowerAscii unless sure about input is all alpha
+  echo "CPU time string strxorLower ", t4
+
+  block strxorUpper:
+    var t3 = cpuTime()
+    var e: char
+    for i in 1 .. 100_000:
+      for c in All:
+        if c in {'a' .. 'z'}:
+        # if c >= 'a' and c <= 'z':
+          e = cast[char](cast[uint8](c) xor 0b0010_0000'u8)
+        else:
+          e = c
+    var t4 = cpuTime() - t3
+    echo "CPU time string strxorUpper ", t4
+
