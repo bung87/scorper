@@ -139,56 +139,53 @@ proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.as
       return none(FileInfo)
   return some(info)
 
+proc fileMeta(request: Request, filepath:string):Future[Option[tuple[info:FileInfo,headers:HttpHeaders]]]{.async, inline.} =
+  let info = await fileGuard(request, filepath)
+  if not info.isSome():
+    return none(tuple[info:FileInfo,headers:HttpHeaders])
+  var size = info.get.size
+  var headers = genericHeaders()
+  headers["Content-Length"] = $size
+  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
+  return some((info:info.get,headers:headers))
+
 proc sendFile*(request: Request, filepath:string) {.async.} = 
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
-  let info = await fileGuard(request, filepath)
-  if not info.isSome():
-    return 
-  var (dir, name, ext) = splitFile(filepath)
+  var meta = await fileMeta(request, filepath)
+  if meta.isNone:
+    return
+  var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext) 
-  var size = int(info.get.size)
-  var headers = genericHeaders()
-  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
-  headers["Content-Type"] = mime
-  headers["Content-Length"] = $size
-  var msg = generateHeaders(headers,Http200)
+  meta.unsafeGet.headers["Content-Type"] = mime
+  var msg = generateHeaders(meta.unsafeGet.headers,Http200)
   discard await request.transp.write(msg)
-  await request.writeFile(filepath, size)
+  await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
 proc sendDownload*(request: Request, filepath:string) {.async.} = 
   ## send file directly without mime type , downloaded file name same as original
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
-  let info = await fileGuard(request, filepath)
-  if not info.isSome():
-    return 
-  var (dir, name, ext) = splitFile(filepath)
-  var size = int(info.get.size)
-  var headers = genericHeaders()
-  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
-  headers["Content-Type"] = "application/x-download"
-  headers["Content-Length"] = $size
-  var msg = generateHeaders(headers,Http200)
+  var meta = await fileMeta(request, filepath)
+  if meta.isNone:
+    return
+  meta.unsafeGet.headers["Content-Type"] = "application/x-download"
+  var msg = generateHeaders(meta.unsafeGet.headers,Http200)
   discard await request.transp.write(msg)
-  await request.writeFile(filepath, size)
+  await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
 proc sendAttachment*(request: Request, filepath:string, asName: string = "") {.async.} = 
-  let info = await fileGuard(request, filepath)
-  if not info.isSome():
+  var meta = await fileMeta(request, filepath)
+  if meta.isNone:
     return
-  var (dir, name, ext) = splitFile(filepath)
+  var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext) 
-  var size = int(info.get.size)
-  var headers = genericHeaders()
-  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
-  headers["Content-Type"] = mime
-  headers["Content-Length"] = $size
-  var msg = generateHeaders(headers,Http200)
+  meta.unsafeGet.headers["Content-Type"] = mime
+  var msg = generateHeaders(meta.unsafeGet.headers,Http200)
   let filename = if asName.len == 0: filepath.extractFilename else: asName
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
   msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & CRLF & CRLF
   discard await request.transp.write(msg)
-  await request.writeFile(filepath, size)
+  await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
 proc serveStatic*(request: Request) {.async.} =
   if request.meth != HttpGet:
