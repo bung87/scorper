@@ -7,7 +7,7 @@
 
 import chronos
 import mofuparser, parseutils, strutils
-import multipartparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
+import urlencodedparser, multipartparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
 import std / [os,options,strformat,times,mimetypes,json,sequtils ]
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
@@ -215,23 +215,12 @@ proc form*(request: Request): Future[Form] {.async.} =
   result = newForm()
   case request.contentType:
     of "application/x-www-form-urlencoded":
-      # TODO also be streamingly
-      var str: string
-      try:
-        str = await request.transp.readLine(limit = min(request.contentLength.int,request.server.maxBody ))
-      except Exception as e:
-        await request.respStatus(Http400)
-        raise e
-      for pairStr in str.split('&'):
-        let pair = pairStr.split('=', 1)
-        let kv =
-          if pair.len == 2:
-            (decodeUrlComponent(pair[0]), decodeUrlComponent(pair[1]))
-          elif pair.len == 1:
-            (decodeUrlComponent(pair[0]), "")
-          else:
-            ("", "")
-        result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:kv[0],value:kv[1])
+      var parser = newUrlEncodedParser(request.transp, request.buf.addr, request.contentLength.int)
+      var parsed = await parser.parse()
+      for (key,value) in parsed:
+        let v = if value.len > 0: decodeUrlComponent(value) else: ""
+        let k = decodeUrlComponent key
+        result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:k,value: v)
     else:
       if request.contentType.len > 0:
         var parsed:tuple[i:int,boundary:string]
@@ -273,7 +262,6 @@ proc processRequest(
 ): Future[bool] {.async.} =
 
   request.headers.clear()
-  
   # receivce untill http header end
   # note: headers field name is case-insensitive, field value is case sensitive
   const HeaderSep = @[byte('\c'),byte('\L'),byte('\c'),byte('\L')]

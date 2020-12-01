@@ -506,7 +506,6 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
   let headerString = generateHeaders(requestUrl, httpMethod, newHeaders,
                                      client.proxy)
   discard await client.transp.write(headerString)
-
   if data.len > 0:
     var buffer: string
     for i, entry in multipart.entries:

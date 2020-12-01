@@ -15,14 +15,21 @@ type
     bSlice:Slice[int]
     tmpRead:int
 
+proc newUrlEncodedParser*(transp:StreamTransport, src:ptr array[HttpRequestBufferSize,char], contentLength: int): UrlEncodedParser =
+  new result
+  result.transp = transp
+  result.src = src
+  result.buf = src[0].addr
+  result.contentLength = contentLength
+
 proc remainLen(parser:UrlEncodedParser):int {.inline.} =
   parser.contentLength - parser.read
 
 proc needReadLen(parser: UrlEncodedParser): int {.inline.} =
   min(parser.remainLen, HttpRequestBufferSize)
 
-proc readLine(parser:UrlEncodedParser): Future[int] {.async.} =
-  result = await parser.transp.readUntil(parser.src[0].addr, sep = @[byte('\c'),byte('\l')], nbytes = parser.needReadLen)
+proc readOnce(parser:UrlEncodedParser): Future[int] {.async.} =
+  result = await parser.transp.readOnce(parser.src[0].addr, nbytes = parser.needReadLen)
   parser.buf = parser.src[0].addr
 
 template `+`[T](p: ptr T, off: int): ptr T =
@@ -47,8 +54,12 @@ template debug(a:varargs[untyped]) =
   when defined(DebugUrlEncodedParser):
     echo a
 
+template `-`[T](p: ptr T, p2: ptr T): int =
+  cast[int](p) - cast[int](p2)
+
 proc processChar(parser:UrlEncodedParser, o:var seq[tuple[key, value: TaintedString]]) =
   var name,value:string
+  var old = parser.buf
   while true:
     case parser.state:
       of nameBegin:
@@ -66,9 +77,13 @@ proc processChar(parser:UrlEncodedParser, o:var seq[tuple[key, value: TaintedStr
           parser.buf += 1
           parser.state = valueBegin
       of valueBegin:
-        while parser.buf[] notin {'&','\c','\l'}:
-          parser.buf += 1
-          inc parser.bSlice.b
+        debug "value begin"
+        while parser.buf[] != '&':
+          if parser.buf - old < parser.tmpRead:
+            parser.buf += 1
+            inc parser.bSlice.b
+          else:
+            break
         parser.aSlice.a = parser.bSlice.b + 1
         parser.aSlice.b = parser.bSlice.b + 1
         parser.state = valueEnd
@@ -82,11 +97,13 @@ proc processChar(parser:UrlEncodedParser, o:var seq[tuple[key, value: TaintedStr
         else:
           parser.state = allEnd
       of allEnd:
+        debug "allEnd"
         break
 
 proc parse*(parser:UrlEncodedParser):Future[seq[tuple[key, value: TaintedString]]] {.async.} =
   while not parser.transp.atEof():
-    parser.tmpRead = await parser.readLine
-    if parser.tmpRead == 2:
+    if parser.needReadLen == 0:
       break
+    parser.tmpRead = await parser.readOnce
+    parser.read += parser.tmpRead
     parser.processChar(result)

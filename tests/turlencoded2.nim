@@ -3,14 +3,14 @@ import ./looper/http/streamserver
 import ./looper/http/streamclient
 import ./looper/http/httpform
 import ./looper/http/urlly
-import ./looper/http/httpcore,chronos
+import ./looper/http/httpcore, chronos
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Looper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) {.async.}  =
+    test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
@@ -37,7 +37,7 @@ proc testMultipart() {.async.} =
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
-    var headers = newHttpHeaders([(key:"Content-Type",val:"application/x-www-form-urlencoded")])
+    var headers = newHttpHeaders([(key: "Content-Type", val: "application/x-www-form-urlencoded")])
     const body = "UserName=test&UserNameKana=%E3%83%86%E3%82%B9%E3%83%88&MailAddress=test%40example.com"
     let clientResponse = await client.request(TestUrl, HttpPost, body = body, headers = headers)
     client.close()
