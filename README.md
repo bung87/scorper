@@ -24,12 +24,14 @@ const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32)
 - [x] Parse http request streamingly.  
 - [x] Parse form streamingly and lazyly.  
 - [x] Send file and attachement streamingly.  
-- [x] Http Basic auth.  
+- [x] Http Basic auth, Bearer auth , Digest auth(planed).  
 - [x] Serve static files (env:StaticDir)  
 - [x] Parse JSON lazyly.  
 - [x] cookies module.  
 - [ ] Parse JSON streamingly.  
 - [ ] Better error control flow.  
+- [ ] CLI tool generate object oriented controller and routes.
+- [ ] Auto render response respect client accepted content type.
 
 ## Limitations  
 
