@@ -11,6 +11,7 @@ skipDirs      = @["tests","examples"]
 
 requires "nim >= 1.2.0"
 requires "https://github.com/status-im/nim-chronos.git"
+requires "npeg"
 
 task test, "Runs the test suite":
   exec "testament --megatest:off pattern 'tests/*.nim'"
