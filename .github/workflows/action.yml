@@ -45,4 +45,4 @@ jobs:
       run: nimble install -d -y
 
     - name: Test
-      run: nimble tests
+      run: nimble test
