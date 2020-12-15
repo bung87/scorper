@@ -30,7 +30,10 @@ type
     contentType: string
     server: Looper
     prefix: string
-    
+    parsedJson: Option[JsonNode]
+    parsedForm: Option[Form]
+    parsed:bool
+
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
     callback: AsyncCallback
@@ -199,6 +202,9 @@ proc serveStatic*(request: Request) {.async.} =
   await request.sendFile(absPath)
 
 proc json*(request: Request): Future[JsonNode] {.async.} =
+  doAssert request.parsed == false
+  if request.parsedJson.isSome:
+    return request.parsedJson.unSafeGet
   var str: string
   try:
     str = await request.transp.readLine(limit = request.contentLength.int)
@@ -206,12 +212,17 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
     await request.respStatus(Http400, ContentLengthMismatch)
     raise e
   result = parseJson(str)
+  request.parsedJson = some(result)
+  request.parsed = true
 
 proc stream*(request: Request): AsyncStreamReader =
   doAssert request.transp.closed == false
   newAsyncStreamReader(request.transp)
 
 proc form*(request: Request): Future[Form] {.async.} =
+  doAssert request.parsed == false
+  if request.parsedForm.isSome:
+    return request.parsedForm.unSafeGet
   result = newForm()
   case request.contentType:
     of "application/x-www-form-urlencoded":
@@ -254,13 +265,17 @@ proc form*(request: Request): Future[Form] {.async.} =
             elif disp.kind == ContentDispositionKind.file:
               result.files.add disp
       else:
-        return result
+        discard
+  request.parsedForm= some(result)
+  request.parsed = true
 
 proc processRequest(
   looper: Looper,
   request: Request,
 ): Future[bool] {.async.} =
-
+  request.parsed = false
+  request.parsedJson = none(JsonNode)
+  request.parsedForm = none(Form)
   request.headers.clear()
   # receivce untill http header end
   # note: headers field name is case-insensitive, field value is case sensitive
