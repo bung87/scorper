@@ -33,6 +33,7 @@ type
     parsedJson: Option[JsonNode]
     parsedForm: Option[Form]
     parsed:bool
+    rawBody: Option[string]
 
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
@@ -202,7 +203,6 @@ proc serveStatic*(request: Request) {.async.} =
   await request.sendFile(absPath)
 
 proc json*(request: Request): Future[JsonNode] {.async.} =
-  doAssert request.parsed == false
   if request.parsedJson.isSome:
     return request.parsedJson.unSafeGet
   var str: string
@@ -215,12 +215,21 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
   request.parsedJson = some(result)
   request.parsed = true
 
+proc body*(request: Request): Future[string] {.async.} =
+  if request.rawBody.isSome:
+    return request.rawBody.unSafeGet
+  try:
+    result = await request.transp.readLine(limit = request.contentLength.int)
+  except AsyncStreamIncompleteError as e:
+    await request.respStatus(Http400, ContentLengthMismatch)
+    raise e
+  request.parsed = true
+
 proc stream*(request: Request): AsyncStreamReader =
   doAssert request.transp.closed == false
   newAsyncStreamReader(request.transp)
 
 proc form*(request: Request): Future[Form] {.async.} =
-  doAssert request.parsed == false
   if request.parsedForm.isSome:
     return request.parsedForm.unSafeGet
   result = newForm()
@@ -244,20 +253,7 @@ proc form*(request: Request): Future[Form] {.async.} =
           await request.respError(Http400, e.msg)
           raise e
         var parser = newMultipartParser(parsed.boundary, request.transp, request.buf.addr, request.contentLength.int)
-        try:
-          await parser.parse()
-        except TransportIncompleteError as e:
-          await request.respStatus(Http400)
-          request.transp.close()
-          raise e
-        except TransportLimitError as e:
-          await request.respStatus(Http400, BufferLimitExceeded)
-          request.transp.close()
-          raise e
-        except CatchableError as e:
-          await request.respStatus(Http400, BufferLimitExceeded)
-          request.transp.close()
-          raise e
+        await parser.parse()
         if parser.state == boundaryEnd:
           for disp in parser.dispositions:
             if disp.kind == ContentDispositionKind.data:

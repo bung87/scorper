@@ -114,7 +114,8 @@ proc testCustomContentLength() {.async.} =
 
 proc testPost() {.async.} =
   proc handler(request: Request) {.async.} =
-    # doAssert(request.body == "hello")
+    let body = await request.body()
+    doAssert(body == "hello")
     await request.resp("Hello World, 200")
 
   proc request(server: Looper): Future[AsyncResponse] {.async.} =
