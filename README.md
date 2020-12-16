@@ -1,4 +1,4 @@
-# Looper  ![Build Status](https://github.com/bung87/Looper/workflows/Test/badge.svg) [![Build Status](travis)](https://travis-ci.org/bung87/Looper)  
+# Looper  ![Build Status](https://github.com/bung87/Looper/workflows/Test/badge.svg) <!-- ([![Build Status](travis)](https://travis-ci.org/bung87/Looper)  -->
 
 
 [travis]: https://travis-ci.org/bung87/Looper.svg?branch=master
