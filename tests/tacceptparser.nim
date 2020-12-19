@@ -46,6 +46,13 @@ block `the most specific reference has precedence`:
     (mime: "text/*", q: 1.0, extro: 0),
     (mime: "*/*", q: 1.0, extro: 0)]
 
+block empty:
+  let parser = accpetParser()
+  let accept = ""
+  var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
+  var r = parser.match(accept, mimes)
+  doAssert r.ok == false
+
 block q:
   let parser = accpetParser()
   let accept = "text/*, text/plain;format=flowed, text/plain, text/plain;level=1, text/html, text/plain;level=2, */*, image/*, text/rich"

@@ -7,7 +7,8 @@
 
 import chronos
 import mofuparser, parseutils, strutils
-import urlencodedparser, multipartparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
+import npeg/codegen
+import urlencodedparser, multipartparser,acceptparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
 import std / [os,options,strformat,times,mimetypes,json,sequtils ]
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
@@ -34,6 +35,7 @@ type
     parsedForm: Option[Form]
     parsed:bool
     rawBody: Option[string]
+    privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
 
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Looper* = ref object of StreamServer
@@ -55,6 +57,29 @@ proc genericHeaders():HttpHeaders =
   result = newHttpHeaders()
   result["Date"] = httpDate()
   result["X-Frame-Options"] = "SAMEORIGIN"
+
+proc getExt*(req: Request, mime: string): string =
+  result = req.server.mimeDb.getExt(mime,default = "")
+
+proc getMimetype*(req: Request, ext: string): string =
+  result = req.server.mimeDb.getMimetype(ext,default = "")
+
+template acceptMime*(req: Request, ext:untyped, headers:HttpHeaders, body:untyped) = 
+  ## Responds to the request respect client's accept 
+  ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
+  ## Your body code will runs in loop don't forget to `break`
+  ## Order is important
+  var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
+  let accept:string = req.headers["accept"]
+  let r = req.privAccpetParser.match(accept, mimes)
+  var ext:string
+  if r.ok:
+    for item in mimes:
+      ext = req.getExt(item.mime)
+      headers["Content-Type"] = item.mime
+      body
+  else:
+    body
 
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
@@ -399,6 +424,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   req.transp = transp
   req.hostname = $req.transp.localAddress
   req.ip = $req.transp.remoteAddress
+  req.privAccpetParser = accpetParser()
   req.httpParser = MofuParser()
   while not transp.atEof():
     let retry = await processRequest(looper, req)
