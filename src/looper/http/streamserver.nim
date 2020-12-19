@@ -9,7 +9,7 @@ import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser,acceptparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
-import std / [os,options,strformat,times,mimetypes,json,sequtils ]
+import std / [os,options,strformat,times,mimetypes,json,sequtils,macros ]
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -64,22 +64,29 @@ proc getExt*(req: Request, mime: string): string =
 proc getMimetype*(req: Request, ext: string): string =
   result = req.server.mimeDb.getMimetype(ext,default = "")
 
-template acceptMime*(req: Request, ext:untyped, headers:HttpHeaders, body:untyped) = 
+macro acceptMime*(req: Request, ext:untyped, headers:HttpHeaders, body:untyped) = 
   ## Responds to the request respect client's accept 
   ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
-  ## Your body code will runs in loop don't forget to `break`
-  ## Order is important
-  var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
-  let accept:string = req.headers["accept"]
-  let r = req.privAccpetParser.match(accept, mimes)
-  var ext:string
-  if r.ok:
-    for item in mimes:
-      ext = req.getExt(item.mime)
-      headers["Content-Type"] = item.mime
-      body
-  else:
-    body
+  expectLen(body,1)
+  expectKind(body[0],nnkCaseStmt)
+  for item in body[0]:
+    if item.kind in {nnkOfBranch,nnkElifBranch}:
+      expectKind(item.last,nnkStmtList)
+      item.last.add nnkBreakStmt.newTree( newEmptyNode() )
+    elif item.kind == nnkElse:
+      item[0].add nnkBreakStmt.newTree( newEmptyNode() )
+  result = quote do:
+    var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
+    let accept:string = req.headers["accept"]
+    let r = req.privAccpetParser.match(accept, mimes)
+    var ext {.inject.}:string
+    if r.ok:
+      for item in mimes:
+        ext = req.getExt(item.mime)
+        headers["Content-Type"] = item.mime
+        `body`
+    else:
+      `body`
 
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
