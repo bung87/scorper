@@ -1,53 +1,56 @@
 import ./looper/http/acceptparser
-import strutils
+import sequtils,math
 block basic:
-  echo "text/html"[0 ..< "text/html".find('/')]
   let parser = accpetParser()
-  var mimes = newSeq[tuple[mime: string, q: float]]()
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
   let accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
   let r = parser.match(accept, mimes)
-  doAssert mimes == @[(mime: "text/html", q: 1.0), (mime: "application/xhtml+xml", q: 1.0), (mime: "application/xml",
+  doAssert mimes.mapIt( (mime:it.mime,q:it.q) ) == @[(mime: "text/html", q: 1.0), (mime: "application/xhtml+xml", q: 1.0), (mime: "application/xml",
       q: 0.9), (mime: "*/*", q: 0.8)]
 
 block defaultQuality:
   let parser = accpetParser()
   let accept = "application/json;q=0.2, text/html"
-  var mimes = newSeq[tuple[mime: string, q: float]]()
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
   let r = parser.match(accept, mimes)
-  doAssert mimes == @[(mime: "text/html", q: 1.0), (mime: "application/json", q: 0.2)]
+  doAssert mimes.mapIt( (mime:it.mime,q:it.q) ) == @[(mime: "text/html", q: 1.0), (mime: "application/json", q: 0.2)]
 
 block order:
   let parser = accpetParser()
   let accept = "application/json;q=0.6, text/plain;q=0.8"
-  var mimes = newSeq[tuple[mime: string, q: float]]()
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
   var r = parser.match(accept, mimes)
-  doAssert mimes == @[(mime: "text/plain", q: 0.8), (mime: "application/json", q: 0.6)]
+  doAssert mimes.mapIt( (mime:it.mime,q:it.q) ) == @[(mime: "text/plain", q: 0.8), (mime: "application/json", q: 0.6)]
 
 block customParams:
   let parser = accpetParser()
   let accept = "text/*, text/plain;format=flowed, text/plain, text/plain;level=1, text/html, text/plain;level=2, */*, image/*, text/rich"
-  var mimes = newSeq[tuple[mime: string, q: float]]()
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
   var r = parser.match(accept, mimes)
-  echo mimes
 
 block disallows:
   let parser = accpetParser()
   let accept = "text/plain, application/json;q=0.5, text/html, text/drop;q=0"
-  var mimes = newSeq[tuple[mime: string, q: float]]()
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
   var r = parser.match(accept, mimes)
-  doAssert mimes == @[(mime: "text/plain", q: 1.0), (mime: "text/html", q: 1.0), (mime: "application/json", q: 0.5)]
+  doAssert mimes.mapIt(it.mime) == @["text/plain",  "text/html",  "application/json"]
 
-block mixed:
+block `the most specific reference has precedence`:
+  let parser = accpetParser()
+  let accept = "text/*, text/plain, text/plain;format=flowed, */*"
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
+  var r = parser.match(accept, mimes)
+  doAssert mimes.mapIt( (mime:it.mime,q:it.q,extro:it.extro) ) == @[
+    (mime: "text/plain",q: 1.0, extro: 1),
+    (mime: "text/plain",q: 1.0, extro: 0), 
+    (mime: "text/*", q: 1.0, extro: 0),
+    (mime: "*/*", q: 1.0, extro: 0)]
+
+block q:
   let parser = accpetParser()
   let accept = "text/*, text/plain;format=flowed, text/plain, text/plain;level=1, text/html, text/plain;level=2, */*, image/*, text/rich"
-  var mimes = newSeq[tuple[mime: string, q: float]]()
+  var mimes = newSeq[tuple[mime: string, q: float,extro:int,typScore:int]]()
   var r = parser.match(accept, mimes)
+  # TODO not sure this order is correct
   echo mimes
-  #           'text/html',
-  #           'text/plain;format=flowed',
-  #           'text/plain;level=1',
-  #           'text/plain;level=2',
-  #           'text/plain',
-  #           'text/rich',
-  #           'text/*',
-  #           '*/*'
+  # doAssert mimes.mapIt(it.q) == @[1.0, 0.7, 0.3, 0.5, 0.4 ]
