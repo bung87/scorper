@@ -23,13 +23,10 @@ proc accpetParser*():Parser[char, seq[tuple[mime: string, q: float,extro:int,typ
     quoted_string <- DQUOTE * ( qdtext | quoted_pair ) * DQUOTE
     obs_text <- {'\x80' .. '\xff'}
     qdtext <- Blank | '\x21' | {'\x21' .. '\x5b'} | {'\x5d' .. '\x7e'} | obs_text
-    
-    quoted_string <- Blank
     value <- token | quoted_string:
       inc d[d.high].extro
     weight <- qkey * '=' * q
     p <- token * '=' * value
-    value <- token | quoted_string
     parameter <- weight | p
     parameters <- *(';' * * Blank * parameter)
     mime <- token:
