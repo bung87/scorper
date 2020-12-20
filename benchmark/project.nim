@@ -1,7 +1,6 @@
 import osproc
 import os
 import strformat
-import times
 import locks
 import strutils
 
