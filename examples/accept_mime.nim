@@ -10,6 +10,6 @@ when isMainModule:
       else:
         headers["Content-Type"] = "text/html"
         await req.resp("Hello World", headers)
-    
+
   let address = "127.0.0.1:8888"
-  waitFor serve(address,cb)
+  waitFor serve(address, cb)
