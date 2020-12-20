@@ -100,6 +100,7 @@ proc `$`(piece : MapperKnot) : string =
       result = $(piece.kind)
     of ptrnStartHeaderConstraint:
       result = $(piece.kind) & ":" & piece.headerName
+
 proc `$`[H](node : PatternNode[H]) : string =
   case node.kind:
     of ptrnParam, ptrnText:
@@ -109,6 +110,7 @@ proc `$`[H](node : PatternNode[H]) : string =
     of ptrnStartHeaderConstraint:
       result = $(node.kind) & ":" & node.headerName & ", "
   result = result & "leaf=" & $node.isLeaf & ", terminator=" & $node.isTerminator & ", greedy=" & $node.isGreedy
+
 proc `==`[H](node : PatternNode[H], knot : MapperKnot) : bool =
   result = (node.kind == knot.kind)
 
@@ -441,6 +443,7 @@ func matchTree[H](
   ## Check whether the given path matches the given tree node starting from pathIndex
   var node = head
   var pathIndex = pathIndex
+  var newPathIndex:int
   var prefix = path[0 ..< pathIndex]
   block matching:
     while pathIndex >= 0:
@@ -463,7 +466,7 @@ func matchTree[H](
             params[node.value] = decodeUrlComponent path[pathIndex.. ^1]
             pathIndex = path.len
           else:
-            let newPathIndex = path.find(pathSeparator, pathIndex) #skip forward to the next separator
+            newPathIndex = path.find(pathSeparator, pathIndex) #skip forward to the next separator
             if newPathIndex == -1:
               params[node.value] = decodeUrlComponent path[pathIndex.. ^1]
               pathIndex = path.len
@@ -471,8 +474,8 @@ func matchTree[H](
               params[node.value] = decodeUrlComponent path[pathIndex..newPathIndex - 1]
               pathIndex = newPathIndex
         of ptrnStartHeaderConstraint:
+          var p = ""
           for child in node.children:
-            var p = ""
             if not headers.isNil:
               p = toString(headers.getOrDefault(node.headerName))
             let childResult = child.matchTree(
