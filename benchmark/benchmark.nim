@@ -9,8 +9,6 @@ const demoPath{.strdefine.} = "examples" / "hello_world_with_router.nim"
 var
   thr: array[3, Thread[void]]
   L: Lock
-let n = 5000
-let c = 500
 let testOptions = {poEvalCommand, poParentStreams}
 var pid: int
 var projChan: Channel[int]
@@ -24,30 +22,33 @@ proc proj(){.thread.} =
   let project = startProcess(fmt"{dir / path}", options = {poEvalCommand})
   pid = project.processID
   workerChan.send(true)
+  var total:int
   while project.running:
     let tried = projChan.tryRecv()
-    if tried.dataAvailable and tried.msg == 2:
+    if tried.dataAvailable:
+      inc total 
+    if total == 2:
       project.terminate
       break
 
 proc root(){.thread.} =
   acquire(L)
-  let test = startProcess(fmt"wrk -t12 -c400 -d30s http://127.0.0.1:{port}/", options = testOptions)
+  let test = startProcess(fmt"wrk -t12 -c100 -d30s http://127.0.0.1:{port}/", options = testOptions)
   let test1Code = waitForExit(test)
-  release(L)
   projChan.send(1)
+  release(L)
 
 proc pa(){.thread.} =
   acquire(L)
-  let test2 = startProcess(fmt"wrk -t12 -c400 -d30s http://127.0.0.1:{port}/p1/p2", options = testOptions)
+  let test2 = startProcess(fmt"wrk -t12 -c100 -d30s http://127.0.0.1:{port}/p1/p2", options = testOptions)
   let test2Code = waitForExit(test2)
-  release(L)
   projChan.send(2)
+  release(L)
 
 initLock(L)
 createThread(thr[0], proj)
 discard workerChan.recv()
-sleep(1000)
+sleep(2000)
 createThread(thr[1], root)
 createThread(thr[2], pa)
 joinThreads(thr)

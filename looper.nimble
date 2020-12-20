@@ -28,3 +28,7 @@ task ghpage,"gh page":
   exec "git commit -m \"docs(docs): update gh-pages\""
   let url = "\"https://bung87@github.com/bung87/looper.git\""
   exec "git push --force --quiet " & url & " master:gh-pages"
+
+task benchmark,"benchmark":
+  exec "nim c -r -d:release --threads:on -d:port=8888 benchmark/benchmark.nim"
+  exec "nim c -r -d:release --threads:on -d:port=9999 -d:demoPath=benchmark/tjester.nim benchmark/benchmark.nim"
