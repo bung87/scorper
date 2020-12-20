@@ -31,14 +31,14 @@ proc proj(){.thread.} =
 
 proc root(){.thread.} =
   acquire(L)
-  let test = startProcess(fmt"ab -v 1 -n {n} -c {c} -r http://127.0.0.1:8888/", options = testOptions)
+  let test = startProcess(fmt"ab -v 1 -n {n} -c {c} -r http://127.0.0.1:{port}/", options = testOptions)
   let test1Code = waitForExit(test)
   release(L)
   projChan.send(1)
 
 proc pa(){.thread.} =
   acquire(L)
-  let test2 = startProcess(fmt"ab -v 1 -n {n} -c {c} -r http://127.0.0.1:8888/p1/p2", options = testOptions)
+  let test2 = startProcess(fmt"ab -v 1 -n {n} -c {c} -r http://127.0.0.1:{port}/p1/p2", options = testOptions)
   let test2Code = waitForExit(test2)
   release(L)
   projChan.send(2)
