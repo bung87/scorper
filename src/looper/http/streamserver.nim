@@ -228,7 +228,7 @@ proc serveStatic*(request: Request) {.async.} =
     await request.respError(Http405)
     return
   let relPath = request.url.path.relativePath(request.prefix)
-  let absPath =  absolutePath(os.getEnv("StaticDir") / relPath)
+  let absPath =  absolutePath(os.getEnv("StaticDir") / request.prefix)
   if not absPath.fileExists:
     await request.respError(Http404)
     return
@@ -317,9 +317,6 @@ proc processRequest(
     await request.respStatus(Http400, BufferLimitExceeded)
     request.transp.close()
     return false
-  except CatchableError as e:
-    echo e.msg
-    echo "CatchableError error"
   # Headers
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
   if headerEnd == -1:

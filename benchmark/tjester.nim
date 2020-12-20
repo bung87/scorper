@@ -11,6 +11,6 @@ router myrouter:
 
 when isMainModule:
   const p = port.Port
-  let conf = newSettings(port = p,bindAddr="127.0.0.1")
+  let conf = newSettings(port = p, bindAddr = "127.0.0.1")
   var server = initJester(myrouter, settings = conf)
   server.serve()
