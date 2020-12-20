@@ -10,7 +10,7 @@ router myrouter:
     resp data, "text/plain"
 
 when isMainModule:
-  let p = port.Port
-  let conf = newSettings(port=p)
-  var server = initJester(myrouter, settings=conf)
+  const p = port.Port
+  let conf = newSettings(port = p)
+  var server = initJester(myrouter, settings = conf)
   server.serve()
