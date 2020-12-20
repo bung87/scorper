@@ -3,8 +3,8 @@ import os
 import strformat
 import locks
 import strutils
-
-const demoPath = currentSourcePath.parentDir / ".." / "examples" / "hello_world_with_router.nim"
+const port {.intdefine.} = 8888
+const demoPath{.strdefine.} = "examples" / "hello_world_with_router.nim"
 var
   thr: array[3, Thread[void]]
   L: Lock
@@ -18,7 +18,7 @@ var workerChan: Channel[bool]
 workerChan.open()
 proc proj(){.thread.} =
   let (dir, path, ext) = demoPath.splitFile
-  let bin = startProcess(fmt"nim c -d:release {demoPath}", options = {poEvalCommand})
+  let bin = startProcess(fmt"nim c -d:release -d:port={port} {demoPath}", options = {poEvalCommand})
   discard waitForExit(bin)
   let project = startProcess(fmt"{dir / path}", options = {poEvalCommand})
   pid = project.processID

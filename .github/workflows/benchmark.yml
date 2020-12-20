@@ -44,5 +44,9 @@ jobs:
       run: sudo apt-get install apache2-utils
     - name: Install Packages
       run: nimble install -d -y
-    - name: Test project
-      run: nim c -r -d:release --threads:on benchmark/project.nim
+    - name: Benchmark project
+      run: nim c -r -d:release --threads:on benchmark/benchmark.nim
+    - name: install jester
+      run: nimble install jester
+    - name: Benchmark jester
+      run: nim c -r -d:release --threads:on -d:demoPath=benchmark/tjester.nim benchmark/benchmark.nim
