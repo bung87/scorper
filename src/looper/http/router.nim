@@ -402,10 +402,10 @@ func addRoute*[H](
 # Data extractors and utilities
 #
 
-func extractParams(query: seq[(string,string)]) : TableRef[string,string] =
-  result = newTable[string,string]()
-  for (k, v) in query:
-    result[k] = v
+# func extractParams(query: seq[(string,string)]) : TableRef[string,string] =
+#   result = newTable[string,string]()
+#   for (k, v) in query:
+#     result[k] = v
 
 #
 # Compression routines, compression makes matching more efficient. Once compressed, a router is immutable
@@ -525,14 +525,14 @@ func matchTree[H](
 func match*[H](
   router : Router[H],
   requestMethod : string,
-  url : Url,
+  requestPath : string,
   requestHeaders : HttpHeaders = newHttpHeaders(),
 ) : RouteResult[H] =
   ## Find a mapping that matches the given request description
   try:
       let verb = requestMethod.toLowerAscii()
       if router.verbTrees.hasKey(verb):
-        result = matchTree(router.verbTrees[verb], ensureCorrectRoute(url.path), requestHeaders)
+        result = matchTree(router.verbTrees[verb], ensureCorrectRoute(requestPath), requestHeaders)
         # if result.success == true:
         #   result.route.query = extractParams(url.query)
       else:
@@ -543,8 +543,8 @@ func match*[H](
 func match*[H](
     router : Router[H],
     requestMethod : HttpMethod,
-    url : Url,
+    requestPath : string,
     requestHeaders : HttpHeaders = newHttpHeaders(),
 ) : RouteResult[H] {.noSideEffect.} =
     ## Simple wrapper around the regular route function
-    match(router, $requestMethod, url, requestHeaders)
+    match(router, $requestMethod, requestPath, requestHeaders)

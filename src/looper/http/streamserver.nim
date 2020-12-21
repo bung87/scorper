@@ -391,7 +391,7 @@ proc processRequest(
   if looper.callback != nil:
     await looper.callback(request)
   elif looper.router != nil:
-    let matched = looper.router.match($request.meth, request.url)
+    let matched = looper.router.match($request.meth, request.url.path)
     if matched.success:
       request.params = matched.route.params[]
       shallowCopy(request.query, request.url.query)
