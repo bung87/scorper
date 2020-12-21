@@ -5,11 +5,10 @@
 
 Another web framework written in Nim  
 
-build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
+Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
 
 `Looper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
 
-`Looper` current stage is proving my idea.  
 
 ## Compile flags  
 
