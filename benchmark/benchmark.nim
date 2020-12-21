@@ -38,14 +38,16 @@ proc proj(){.thread.} =
 
 proc root(){.thread.} =
   acquire(L)
-  let test = startProcess(fmt"wrk -t{threadsNum} -c{connections} -d{seconds}s http://127.0.0.1:{port}/", options = testOptions)
+  let test = startProcess(fmt"wrk -t{threadsNum} -c{connections} -d{seconds}s http://127.0.0.1:{port}/",
+      options = testOptions)
   let test1Code = waitForExit(test)
   projChan.send(1)
   release(L)
 
 proc pa(){.thread.} =
   acquire(L)
-  let test2 = startProcess(fmt"wrk -t{threadsNum} -c{connections} -d{seconds}s http://127.0.0.1:{port}/p1/p2", options = testOptions)
+  let test2 = startProcess(fmt"wrk -t{threadsNum} -c{connections} -d{seconds}s http://127.0.0.1:{port}/p1/p2",
+      options = testOptions)
   let test2Code = waitForExit(test2)
   projChan.send(2)
   release(L)

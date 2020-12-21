@@ -5,10 +5,10 @@ const port{.intdefine.} = 8888
 router myrouter:
   get "/":
     const data = "Hello, World!"
-    resp Http200,{"Date":httpDate(),"Content-Type":"text/plain"}, data
+    resp Http200, {"Date": httpDate(), "Content-Type": "text/plain"}, data
   get "/@p1/@p2":
     const data = "Hello, World!"
-    resp Http200,{"Date":httpDate(),"Content-Type":"text/plain"}, data
+    resp Http200, {"Date": httpDate(), "Content-Type": "text/plain"}, data
 
 when isMainModule:
   const p = port.Port

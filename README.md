@@ -33,6 +33,15 @@ const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32)
 - [ ] CLI tool generate object oriented controller and routes.  
 - [ ] Auto render response respect client accepted content type.  
 - [ ] Chuncked file upload handle for large file.  
+
+## Benchmark  
+
+requires `wrk`  
+
+`nimble benchmark`  
+
+*qps* thousands faster than jester with stdlib.  
+
 ## Limitations  
 
 the `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructions  

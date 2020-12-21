@@ -1,4 +1,4 @@
-import jester/patterns,tables
+import jester/patterns, tables
 import looper/http/router
 
 import times
