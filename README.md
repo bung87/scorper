@@ -40,7 +40,7 @@ requires `wrk`
 
 `nimble benchmark`  
 
-*qps* thousands faster than jester with stdlib.  
+*qps* thousands faster than `jester` with stdlib.  
 
 ## Limitations  
 
