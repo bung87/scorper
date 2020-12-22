@@ -6,7 +6,6 @@ when isMainModule:
   let r = newRouter[AsyncCallback]()
   r.addRoute(serveStatic, "get","/static/*$")
   let address = "127.0.0.1:8888"
-  echo "serve at " & address & "/static/"
   echo "check " & "http://127.0.0.1:8888/static/README.md"
   let flags = {ReuseAddr}
   var server = newLooper(address,r,flags)

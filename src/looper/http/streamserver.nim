@@ -10,6 +10,7 @@ import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser,acceptparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
 import std / [os,options,strformat,times,mimetypes,json,sequtils,macros ]
+import rx_nim
 
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
@@ -43,6 +44,7 @@ type
     maxBody: int
     router: Router[AsyncCallback]
     mimeDb: MimeDB 
+    logSub: Subject[string]
 
 proc `$`*(r: Request): string =
   var j = newJObject()
@@ -51,6 +53,12 @@ proc `$`*(r: Request): string =
   j["hostname"] = % r.hostname
   j["headers"] = %* r.headers.table
   result = $j
+
+proc formatCommon*(r: Request,status:HttpCode,size:int): string =
+  # LogFormat "%h %l %u %t \"%r\" %>s %b" common
+  # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined
+  let remoteUser = os.getEnv("REMOTE_USER","-")
+  result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
 proc genericHeaders():HttpHeaders = 
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
@@ -145,6 +153,7 @@ proc writeFile(request: Request, fname:string, size:int) {.async.} =
     handle = int(getFileHandle(fhandle))
   discard await request.transp.writeFile(handle, 0'u, size)
   close(fhandle)
+  request.server.logSub.next(request.formatCommon(Http200,size))
 
 proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
@@ -228,11 +237,12 @@ proc serveStatic*(request: Request) {.async.} =
     await request.respError(Http405)
     return
   let relPath = request.url.path.relativePath(request.prefix)
-  let absPath =  absolutePath(os.getEnv("StaticDir") / request.prefix)
+  let absPath =  absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
     await request.respError(Http404)
     return
   await request.sendFile(absPath)
+  
 
 proc json*(request: Request): Future[JsonNode] {.async.} =
   if request.parsedJson.isSome:
@@ -462,6 +472,11 @@ proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
     result.router = handler
   result.maxBody = maxBody
   let address = initTAddress(address)
+  result.logSub = subject[string]()
+  when not defined(release):
+    discard result.logSub.subscribe proc (v:string) =
+      echo v
+  result.logSub.next("Looper serve at " & $address)
   result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
 
 proc isClosed*(server:Looper):bool =
