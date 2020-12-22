@@ -14,8 +14,8 @@ requires "https://github.com/status-im/nim-chronos.git"
 requires "npeg"
 requires "https://github.com/nortero-code/rx-nim"
 
-task test, "Runs the test suite":
-  exec "testament --megatest:off pattern 'tests/*.nim'"
+# task test, "Runs the test suite":
+  # exec "testament --megatest:off pattern 'tests/*.nim'"
 
 task docs,"a":
   exec "nim doc --project src/looper.nim"
