@@ -303,6 +303,8 @@ proc form*(request: Request): Future[Form] {.async.} =
               result.data.add disp
             elif disp.kind == ContentDispositionKind.file:
               result.files.add disp
+        else:
+          echo "form parse error: " & $parser.state
       else:
         discard
   request.parsedForm= some(result)
