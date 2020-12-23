@@ -391,13 +391,7 @@ proc parse*(parser:MultipartParser) {.async.} =
         debug "contentEnd state"
         debug "content length:" & $ parser.contentLength
         debug "remain length:" & $ parser.remainLen
-        if parser.remainLen == parser.boundaryEndLen:
-          debug "parser.remainLen == parser.boundaryEndLen"
-          parser.state = boundaryEnd
-          if parser.currentDisposition.kind == file:
-            parser.currentDisposition.file.flush
-            parser.currentDisposition.file.close
-          break
+ 
         if parser.remainLen != 0:
           try:
             parser.tmpRead = await parser.readLine()
@@ -413,24 +407,6 @@ proc parse*(parser:MultipartParser) {.async.} =
           parser.state = disposition
           continue
 
-        if parser.isBoundaryEnd:
-          debug "contentEnd isBoundaryEnd"
-          if parser.currentDisposition.kind == file:
-            parser.currentDisposition.file.flush
-            parser.currentDisposition.file.close
-          parser.state = boundaryEnd
-        elif parser.isBoundaryBegin:
-          debug "contentEnd isBoundaryBegin"
-          if parser.currentDisposition.kind == file:
-            parser.currentDisposition.file.flush
-            parser.currentDisposition.file.close
-          inc parser.dispositionIndex
-          parser.state = disposition
-        else:
-          debug parser.buf[]
-          debug (parser.buf + 3)[]
-          debug (parser.buf + 4)[]
-          break
       of boundaryEnd:
         debug "boundaryEnd state"
         parser.skipEndTok
