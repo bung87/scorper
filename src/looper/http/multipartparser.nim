@@ -260,6 +260,29 @@ proc readLine(parser:MultipartParser): Future[int] {.async.} =
   if j < 2:
     raise newException(LineIncompleteError,"")
 
+proc readUntilBoundary(parser:MultipartParser): Future[int] {.async.} =
+  parser.buf = parser.src[0].addr
+  when defined(DebugMultipartParser):
+    zeroMem(parser.src[0].addr,parser.src.len)
+  var needed = parser.needReadLen
+  debug "needed:" & $needed
+  debug "contentLength:" & $parser.contentLength
+  
+  var j = 0
+  let sep = "\c\l" &  parser.boundaryBegin
+  while result < needed:
+    discard await parser.transp.readOnce(parser.src[result].addr,1)
+    if sep[j] == parser.src[result]:
+      inc(j)
+      if j == len(sep):
+        inc result
+        break
+    else:
+      j = 0
+    inc result
+  if j < sep.len:
+    raise newException(LineIncompleteError,"")
+
 proc parse*(parser:MultipartParser) {.async.} =
   while not parser.transp.atEof():
     case parser.state:
@@ -331,7 +354,7 @@ proc parse*(parser:MultipartParser) {.async.} =
           while true:
             try:
               debug "start readLine"
-              parser.tmpRead = await parser.readLine()
+              parser.tmpRead = await parser.readUntilBoundary()
               needReload = false
             except LineIncompleteError:
               debug "LineIncompleteError parser.needReadLen:" & $parser.needReadLen
@@ -348,9 +371,9 @@ proc parse*(parser:MultipartParser) {.async.} =
               # read content complete
               debug "read content complete"
               if parser.currentDisposition.kind == data:
-                parser.currentDisposition.value = cast[string](parser.src[0 ..< parser.tmpRead - 2])
+                parser.currentDisposition.value = cast[string](parser.src[0 ..< parser.tmpRead - 2 - parser.boundaryBeginLen])
               elif parser.currentDisposition.kind == file:
-                parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - 2)
+                parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - 2 - parser.boundaryBeginLen)
               parser.buf = parser.src[parser.tmpRead - 1].addr
               parser.state = contentEnd
               break contentReadLoop 
@@ -367,7 +390,7 @@ proc parse*(parser:MultipartParser) {.async.} =
       of contentEnd:
         debug "contentEnd state"
         debug "content length:" & $ parser.contentLength
-        
+        debug "remain length:" & $ parser.remainLen
         if parser.remainLen == parser.boundaryEndLen:
           debug "parser.remainLen == parser.boundaryEndLen"
           parser.state = boundaryEnd
@@ -376,9 +399,19 @@ proc parse*(parser:MultipartParser) {.async.} =
             parser.currentDisposition.file.close
           break
         if parser.remainLen != 0:
-          parser.tmpRead = await parser.readLine()
+          try:
+            parser.tmpRead = await parser.readLine()
+          except LineIncompleteError:
+            if parser.currentDisposition.kind == file:
+              parser.currentDisposition.file.flush
+              parser.currentDisposition.file.close
+            parser.state = boundaryEnd
+            continue
           debug "contentEnd tmp:" & $parser.tmpRead
           parser.read += parser.tmpRead
+          inc parser.dispositionIndex
+          parser.state = disposition
+          continue
 
         if parser.isBoundaryEnd:
           debug "contentEnd isBoundaryEnd"
