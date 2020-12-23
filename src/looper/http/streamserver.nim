@@ -11,7 +11,8 @@ import npeg/codegen
 import urlencodedparser, multipartparser,acceptparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
 import std / [os,options,strformat,times,mimetypes,json,sequtils,macros ]
 import rx_nim
-
+when defined(windows):
+  import winlean
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
 type

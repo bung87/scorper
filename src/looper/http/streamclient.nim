@@ -5,7 +5,8 @@ import nativesockets
 export asyncresponse
 export multipart
 export httpcore except parseHeader # TODO: The ``except`` doesn't work
-
+when defined(windows):
+  import winlean
 const headerLimit = 10_000
 
 type
