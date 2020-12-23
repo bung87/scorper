@@ -33,6 +33,7 @@ proc testMultipart() {.async.} =
   proc handler(request: Request) {.async.} =
     let form = await request.form
     doAssert $form is string
+    echo $form
     doAssert form.data["author"] == "bung"
     let x: FormFile = form.files["uploaded_file"]
     let c = x.open().readAll
