@@ -1,12 +1,8 @@
 import looper
+const port{.intdefine.} = 8888
 when isMainModule:
   proc cb(req: Request) {.async.} =
-    echo req.hostname
-    echo req.meth
-    echo req.headers
-    echo req.protocol
-    echo req.url
-    let headers = {"Content-type": "text/plain; charset=utf-8"}
-    await req.resp("Hello World", headers.newHttpHeaders())
-  let address = "127.0.0.1:8888"
+    let headers = {"Content-type": "text/plain"}
+    await req.resp("Hello, World!", headers.newHttpHeaders())
+  let address = "127.0.0.1:" & $port
   waitFor serve(address,cb)

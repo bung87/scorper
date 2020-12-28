@@ -33,3 +33,6 @@ task ghpage,"gh page":
 task benchmark,"benchmark":
   exec "nim c -r -d:release --threads:on -d:port=8888 benchmark/benchmark.nim"
   exec "nim c -r -d:release --threads:on -d:port=9999 -d:demoPath=benchmark/tjester.nim benchmark/benchmark.nim"
+task benchmarkserver,"benchmarkserver":
+  exec "nim c -r -d:release --threads:on -d:port=7777 -d:serverTest -d:demoPath=examples/hello_world.nim benchmark/benchmark.nim"
+  exec "nim c -r -d:release --threads:on -d:port=6666 -d:serverTest -d:demoPath=benchmark/tstdserver.nim benchmark/benchmark.nim"

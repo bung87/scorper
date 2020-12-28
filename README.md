@@ -38,8 +38,9 @@ const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32)
 requires `wrk`  
 
 `nimble benchmark`  
+`nimble benchmarkserver` 
 
-*qps* thousands faster than `jester` with stdlib.  
+*qps* thousands faster than `jester` with stdlib.  it even thousand faster than `asynchttpserver`
 
 ## Limitations  
 

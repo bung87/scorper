@@ -11,9 +11,13 @@ let seconds = 30
 
 const port {.intdefine.} = 8888
 const demoPath{.strdefine.} = "examples" / "hello_world_with_router.nim"
-var
-  thr: array[3, Thread[void]]
-  L: Lock
+when not defined(serverTest):
+  var thr: array[3, Thread[void]]
+else:
+  var thr: array[2, Thread[void]]
+
+var L: Lock
+
 let testOptions = {poEvalCommand, poParentStreams}
 var pid: int
 var projChan: Channel[int]
@@ -32,9 +36,14 @@ proc proj(){.thread.} =
     let tried = projChan.tryRecv()
     if tried.dataAvailable:
       inc total
-    if total == 2:
-      project.terminate
-      break
+    when not defined(serverTest):
+      if total == 2:
+        project.terminate
+        break
+    else:
+      if tried.dataAvailable:
+        project.terminate
+        break
 
 proc root(){.thread.} =
   acquire(L)
@@ -57,7 +66,8 @@ createThread(thr[0], proj)
 discard workerChan.recv()
 sleep(2000)
 createThread(thr[1], root)
-createThread(thr[2], pa)
+when not defined(serverTest):
+  createThread(thr[2], pa)
 joinThreads(thr)
 deinitLock(L)
 workerChan.close
