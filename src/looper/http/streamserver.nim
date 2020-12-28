@@ -449,6 +449,9 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
       transp.close
       break
 
+proc logSubOnNext(v:string) = 
+  echo v
+
 proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
@@ -460,7 +463,11 @@ proc serve*(address: string,
   server.maxBody = maxBody
   let address = initTAddress(address)
   server = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
+  server.logSub = subject[string]()
   server.start()
+  when not defined(release):
+    discard server.logSub.subscribe logSubOnNext
+  server.logSub.next("Looper serve at http://" & $address)
   await server.join()
 
 proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
@@ -477,9 +484,8 @@ proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
   let address = initTAddress(address)
   result.logSub = subject[string]()
   when not defined(release):
-    discard result.logSub.subscribe proc (v:string) =
-      echo v
-  result.logSub.next("Looper serve at " & $address)
+    discard result.logSub.subscribe logSubOnNext
+  result.logSub.next("Looper serve at http://" & $address)
   result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
 
 proc isClosed*(server:Looper):bool =
