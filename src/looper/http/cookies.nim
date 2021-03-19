@@ -42,9 +42,10 @@ proc addSession*(headers: HttpHeaders, name, value: string, domain = "", path = 
 
 when isMainModule:
   var test = newHttpHeaders()
-  # test.addCookie("test","onlykv") match semantics but cause Error: ambiguous call; 
-  test.addCookie("id","a3fWa", expires = now().utc + 30.days, httpOnly = true, domain = "nim-lang.org", path = "/")
-  test.addCookie("id","a3fWa", maxAge = initDuration(days=30), expires=now().utc + 30.days, httpOnly = true, domain = "nim-lang.org", path = "/")
-  test.addCookie("id","a3fWa", maxAge = initDuration(days=30))
-  test.addSession("sessionid","123")
+  # test.addCookie("test","onlykv") match semantics but cause Error: ambiguous call;
+  test.addCookie("id", "a3fWa", expires = now().utc + 30.days, httpOnly = true, domain = "nim-lang.org", path = "/")
+  test.addCookie("id", "a3fWa", maxAge = initDuration(days = 30), expires = now().utc + 30.days, httpOnly = true,
+      domain = "nim-lang.org", path = "/")
+  test.addCookie("id", "a3fWa", maxAge = initDuration(days = 30))
+  test.addSession("sessionid", "123")
   echo generateHeaders(test)

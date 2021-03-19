@@ -162,13 +162,13 @@ const HEADER_VALUE_TOKEN = [
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 ]
 
-type   
+type
   MofuHeader* = object
     name*, value: ptr char
     nameLen*, valueLen*: int
 type
   MofuParser* = ref object
-    httpMethod*, path*,major*, minor*: ptr char
+    httpMethod*, path*, major*, minor*: ptr char
     httpMethodLen*, pathLen*, headerLen*: int
     headers*: array[HttpHeadersLength, MofuHeader]
 
@@ -185,7 +185,7 @@ type
     middle
 
 template `+`[T](p: ptr T, off: int): ptr T =
-    cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
+  cast[ptr type(p[])](cast[ByteAddress](p) +% off * sizeof(p[]))
 
 template `+=`[T](p: ptr T, off: int) =
   p = p + off
@@ -481,12 +481,12 @@ proc toHttpHeaders*(mhr: MofuParser): HttpHeaders =
 
   return hds.newHttpHeaders
 
-proc toHttpHeaders*(mhr: MofuParser , headers: var HttpHeaders) =
+proc toHttpHeaders*(mhr: MofuParser, headers: var HttpHeaders) =
   for hd in mhr.headersPair:
     headers[hd.name] = hd.value
 
 when isMainModule:
-  import times,httputils
+  import times, httputils
 
   var buf =
     "GET /test HTTP/1.1\r\l" &
@@ -505,7 +505,7 @@ when isMainModule:
   let old = cpuTime()
   var mhreq = MofuParser()
   for i in 0 .. 100000:
-    
+
     discard mhreq.parseHeader(addr buf[0], buf.len)
   echo "mofuparser:" & $(cpuTime() - old)
 
@@ -517,6 +517,6 @@ when isMainModule:
 
   var pdata = "POST /foo HTTP/1.1\r\n" &
     "Content-Length: 68137\r\n" &
-    "Content-Type: multipart/form-data; boundary=--AaB03x\r\n\r\n" 
+    "Content-Type: multipart/form-data; boundary=--AaB03x\r\n\r\n"
   discard mhreq.parseHeader(addr pdata[0], pdata.len)
   echo mhreq.toHttpHeaders()

@@ -25,7 +25,7 @@ proc hashFromFile*(filepath: string): Hash =
   var buf {.noinit.}: array[bufSize, char]
   while true:
     var readBytes = bin.readChars(buf, 0, bufSize)
-    result = result.`!&`(hashData(buf[0].addr,readBytes).int)
+    result = result.`!&`(hashData(buf[0].addr, readBytes).int)
     if readBytes != bufSize: break
   close(bin)
   result = hashWangYi1(result)

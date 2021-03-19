@@ -1,6 +1,6 @@
 import net, strutils, urlly, parseutils, base64, os, streams,
   math, random, ./httpcore, times, tables, streams, std/monotimes
-import asyncnet, chronos, ./futurestream , asyncresponse , multipart
+import asyncnet, chronos, ./futurestream, asyncresponse, multipart
 import nativesockets
 export asyncresponse
 export multipart
@@ -75,7 +75,7 @@ proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
     result.add(requestUrl.path)
     if requestUrl.query.len > 0:
       result.add("?")
-      for (k,v) in requestUrl.query:
+      for (k, v) in requestUrl.query:
         result.add k & "=" & v
   else:
     # Remove the 'http://' from the URL for CONNECT requests for TLS connections.
@@ -133,9 +133,9 @@ type
     getBody: bool         ## When `false`, the body is never read in requestAux.
     bodyStream: FutureStream[string]
     parseBodyFut: Future[void]
-    buf: array[net.BufferSize,char]
+    buf: array[net.BufferSize, char]
 
-proc sendFile(transp: StreamTransport, fname:string) {.async.} = 
+proc sendFile(transp: StreamTransport, fname: string) {.async.} =
   var handle = 0
   var size = int(getFileSize(fname))
   var fhandle = open(fname)
@@ -202,7 +202,7 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
               keep: bool): Future[int] {.async.} =
   ## Ensures that all the data requested is read and returned.
   var readLen = 0
-  
+
   while not client.transp.atEof():
     if size == readLen: break
 
@@ -366,8 +366,8 @@ proc parseResponse(client: AsyncHttpClient,
 
 proc newConnection(client: AsyncHttpClient,
                    url: Url) {.async.} =
-  if client.currentURL == default(Url) or client.currentURL.hostname != url.hostname or
-      client.currentURL.scheme != url.scheme or
+  if client.currentURL == default(Url) or client.currentURL.hostname !=
+      url.hostname or client.currentURL.scheme != url.scheme or
       client.currentURL.port != url.port or
       (not client.connected):
     # Connect to proxy if specified
@@ -559,7 +559,9 @@ proc request*(client: AsyncHttpClient, url: string,
       lastURL = redirectTo
 
 proc sendJson*(client: AsyncHttpClient, url: string,
-              httpMethod = HttpPost, body = "", headers: HttpHeaders = newHttpHeaders([(key:"Content-Type",val:"application/json")])): Future[AsyncResponse]
+              httpMethod = HttpPost, body = "",
+                  headers: HttpHeaders = newHttpHeaders([(key: "Content-Type",
+                  val: "application/json")])): Future[AsyncResponse]
               {.async.} =
   result = await client.requestAux(url, $httpMethod, body, headers, nil)
 
@@ -625,7 +627,7 @@ proc post*(client: AsyncHttpClient, url: string, body = "",
            {.async.} =
   ## Connects to the hostname specified by the URL and performs a POST request.
   ## This procedure uses httpClient values such as ``client.maxRedirects``.
-  result = await client.request(url, $HttpPost, body, multipart=multipart)
+  result = await client.request(url, $HttpPost, body, multipart = multipart)
 
 proc postContent*(client: AsyncHttpClient, url: string, body = "",
                   multipart: MultipartData = nil): Future[string]
@@ -639,7 +641,7 @@ proc put*(client: AsyncHttpClient, url: string, body = "",
           {.async.} =
   ## Connects to the hostname specified by the URL and performs a PUT request.
   ## This procedure uses httpClient values such as ``client.maxRedirects``.
-  result = await client.request(url, $HttpPut, body, multipart=multipart)
+  result = await client.request(url, $HttpPut, body, multipart = multipart)
 
 proc putContent*(client: AsyncHttpClient, url: string, body = "",
                  multipart: MultipartData = nil): Future[string] {.async.} =
@@ -652,7 +654,7 @@ proc patch*(client: AsyncHttpClient, url: string, body = "",
             {.async.} =
   ## Connects to the hostname specified by the URL and performs a PATCH request.
   ## This procedure uses httpClient values such as ``client.maxRedirects``.
-  result = await client.request(url, $HttpPatch, body, multipart=multipart)
+  result = await client.request(url, $HttpPatch, body, multipart = multipart)
 
 proc patchContent*(client: AsyncHttpClient, url: string, body = "",
                    multipart: MultipartData = nil): Future[string]

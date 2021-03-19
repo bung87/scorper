@@ -8,8 +8,8 @@
 import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
-import urlencodedparser, multipartparser,acceptparser, httpform, httpdate ,httpcore, urlly, router, netunit, constant
-import std / [os,options,strformat,times,mimetypes,json,sequtils,macros ]
+import urlencodedparser, multipartparser, acceptparser, httpform, httpdate, httpcore, urlly, router, netunit, constant
+import std / [os, options, strformat, times, mimetypes, json, sequtils, macros]
 import rx_nim
 when defined(windows):
   import winlean
@@ -21,13 +21,13 @@ type
     headers*: HttpHeaders
     protocol*: tuple[major, minor: int]
     url*: Url
-    path*: string # http request path
+    path*: string              # http request path
     hostname*: string
     ip*: string
-    params* : Table[string,string]
-    query* : seq[(string, string)]
+    params*: Table[string, string]
+    query*: seq[(string, string)]
     transp: StreamTransport
-    buf: array[HttpRequestBufferSize,char]
+    buf: array[HttpRequestBufferSize, char]
     httpParser: MofuParser
     contentLength: BiggestUInt # as RFC no limit
     contentType: string
@@ -35,7 +35,7 @@ type
     prefix: string
     parsedJson: Option[JsonNode]
     parsedForm: Option[Form]
-    parsed:bool
+    parsed: bool
     rawBody: Option[string]
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
 
@@ -44,7 +44,7 @@ type
     callback: AsyncCallback
     maxBody: int
     router: Router[AsyncCallback]
-    mimeDb: MimeDB 
+    mimeDb: MimeDB
     logSub: Subject[string]
 
 proc `$`*(r: Request): string =
@@ -55,40 +55,40 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
-proc formatCommon*(r: Request,status:HttpCode,size:int): string {.gcsafe.} =
+proc formatCommon*(r: Request, status: HttpCode, size: int): string {.gcsafe.} =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
   # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined
-  let remoteUser = os.getEnv("REMOTE_USER","-")
+  let remoteUser = os.getEnv("REMOTE_USER", "-")
   result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
-proc genericHeaders():HttpHeaders = 
+proc genericHeaders(): HttpHeaders =
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   result = newHttpHeaders()
   result["Date"] = httpDate()
   result["X-Frame-Options"] = "SAMEORIGIN"
 
 proc getExt*(req: Request, mime: string): string =
-  result = req.server.mimeDb.getExt(mime,default = "")
+  result = req.server.mimeDb.getExt(mime, default = "")
 
 proc getMimetype*(req: Request, ext: string): string =
-  result = req.server.mimeDb.getMimetype(ext,default = "")
+  result = req.server.mimeDb.getMimetype(ext, default = "")
 
-macro acceptMime*(req: Request, ext:untyped, headers:HttpHeaders, body:untyped) = 
-  ## Responds to the request respect client's accept 
+macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untyped) =
+  ## Responds to the request respect client's accept
   ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
-  expectLen(body,1)
-  expectKind(body[0],nnkCaseStmt)
+  expectLen(body, 1)
+  expectKind(body[0], nnkCaseStmt)
   for item in body[0]:
-    if item.kind in {nnkOfBranch,nnkElifBranch}:
-      expectKind(item.last,nnkStmtList)
-      item.last.add nnkBreakStmt.newTree( newEmptyNode() )
+    if item.kind in {nnkOfBranch, nnkElifBranch}:
+      expectKind(item.last, nnkStmtList)
+      item.last.add nnkBreakStmt.newTree(newEmptyNode())
     elif item.kind == nnkElse:
-      item[0].add nnkBreakStmt.newTree( newEmptyNode() )
+      item[0].add nnkBreakStmt.newTree(newEmptyNode())
   result = quote do:
     var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
-    let accept:string = req.headers["accept"]
+    let accept: string = req.headers["accept"]
     let r = req.privAccpetParser.match(accept, mimes)
-    var ext {.inject.}:string
+    var ext {.inject.}: string
     if r.ok:
       for item in mimes:
         ext = req.getExt(item.mime)
@@ -98,7 +98,7 @@ macro acceptMime*(req: Request, ext:untyped, headers:HttpHeaders, body:untyped) 
       `body`
 
 proc resp*(req: Request, content: string,
-              headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.}=
+              headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``, headers and
   ## content.
   # If the headers did not contain a Content-Length use our own
@@ -110,7 +110,7 @@ proc resp*(req: Request, content: string,
   msg.add(content)
   discard await req.transp.write(msg)
 
-proc respError*(req: Request, code: HttpCode, detail:string ): Future[void] {.async.}=
+proc respError*(req: Request, code: HttpCode, detail: string): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
   let detailLen = detail.len
@@ -119,7 +119,7 @@ proc respError*(req: Request, code: HttpCode, detail:string ): Future[void] {.as
   msg.add(detail)
   discard await req.transp.write(msg)
 
-proc respError*(req: Request, code: HttpCode): Future[void] {.async.}=
+proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
   let content = $code
@@ -128,24 +128,25 @@ proc respError*(req: Request, code: HttpCode): Future[void] {.async.}=
   msg.add(content)
   discard await req.transp.write(msg)
 
-proc pairParam(x:tuple[key:string,value:string]): string =
-    result = x[0] & '=' & '"' & x[1] &  '"'
+proc pairParam(x: tuple[key: string, value: string]): string =
+  result = x[0] & '=' & '"' & x[1] & '"'
 
-proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper", params:seq[tuple[key:string,value:string]] = @[],code = Http401): Future[void] {.async.}=
+proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper", params: seq[tuple[key: string,
+    value: string]] = @[], code = Http401): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
-  let extro = if params.len > 0 : "," & params.map( pairParam).join(",") else: ""
+  let extro = if params.len > 0: "," & params.map(pairParam).join(",") else: ""
   headers["WWW-Authenticate"] = &"{scheme} realm={realm}" & extro
   let msg = generateHeaders(headers, code)
   discard await req.transp.write(msg)
 
-proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.}=
+proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
   discard await request.transp.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
 
-proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.}=
+proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
   discard await request.transp.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
 
-proc writeFile(request: Request, fname:string, size:int) {.async.} = 
+proc writeFile(request: Request, fname: string, size: int) {.async.} =
   var handle = 0
   var fhandle = open(fname)
   when defined(windows):
@@ -154,9 +155,9 @@ proc writeFile(request: Request, fname:string, size:int) {.async.} =
     handle = int(getFileHandle(fhandle))
   discard await request.transp.writeFile(handle, 0'u, size)
   close(fhandle)
-  request.server.logSub.next(request.formatCommon(Http200,size))
+  request.server.logSub.next(request.formatCommon(Http200, size))
 
-proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.async.} =
+proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
   # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
   let info = getFileInfo(filepath)
@@ -166,7 +167,7 @@ proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.as
   if request.headers.hasKey("If-Modified-Since"):
     var ifModifiedSince: Time
     try:
-      ifModifiedSince = parseTime(request.headers["If-Modified-Since"],HttpDateFormat, utc())
+      ifModifiedSince = parseTime(request.headers["If-Modified-Since"], HttpDateFormat, utc())
     except:
       await request.respError(Http400)
       return none(FileInfo)
@@ -176,7 +177,7 @@ proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.as
   elif request.headers.hasKey("If-Unmodified-Since"):
     var ifUnModifiedSince: Time
     try:
-      ifUnModifiedSince = parseTime(request.headers["If-Unmodified-Since"],HttpDateFormat, utc())
+      ifUnModifiedSince = parseTime(request.headers["If-Unmodified-Since"], HttpDateFormat, utc())
     except:
       await request.respError(Http400)
       return none(FileInfo)
@@ -185,48 +186,48 @@ proc fileGuard(request: Request, filepath:string): Future[Option[FileInfo]] {.as
       return none(FileInfo)
   return some(info)
 
-proc fileMeta(request: Request, filepath:string):Future[Option[tuple[info:FileInfo,headers:HttpHeaders]]]{.async, inline.} =
+proc fileMeta(request: Request, filepath: string): Future[Option[tuple[info: FileInfo, headers: HttpHeaders]]]{.async, inline.} =
   let info = await fileGuard(request, filepath)
   if not info.isSome():
-    return none(tuple[info:FileInfo,headers:HttpHeaders])
+    return none(tuple[info: FileInfo, headers: HttpHeaders])
   var size = info.get.size
   var headers = genericHeaders()
   headers["Content-Length"] = $size
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
-  return some((info:info.get,headers:headers))
+  return some((info: info.get, headers: headers))
 
-proc sendFile*(request: Request, filepath:string) {.async.} = 
+proc sendFile*(request: Request, filepath: string) {.async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
     return
   var (_, _, ext) = splitFile(filepath)
-  let mime = request.server.mimeDb.getMimetype(ext) 
+  let mime = request.server.mimeDb.getMimetype(ext)
   meta.unsafeGet.headers["Content-Type"] = mime
-  var msg = generateHeaders(meta.unsafeGet.headers,Http200)
+  var msg = generateHeaders(meta.unsafeGet.headers, Http200)
   discard await request.transp.write(msg)
   await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
-proc sendDownload*(request: Request, filepath:string) {.async.} = 
+proc sendDownload*(request: Request, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
     return
   meta.unsafeGet.headers["Content-Type"] = "application/x-download"
-  var msg = generateHeaders(meta.unsafeGet.headers,Http200)
+  var msg = generateHeaders(meta.unsafeGet.headers, Http200)
   discard await request.transp.write(msg)
   await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
-proc sendAttachment*(request: Request, filepath:string, asName: string = "") {.async.} = 
+proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.async.} =
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
     return
   var (_, _, ext) = splitFile(filepath)
-  let mime = request.server.mimeDb.getMimetype(ext) 
+  let mime = request.server.mimeDb.getMimetype(ext)
   meta.unsafeGet.headers["Content-Type"] = mime
-  var msg = generateHeaders(meta.unsafeGet.headers,Http200)
+  var msg = generateHeaders(meta.unsafeGet.headers, Http200)
   let filename = if asName.len == 0: filepath.extractFilename else: asName
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
   msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & CRLF & CRLF
@@ -238,12 +239,12 @@ proc serveStatic*(request: Request) {.async.} =
     await request.respError(Http405)
     return
   let relPath = request.url.path.relativePath(request.prefix)
-  let absPath =  absolutePath(os.getEnv("StaticDir") / relPath)
+  let absPath = absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
     await request.respError(Http404)
     return
   await request.sendFile(absPath)
-  
+
 
 proc json*(request: Request): Future[JsonNode] {.async.} =
   if request.parsedJson.isSome:
@@ -280,13 +281,13 @@ proc form*(request: Request): Future[Form] {.async.} =
     of "application/x-www-form-urlencoded":
       var parser = newUrlEncodedParser(request.transp, request.buf.addr, request.contentLength.int)
       var parsed = await parser.parse()
-      for (key,value) in parsed:
+      for (key, value) in parsed:
         let v = if value.len > 0: decodeUrlComponent(value) else: ""
         let k = decodeUrlComponent key
-        result.data.add ContentDisposition(kind:ContentDispositionKind.data,name:k,value: v)
+        result.data.add ContentDisposition(kind: ContentDispositionKind.data, name: k, value: v)
     else:
       if request.contentType.len > 0:
-        var parsed:tuple[i:int,boundary:string]
+        var parsed: tuple[i: int, boundary: string]
         try:
           parsed = parseBoundary(request.contentType)
         except BoundaryMissingError as e:
@@ -307,7 +308,7 @@ proc form*(request: Request): Future[Form] {.async.} =
           echo "form parse error: " & $parser.state
       else:
         discard
-  request.parsedForm= some(result)
+  request.parsedForm = some(result)
   request.parsed = true
 
 proc processRequest(
@@ -320,8 +321,8 @@ proc processRequest(
   request.headers.clear()
   # receivce untill http header end
   # note: headers field name is case-insensitive, field value is case sensitive
-  const HeaderSep = @[byte('\c'),byte('\L'),byte('\c'),byte('\L')]
-  var count:int
+  const HeaderSep = @[byte('\c'), byte('\L'), byte('\c'), byte('\L')]
+  var count: int
   try:
     count = await request.transp.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
   except TransportIncompleteError:
@@ -351,7 +352,7 @@ proc processRequest(
       return true
 
   request.path = request.httpParser.getPath
-  
+
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)[]
   except ValueError:
@@ -365,7 +366,7 @@ proc processRequest(
     else:
       discard
   case request.httpParser.minor[]:
-    of '0': 
+    of '0':
       request.protocol.minor = 0
     of '1':
       request.protocol.minor = 1
@@ -445,11 +446,11 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   req.httpParser = MofuParser()
   while not transp.atEof():
     let retry = await processRequest(looper, req)
-    if not retry: 
+    if not retry:
       transp.close
       break
 
-proc logSubOnNext(v:string) = 
+proc logSubOnNext(v: string) =
   echo v
 
 proc serve*(address: string,
@@ -470,7 +471,7 @@ proc serve*(address: string,
   server.logSub.next("Looper serve at http://" & $address)
   await server.join()
 
-proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
+proc newLooper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
                 maxBody = 8.Mb
                 ): Looper =
@@ -488,5 +489,5 @@ proc newLooper*(address: string, handler:AsyncCallback | Router[AsyncCallback],
   result.logSub.next("Looper serve at http://" & $address)
   result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
 
-proc isClosed*(server:Looper):bool =
+proc isClosed*(server: Looper): bool =
   server.status = ServerStatus.Closed

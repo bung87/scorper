@@ -1,4 +1,4 @@
-import chronos,deques
+import chronos, deques
 
 type
   FutureStream*[T] = ref object ## Special future that acts as
@@ -25,8 +25,8 @@ proc newFutureStream*[T](fromProc = "unspecified"): FutureStream[T] =
   result = FutureStream[T](finished: false, cb: nil)
   result.queue = initDeque[T]()
 
-proc readAll*[T](future: FutureStream[T]): Future[T] {.async.}=
-  while future.queue.len > 0 :
+proc readAll*[T](future: FutureStream[T]): Future[T] {.async.} =
+  while future.queue.len > 0:
     result.add future.queue.popFirst()
 
 proc complete*[T](future: FutureStream[T]) =

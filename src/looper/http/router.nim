@@ -17,7 +17,7 @@ const startParam = '{'
 const endParam = '}'
 const greedyIndicator = '$'
 const specialSectionStartChars = {pathSeparator, wildcard, startParam}
-const allowedCharsInPattern = URL_pchar + { pathSeparator, wildcard, startParam, endParam, greedyIndicator}
+const allowedCharsInPattern = URL_pchar + {pathSeparator, wildcard, startParam, endParam, greedyIndicator}
 
 
 type
@@ -38,51 +38,51 @@ type
 
   # Structures for setting up the mappings
   MapperKnot = object ## A token within a URL to be mapped. The URL is broken into 'knots' that make up a 'rope' (``seq[MapperKnot]``)
-    isGreedy : bool
-    case kind : PatternMatchingType:
+    isGreedy: bool
+    case kind: PatternMatchingType:
       of ptrnParam, ptrnText:
-        value : string
+        value: string
       of ptrnWildcard, ptrnEndHeaderConstraint:
         discard
       of ptrnStartHeaderConstraint:
-        headerName : string
+        headerName: string
 
   # Structures for holding fully parsed mappings
   PatternNode[H] = ref object ## A node within a routing tree, usually constructed from a ``MapperKnot``
-    isGreedy : bool
-    case kind : PatternMatchingType: # TODO: should be able to extend MapperKnot to get this, compiler wont let me, investigate further. Nim compiler bug maybe?
+    isGreedy: bool
+    case kind: PatternMatchingType: # TODO: should be able to extend MapperKnot to get this, compiler wont let me, investigate further. Nim compiler bug maybe?
       of ptrnParam, ptrnText:
-        value : string
+        value: string
       of ptrnWildcard, ptrnEndHeaderConstraint:
         discard
       of ptrnStartHeaderConstraint:
-        headerName : string
-    case isLeaf : bool: #a leaf node is one with no children
+        headerName: string
+    case isLeaf: bool:        #a leaf node is one with no children
       of true:
         discard
       of false:
-        children : seq[PatternNode[H]]
-    case isTerminator : bool: # a terminator is a node that can be considered a mapping on its own, matching could stop at this node or continue. If it is not a terminator, matching can only continue
+        children: seq[PatternNode[H]]
+    case isTerminator: bool:  # a terminator is a node that can be considered a mapping on its own, matching could stop at this node or continue. If it is not a terminator, matching can only continue
       of true:
-        handler : H
+        handler: H
       of false:
         discard
 
 
   # Router Structures
   Router*[H] = ref object ## Container that holds HTTP mappings to handler procs
-    verbTrees : CritBitTree[PatternNode[H]]
+    verbTrees: CritBitTree[PatternNode[H]]
 
   Route* = object ## Arguments extracted from a request while routing it
-    params* : TableRef[string,string]
+    params*: TableRef[string, string]
     # query* : TableRef[string,string]
-    prefix* : string
- 
+    prefix*: string
+
   RouteResult*[H] = object ## Encapsulates the results of a routing operation
-    case success* : bool:
+    case success*: bool:
       of true:
-        handler* : H
-        route* : Route
+        handler*: H
+        route*: Route
       of false:
         discard
 
@@ -92,7 +92,7 @@ type
 #
 # Stringification / other operators
 #
-proc `$`(piece : MapperKnot) : string =
+proc `$`(piece: MapperKnot): string =
   case piece.kind:
     of ptrnParam, ptrnText:
       result = $(piece.kind) & ":" & piece.value
@@ -101,7 +101,7 @@ proc `$`(piece : MapperKnot) : string =
     of ptrnStartHeaderConstraint:
       result = $(piece.kind) & ":" & piece.headerName
 
-proc `$`[H](node : PatternNode[H]) : string =
+proc `$`[H](node: PatternNode[H]): string =
   case node.kind:
     of ptrnParam, ptrnText:
       result = $(node.kind) & ":value=" & node.value & ", "
@@ -111,7 +111,7 @@ proc `$`[H](node : PatternNode[H]) : string =
       result = $(node.kind) & ":" & node.headerName & ", "
   result = result & "leaf=" & $node.isLeaf & ", terminator=" & $node.isTerminator & ", greedy=" & $node.isGreedy
 
-proc `==`[H](node : PatternNode[H], knot : MapperKnot) : bool =
+proc `==`[H](node: PatternNode[H], knot: MapperKnot): bool =
   result = (node.kind == knot.kind)
 
   if (result):
@@ -127,13 +127,13 @@ proc `==`[H](node : PatternNode[H], knot : MapperKnot) : bool =
 # Debugging routines
 #
 
-proc printRouteTree[H](node : PatternNode[H], tabs : int = 0) =
+proc printRouteTree[H](node: PatternNode[H], tabs: int = 0) =
   debugEcho ' '.repeat(tabs), $node
   if not node.isLeaf:
     for child in node.children:
       printRouteTree(child, tabs + 1)
 
-proc printRouteTree*[H](router : Router[H]) =
+proc printRouteTree*[H](router: Router[H]) =
   for verb, tree in pairs(router.verbTrees):
     debugEcho verb.toUpper()
     printRouteTree(tree)
@@ -143,15 +143,15 @@ proc printRouteTree*[H](router : Router[H]) =
 #
 proc newRouter*[H](): Router[H] =
   ## Creates a new ``Router`` instance
-  result = Router[H](verbTrees:CritBitTree[PatternNode[H]]())
+  result = Router[H](verbTrees: CritBitTree[PatternNode[H]]())
 
 #
 # Rope procedures. A rope is a chain of tokens representing the url
 #
 
 func ensureCorrectRoute(
-  path : string
-) : string {. raises:[MappingError].} =
+  path: string
+): string {.raises: [MappingError].} =
   ## Verifies that this given path is a valid path, strips trailing slashes, and guarantees leading slashes
   if(not path.allCharsInSet(allowedCharsInPattern)):
     raise newException(MappingError, "Illegal characters occurred in the mapped pattern, please restrict to alphanumerics, or the following: - . _ ~ /")
@@ -166,17 +166,17 @@ func ensureCorrectRoute(
     result.insert("/")
 
 func emptyKnotSequence(
-  knotSeq : seq[MapperKnot]
-) : bool  =
+  knotSeq: seq[MapperKnot]
+): bool =
   ## A knot sequence is empty if it A) contains no elements or B) it contains a single text element with no value
   result = (knotSeq.len == 0 or (knotSeq.len == 1 and knotSeq[0].kind == ptrnText and knotSeq[0].value == ""))
 
 func generateRope(
-  pattern : string,
-  startIndex : int = 0
-) : seq[MapperKnot] {. raises: [MappingError].} =
+  pattern: string,
+  startIndex: int = 0
+): seq[MapperKnot] {.raises: [MappingError].} =
   ## Translates the string form of a pattern into a sequence of MapperKnot objects to be parsed against
-  var token : string
+  var token: string
   let tokenSize = pattern.parseUntil(token, specialSectionStartChars, startIndex)
   var newStartIndex = startIndex + tokenSize
 
@@ -184,35 +184,35 @@ func generateRope(
     let specialChar = pattern[newStartIndex]
     newStartIndex += 1
 
-    var scanner : MapperKnot
+    var scanner: MapperKnot
 
     if specialChar == wildcard:
       if pattern[newStartIndex] == greedyIndicator:
         newStartIndex += 1
         if pattern.len != newStartIndex:
           raise newException(MappingError, "$ found before end of route")
-        scanner = MapperKnot(kind:ptrnWildcard, isGreedy:true)
+        scanner = MapperKnot(kind: ptrnWildcard, isGreedy: true)
       else:
-        scanner = MapperKnot(kind:ptrnWildcard)
+        scanner = MapperKnot(kind: ptrnWildcard)
     elif specialChar == startParam:
-      var paramName : string
+      var paramName: string
       let paramNameSize = pattern.parseUntil(paramName, endParam, newStartIndex)
       newStartIndex += (paramNameSize + 1)
       if pattern.len > newStartIndex and pattern[newStartIndex] == greedyIndicator:
         newStartIndex += 1
         if pattern.len != newStartIndex:
           raise newException(MappingError, "$ found before end of route")
-        scanner = MapperKnot(kind:ptrnParam, value:paramName, isGreedy:true)
+        scanner = MapperKnot(kind: ptrnParam, value: paramName, isGreedy: true)
       else:
-        scanner = MapperKnot(kind:ptrnParam, value:paramName)
+        scanner = MapperKnot(kind: ptrnParam, value: paramName)
     elif specialChar == pathSeparator:
-      scanner = MapperKnot(kind:ptrnText, value:($pathSeparator))
+      scanner = MapperKnot(kind: ptrnText, value: ($pathSeparator))
     else:
       raise newException(MappingError, "Unrecognized special character")
 
-    var prefix : seq[MapperKnot]
+    var prefix: seq[MapperKnot]
     if tokenSize > 0:
-      prefix = @[MapperKnot(kind:ptrnText, value:token),   scanner]
+      prefix = @[MapperKnot(kind: ptrnText, value: token), scanner]
     else:
       prefix = @[scanner]
 
@@ -226,62 +226,72 @@ func generateRope(
   else: #no more wildcards or parameter defs, the rest is static text
     result = newSeq[MapperKnot](token.len)
     for i, c in pairs(token):
-      result[i] = MapperKnot(kind:ptrnText, value:($c))
+      result[i] = MapperKnot(kind: ptrnText, value: ($c))
 
 #
 # Node procedures. A pattern node represents part of a chain representing a matchable path
 #
 
 proc terminatingPatternNode[H](
-  oldNode : PatternNode[H],
-  knot : MapperKnot,
-  handler : H
-) : PatternNode[H] {.raises: [MappingError].} =
+  oldNode: PatternNode[H],
+  knot: MapperKnot,
+  handler: H
+): PatternNode[H] {.raises: [MappingError].} =
   ## Turns the given node into a terminating node ending at the given knot/handler pair. If it is already a terminator, throws an exception
   if oldNode.isTerminator: # Already mapped
     raise newException(MappingError, "Duplicate mapping detected")
   case knot.kind:
     of ptrnText:
-      result = PatternNode[H](kind: ptrnText, value: knot.value, isLeaf: oldNode.isLeaf, isTerminator: true, handler: handler)
+      result = PatternNode[H](kind: ptrnText, value: knot.value, isLeaf: oldNode.isLeaf, isTerminator: true,
+          handler: handler)
     of ptrnParam:
-      result = PatternNode[H](kind: ptrnParam, value: knot.value, isLeaf: oldNode.isLeaf, isTerminator: true, handler: handler, isGreedy : knot.isGreedy)
+      result = PatternNode[H](kind: ptrnParam, value: knot.value, isLeaf: oldNode.isLeaf, isTerminator: true,
+          handler: handler, isGreedy: knot.isGreedy)
     of ptrnWildcard:
-      result = PatternNode[H](kind: ptrnWildcard, isLeaf: oldNode.isLeaf, isTerminator: true, handler: handler, isGreedy : knot.isGreedy)
+      result = PatternNode[H](kind: ptrnWildcard, isLeaf: oldNode.isLeaf, isTerminator: true, handler: handler,
+          isGreedy: knot.isGreedy)
     of ptrnEndHeaderConstraint:
-      result = PatternNode[H](kind: ptrnEndHeaderConstraint, isLeaf: oldNode.isLeaf, isTerminator: true, handler: handler)
+      result = PatternNode[H](kind: ptrnEndHeaderConstraint, isLeaf: oldNode.isLeaf, isTerminator: true,
+          handler: handler)
     of ptrnStartHeaderConstraint:
-      result = PatternNode[H](kind: ptrnStartHeaderConstraint, headerName: knot.headerName, isLeaf: oldNode.isLeaf, isTerminator: true, handler: handler)
+      result = PatternNode[H](kind: ptrnStartHeaderConstraint, headerName: knot.headerName, isLeaf: oldNode.isLeaf,
+          isTerminator: true, handler: handler)
 
   result.handler = handler
 
   if not result.isLeaf:
     result.children = oldNode.children
 
-proc parentalPatternNode[H](oldNode : PatternNode[H]) : PatternNode[H] =
+proc parentalPatternNode[H](oldNode: PatternNode[H]): PatternNode[H] =
   ## Turns the given node into a parent node. If it not a leaf node, this returns a new copy of the input.
   case oldNode.kind:
     of ptrnText:
-      result = PatternNode[H](kind: ptrnText, value: oldNode.value, isLeaf: false, children: newSeq[PatternNode[H]](), isTerminator: oldNode.isTerminator)
+      result = PatternNode[H](kind: ptrnText, value: oldNode.value, isLeaf: false, children: newSeq[PatternNode[H]](),
+          isTerminator: oldNode.isTerminator)
     of ptrnParam:
-      result = PatternNode[H](kind: ptrnParam, value: oldNode.value, isLeaf: false, children: newSeq[PatternNode[H]](), isTerminator: oldNode.isTerminator, isGreedy: oldNode.isGreedy)
+      result = PatternNode[H](kind: ptrnParam, value: oldNode.value, isLeaf: false, children: newSeq[PatternNode[H]](),
+          isTerminator: oldNode.isTerminator, isGreedy: oldNode.isGreedy)
     of ptrnWildcard:
-      result = PatternNode[H](kind: ptrnWildcard, isLeaf: false, children: newSeq[PatternNode[H]](), isTerminator: oldNode.isTerminator, isGreedy: oldNode.isGreedy)
+      result = PatternNode[H](kind: ptrnWildcard, isLeaf: false, children: newSeq[PatternNode[H]](),
+          isTerminator: oldNode.isTerminator, isGreedy: oldNode.isGreedy)
     of ptrnEndHeaderConstraint:
-      result = PatternNode[H](kind: ptrnEndHeaderConstraint, isLeaf: false, children: newSeq[PatternNode[H]](), isTerminator: oldNode.isTerminator)
+      result = PatternNode[H](kind: ptrnEndHeaderConstraint, isLeaf: false, children: newSeq[PatternNode[H]](),
+          isTerminator: oldNode.isTerminator)
     of ptrnStartHeaderConstraint:
-      result = PatternNode[H](kind: ptrnStartHeaderConstraint, headerName: oldNode.headerName, isLeaf: false, children: newSeq[PatternNode[H]](), isTerminator: oldNode.isTerminator)
+      result = PatternNode[H](kind: ptrnStartHeaderConstraint, headerName: oldNode.headerName, isLeaf: false,
+          children: newSeq[PatternNode[H]](), isTerminator: oldNode.isTerminator)
 
   if result.isTerminator:
     result.handler = oldNode.handler
 
-proc indexOf[H](nodes : seq[PatternNode[H]], knot : MapperKnot) : int =
+proc indexOf[H](nodes: seq[PatternNode[H]], knot: MapperKnot): int =
   ## Finds the index of nodes that matches the given knot. If none is found, returns -1
   for index, child in pairs(nodes):
     if child == knot:
       return index
   return -1 #the 'not found' value
 
-proc chainTree[H](rope : seq[MapperKnot], handler : H) : PatternNode[H] =
+proc chainTree[H](rope: seq[MapperKnot], handler: H): PatternNode[H] =
   ## Creates a tree made up of single-child nodes that matches the given rope. The last node in the tree is a terminator with the given handler.
   let knot = rope[0]
   let lastKnot = (rope.len == 1) #since this is a chain tree, the only leaf node is the terminator node, so they are mutually linked, if this is true then it is both
@@ -290,31 +300,33 @@ proc chainTree[H](rope : seq[MapperKnot], handler : H) : PatternNode[H] =
     of ptrnText:
       result = PatternNode[H](kind: ptrnText, value: knot.value, isLeaf: lastKnot, isTerminator: lastKnot)
     of ptrnParam:
-      result = PatternNode[H](kind: ptrnParam, value: knot.value, isLeaf: lastKnot, isTerminator: lastKnot, isGreedy: knot.isGreedy)
+      result = PatternNode[H](kind: ptrnParam, value: knot.value, isLeaf: lastKnot, isTerminator: lastKnot,
+          isGreedy: knot.isGreedy)
     of ptrnWildcard:
       result = PatternNode[H](kind: ptrnWildcard, isLeaf: lastKnot, isTerminator: lastKnot, isGreedy: knot.isGreedy)
     of ptrnEndHeaderConstraint:
       result = PatternNode[H](kind: ptrnEndHeaderConstraint, isLeaf: lastKnot, isTerminator: lastKnot)
     of ptrnStartHeaderConstraint:
-      result = PatternNode[H](kind: ptrnStartHeaderConstraint, headerName: knot.headerName, isLeaf: lastKnot, isTerminator: lastKnot)
+      result = PatternNode[H](kind: ptrnStartHeaderConstraint, headerName: knot.headerName, isLeaf: lastKnot,
+          isTerminator: lastKnot)
 
   if lastKnot:
     result.handler = handler
   else:
-    result.children = @[chainTree(rope[1.. ^1], handler)] #continue the chain
+    result.children = @[chainTree(rope[1 .. ^1], handler)] #continue the chain
 
 func merge[H](
-  node : PatternNode[H],
-  rope : seq[MapperKnot],
-  handler : H
-) : PatternNode[H] {.raises: [MappingError].} =
+  node: PatternNode[H],
+  rope: seq[MapperKnot],
+  handler: H
+): PatternNode[H] {.raises: [MappingError].} =
   ## Merges the given sequence of MapperKnots into the given tree as a new mapping. This does not mutate the given node, instead it will return a new one
   if rope.len == 1: # Terminating knot reached, finish the merge
     result = terminatingPatternNode(node, rope[0], handler)
   else:
     let currentKnot = rope[0]
     let nextKnot = rope[1]
-    let remainder = rope[1.. ^1]
+    let remainder = rope[1 .. ^1]
 
     assert node == currentKnot
 
@@ -331,9 +343,9 @@ func merge[H](
       result.children[childIndex] = merge(result.children[childIndex], remainder, handler)
 
 func contains[H](
-  node : PatternNode[H],
-  rope : seq[MapperKnot]
-) : bool =
+  node: PatternNode[H],
+  rope: seq[MapperKnot]
+): bool =
   ## Determines whether or not merging rope into node will create a mapping conflict
   if rope.len == 0: return
   let knot = rope[0]
@@ -362,7 +374,7 @@ func contains[H](
     if node.children.len > 0:
       result = false # false until proven otherwise
       for child in node.children:
-        if child.contains(rope[1.. ^1]): # does the child match the rest of the rope?
+        if child.contains(rope[1 .. ^1]): # does the child match the rest of the rope?
           result = true
           break
   elif node.isLeaf and rope.len > 1: # the node is a leaf but we want to map further to it, so it won't conflict
@@ -373,28 +385,28 @@ func contains[H](
 #
 
 func addRoute*[H](
-  router : Router[H],
-  handler : H,
+  router: Router[H],
+  handler: H,
   verb: string,
-  pattern : string,
-  headers : HttpHeaders = nil
+  pattern: string,
+  headers: HttpHeaders = nil
 ) =
   ## Add a new mapping to the given ``Router`` instance
   var rope = generateRope(ensureCorrectRoute(pattern)) # initial rope
 
   if not headers.isNil: # extend the rope with any header constraints
     for key, value in pairs(headers):
-      rope.add(MapperKnot(kind:ptrnStartHeaderConstraint, headerName:key))
+      rope.add(MapperKnot(kind: ptrnStartHeaderConstraint, headerName: key))
       rope = concat(rope, generateRope(value))
-      rope.add(MapperKnot(kind:ptrnEndHeaderConstraint))
+      rope.add(MapperKnot(kind: ptrnEndHeaderConstraint))
 
-  var nodeToBeMerged : PatternNode[H]
+  var nodeToBeMerged: PatternNode[H]
   if router.verbTrees.hasKey(verb):
     nodeToBeMerged = router.verbTrees[verb]
     if nodeToBeMerged.contains(rope):
       raise newException(MappingError, "Duplicate mapping encountered: " & pattern)
   else:
-    nodeToBeMerged = PatternNode[H](kind:ptrnText, value:($pathSeparator), isLeaf:true, isTerminator:false)
+    nodeToBeMerged = PatternNode[H](kind: ptrnText, value: ($pathSeparator), isLeaf: true, isTerminator: false)
 
   router.verbTrees[verb] = nodeToBeMerged.merge(rope, handler)
 
@@ -410,7 +422,7 @@ func addRoute*[H](
 #
 # Compression routines, compression makes matching more efficient. Once compressed, a router is immutable
 #
-proc compress[H](node : PatternNode[H]) : PatternNode[H] =
+proc compress[H](node: PatternNode[H]): PatternNode[H] =
   ## Finds sequences of single ptrnText nodes and combines them to reduce the depth of the tree
   if node.isLeaf: #if it's a leaf, there are clearly no descendents, and if it is a terminator then compression will alter the behavior
     return node
@@ -424,7 +436,7 @@ proc compress[H](node : PatternNode[H]) : PatternNode[H] =
   result = node
   result.children = map(result.children, compress)
 
-proc compress*[H](router : Router[H]) =
+proc compress*[H](router: Router[H]) =
   ## Compresses the entire contents of the given ``Router``. Successive calls will recompress, but may not be efficient, so use this only when mapping is complete for the best effect
   for index, existing in pairs(router.verbTrees):
     router.verbTrees[index] = compress(existing)
@@ -434,16 +446,16 @@ proc compress*[H](router : Router[H]) =
 #
 
 func matchTree[H](
-  head : PatternNode[H],
-  path : string,
-  headers : HttpHeaders,
-  pathIndex : int = 0,
-  params = newTable[string,string]()
-) : RouteResult[H]  =
+  head: PatternNode[H],
+  path: string,
+  headers: HttpHeaders,
+  pathIndex: int = 0,
+  params = newTable[string, string]()
+): RouteResult[H] =
   ## Check whether the given path matches the given tree node starting from pathIndex
   var node = head
   var pathIndex = pathIndex
-  var newPathIndex:int
+  var newPathIndex: int
   var prefix = path[0 ..< pathIndex]
   block matching:
     while pathIndex >= 0:
@@ -463,12 +475,12 @@ func matchTree[H](
               pathIndex = path.len
         of ptrnParam:
           if node.isGreedy:
-            params[node.value] = decodeUrlComponent path[pathIndex.. ^1]
+            params[node.value] = decodeUrlComponent path[pathIndex .. ^1]
             pathIndex = path.len
           else:
             newPathIndex = path.find(pathSeparator, pathIndex) #skip forward to the next separator
             if newPathIndex == -1:
-              params[node.value] = decodeUrlComponent path[pathIndex.. ^1]
+              params[node.value] = decodeUrlComponent path[pathIndex .. ^1]
               pathIndex = path.len
             else:
               params[node.value] = decodeUrlComponent path[pathIndex..newPathIndex - 1]
@@ -479,33 +491,33 @@ func matchTree[H](
             if not headers.isNil:
               p = toString(headers.getOrDefault(node.headerName))
             let childResult = child.matchTree(
-              path=p,
-              pathIndex=0,
-              headers=headers
+              path = p,
+              pathIndex = 0,
+              headers = headers
             )
 
             if childResult.success == true:
               for key, value in childResult.route.params.pairs:
                 params[key] = value
               return RouteResult[H](
-                success:true,
-                handler:childResult.handler,
-                route:Route(params:params, prefix:prefix)
+                success: true,
+                handler: childResult.handler,
+                route: Route(params: params, prefix: prefix)
               )
-          return RouteResult[H](success:false)
+          return RouteResult[H](success: false)
         of ptrnEndHeaderConstraint:
           if node.isTerminator and node.isLeaf:
             return RouteResult[H](
-              success:true,
-              handler:node.handler,
-              route:Route(params:params,prefix:prefix)
+              success: true,
+              handler: node.handler,
+              route: Route(params: params, prefix: prefix)
             )
 
       if pathIndex == path.len and node.isTerminator: #the path was exhausted and we reached a node that has a handler
         return RouteResult[H](
-          success:true,
-          handler:node.handler,
-          route:Route(params:params,prefix:prefix)
+          success: true,
+          handler: node.handler,
+          route: Route(params: params, prefix: prefix)
         )
       elif not node.isLeaf: #there is children remaining, could match against children
         if node.children.len == 1: #optimization for single child that just points the node forward
@@ -520,31 +532,31 @@ func matchTree[H](
       else: #its a leaf and we havent' satisfied the path yet, let the last line handle returning
         break matching
 
-  result = RouteResult[H](success:false)
+  result = RouteResult[H](success: false)
 
 func match*[H](
-  router : Router[H],
-  requestMethod : string,
-  requestPath : string,
-  requestHeaders : HttpHeaders = newHttpHeaders(),
-) : RouteResult[H] =
+  router: Router[H],
+  requestMethod: string,
+  requestPath: string,
+  requestHeaders: HttpHeaders = newHttpHeaders(),
+): RouteResult[H] =
   ## Find a mapping that matches the given request description
   try:
-      let verb = requestMethod.toLowerAscii()
-      if router.verbTrees.hasKey(verb):
-        result = matchTree(router.verbTrees[verb], ensureCorrectRoute(requestPath), requestHeaders)
-        # if result.success == true:
-        #   result.route.query = extractParams(url.query)
-      else:
-        result = RouteResult[H](success:false)
+    let verb = requestMethod.toLowerAscii()
+    if router.verbTrees.hasKey(verb):
+      result = matchTree(router.verbTrees[verb], ensureCorrectRoute(requestPath), requestHeaders)
+      # if result.success == true:
+      #   result.route.query = extractParams(url.query)
+    else:
+      result = RouteResult[H](success: false)
   except MappingError:
-    result = RouteResult[H](success:false)
+    result = RouteResult[H](success: false)
 
 func match*[H](
-    router : Router[H],
-    requestMethod : HttpMethod,
-    requestPath : string,
-    requestHeaders : HttpHeaders = newHttpHeaders(),
-) : RouteResult[H] {.noSideEffect.} =
-    ## Simple wrapper around the regular route function
-    match(router, $requestMethod, requestPath, requestHeaders)
+    router: Router[H],
+    requestMethod: HttpMethod,
+    requestPath: string,
+    requestHeaders: HttpHeaders = newHttpHeaders(),
+): RouteResult[H] {.noSideEffect.} =
+  ## Simple wrapper around the regular route function
+  match(router, $requestMethod, requestPath, requestHeaders)

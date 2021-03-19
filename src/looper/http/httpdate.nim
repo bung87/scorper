@@ -15,4 +15,4 @@ proc httpDate*(): string {.inline.} =
   result = utc(now()).httpDate()
 
 when isMainModule:
-  echo parseTime("Wed, 21 Oct 2015 07:28:00 GMT",HttpDateFormat, utc()).utc
+  echo parseTime("Wed, 21 Oct 2015 07:28:00 GMT", HttpDateFormat, utc()).utc

@@ -330,7 +330,7 @@ func is5xx*(code: HttpCode): bool {.inline.} =
 func `$`*(httpMethod: HttpMethod): string =
   return (system.`$`(httpMethod))[4 .. ^1].toUpperAscii()
 
-proc generateHeaders*( headers: HttpHeaders,
+proc generateHeaders*(headers: HttpHeaders,
                        code: HttpCode = Http200,
                        ver: HttpVersion = HttpVer11
                      ): string =
@@ -364,4 +364,4 @@ when isMainModule:
     testTitleCase.add("content-length", "1")
     doAssert testTitleCase.hasKey("Content-Length")
     for key, val in testTitleCase:
-        doAssert key == "Content-Length"
+      doAssert key == "Content-Length"
