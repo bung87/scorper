@@ -5,6 +5,7 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
         os:
@@ -14,6 +15,10 @@ jobs:
         nim-version:
           - stable
           - devel
+        include:
+          - os: windows-latest
+            experimental: true
+
         exclude:
           - os: macos-latest
             # nim-version: stable
