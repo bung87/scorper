@@ -3,7 +3,7 @@
 
 [travis]: https://travis-ci.org/bung87/Looper.svg?branch=master
 
-Looper is an micro and elegant web framework written in Nim  
+Looper is a micro and elegant web framework written in Nim  
 
 Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
 
