@@ -3,7 +3,7 @@
 
 [travis]: https://travis-ci.org/bung87/Looper.svg?branch=master
 
-Another web framework written in Nim  
+Looper is an micro and elegant web framework written in Nim  
 
 Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
 
@@ -40,6 +40,19 @@ requires `wrk`
 `nimble benchmark`  
 `nimble benchmarkserver` 
 
+### Report  
+runs on my MBP Dual-Core Intel Core i5 2.7 GHz ,8 GB memory.  
+```
+Running 30s test @ http://127.0.0.1:8888/
+  4 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     5.00ms    2.87ms  84.54ms   96.99%
+    Req/Sec     5.11k   757.13     6.55k    74.75%
+  610863 requests in 30.06s, 66.99MB read
+Requests/sec:  20322.20
+Transfer/sec:      2.23MB
+```
+### Conclusion
 *qps* thousands faster than `jester` with stdlib.  it even thousand faster than `asynchttpserver`
 
 ## Limitations  
