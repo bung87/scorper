@@ -7,11 +7,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
           - windows-latest
           - macOS-latest
+        experimental: [false]
         nim-version:
           - stable
           - devel
