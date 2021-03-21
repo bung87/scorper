@@ -263,6 +263,7 @@ proc sendDownload*(request: Request, filepath: string) {.async.} =
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
+    await request.respError(Http404)
     return
   meta.unsafeGet.headers["Content-Type"] = "application/x-download"
   var msg = generateHeaders(meta.unsafeGet.headers, Http200)
@@ -272,6 +273,7 @@ proc sendDownload*(request: Request, filepath: string) {.async.} =
 proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.async.} =
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
+    await request.respError(Http404)
     return
   var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext)
