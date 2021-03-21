@@ -12,6 +12,7 @@ import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpf
     netunit, constant
 import std / [os, options, strformat, times, mimetypes, json, sequtils, macros]
 import rx_nim
+import zippy
 when defined(windows):
   import winlean
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
@@ -98,26 +99,37 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     else:
       `body`
 
+proc gzip*(req: Request):bool = req.headers.hasKey("Accept-Encoding") and
+    string(req.headers["Accept-Encoding"]).contains("gzip")
+
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``, headers and
   ## content.
   # If the headers did not contain a Content-Length use our own
+  let gzip = req.gzip()
+  if gzip and content.len >= gzipMinLength :
+    headers["Content-Encoding"] = "gzip"
+  let ctn = if gzip: compress(content,BestSpeed, dfGzip) else: content
   headers.hasKeyOrPut("Content-Length"):
-    $(content.len)
+    $(ctn.len)
   headers.hasKeyOrPut("Date"):
     httpDate()
   var msg = generateHeaders(headers, code)
-  msg.add(content)
+  msg.add(ctn)
   discard await req.transp.write(msg)
 
-proc respError*(req: Request, code: HttpCode, detail: string): Future[void] {.async.} =
+proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
-  let detailLen = detail.len
-  headers["Content-Length"] = $detailLen
+  let gzip = req.gzip()
+  if gzip and content.len >= gzipMinLength :
+    headers["Content-Encoding"] = "gzip"
+  let ctn = if gzip: compress(content,BestSpeed, dfGzip) else: content
+  headers.hasKeyOrPut("Content-Length"):
+    $(ctn.len)
   var msg = generateHeaders(headers, code)
-  msg.add(detail)
+  msg.add(ctn)
   discard await req.transp.write(msg)
 
 proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =

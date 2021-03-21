@@ -13,6 +13,7 @@ requires "nim >= 1.2.0"
 requires "chronos"
 requires "npeg"
 requires "https://github.com/nortero-code/rx-nim.git"
+requires "zippy"
 
 # task test, "Runs the test suite":
   # exec "testament --megatest:off pattern 'tests/*.nim'"

@@ -16,6 +16,7 @@ Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 const HttpRequestBufferSize* {.intdefine.} = 2.Kb
 const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32) 
 # 32 is sizeof MofuHeader
+const gzipMinLength* {.intdefine.} = 20
 ```
 
 ## Todos  
