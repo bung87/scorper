@@ -99,7 +99,7 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     else:
       `body`
 
-proc gzip*(req: Request):bool = req.headers.hasKey("Accept-Encoding") and
+proc gzip*(req: Request): bool = req.headers.hasKey("Accept-Encoding") and
     string(req.headers["Accept-Encoding"]).contains("gzip")
 
 proc resp*(req: Request, content: string,
@@ -108,11 +108,14 @@ proc resp*(req: Request, content: string,
   ## content.
   # If the headers did not contain a Content-Length use our own
   let gzip = req.gzip()
-  if gzip and content.len >= gzipMinLength :
+  let originalLen = content.len
+  let needCompress = gzip and originalLen >= gzipMinLength
+  if needCompress:
     headers["Content-Encoding"] = "gzip"
-  let ctn = if gzip: compress(content,BestSpeed, dfGzip) else: content
+  let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
+  let flen = if needCompress : $(ctn.len) else: $originalLen
   headers.hasKeyOrPut("Content-Length"):
-    $(ctn.len)
+    flen
   headers.hasKeyOrPut("Date"):
     httpDate()
   var msg = generateHeaders(headers, code)
@@ -123,11 +126,14 @@ proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.a
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
   let gzip = req.gzip()
-  if gzip and content.len >= gzipMinLength :
+  let originalLen = content.len
+  let needCompress = gzip and originalLen >= gzipMinLength
+  if needCompress:
     headers["Content-Encoding"] = "gzip"
-  let ctn = if gzip: compress(content,BestSpeed, dfGzip) else: content
+  let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
+  let flen = if needCompress : $(ctn.len) else: $originalLen
   headers.hasKeyOrPut("Content-Length"):
-    $(ctn.len)
+    flen
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
   discard await req.transp.write(msg)
