@@ -301,7 +301,7 @@ proc serveStatic*(request: Request) {.async.} =
     let mime = request.server.mimeDb.getMimetype(ext)
     meta.unsafeGet.headers["Content-Type"] = mime
     meta.unsafeGet.headers["Accept-Ranges"] = "bytes"
-    var msg = generateHeaders(meta.unsafeGet.headers, Http206)
+    var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     discard await request.transp.write(msg)
     return
   await request.sendFile(absPath)
