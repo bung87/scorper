@@ -8,7 +8,8 @@
 import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
-import urlencodedparser, multipartparser, acceptparser, httpform, httpdate, httpcore, urlly, router, netunit, constant
+import urlencodedparser, multipartparser, acceptparser, rangeparser,oids, httpform, httpdate, httpcore, urlly, router,
+    netunit, constant
 import std / [os, options, strformat, times, mimetypes, json, sequtils, macros]
 import rx_nim
 when defined(windows):
@@ -157,6 +158,28 @@ proc writeFile(request: Request, fname: string, size: int) {.async.} =
   close(fhandle)
   request.server.logSub.next(request.formatCommon(Http200, size))
 
+proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
+    info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
+  var handle = 0
+  var fhandle = open(fname)
+  let fullSize = meta.unsafeGet.info.size.int
+  when defined(windows):
+    handle = int(get_osfhandle(getFileHandle(fhandle)))
+  else:
+    handle = int(getFileHandle(fhandle))
+  for b in ranges:
+    discard await request.transp.write(boundary & CRLF)
+    discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
+    if b.ends > 0:
+      discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF)
+    else:
+      discard await request.transp.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF)
+    let offset = if b.ends > 0: b.starts else: fullSize + b.ends - 1
+    let size = if b.ends > 0: b.ends - b.starts + 1 else: abs(b.ends)
+    discard await request.transp.writeFile(handle, offset.uint, size)
+  discard await request.transp.write(boundary & "--")
+  close(fhandle)
+
 proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
   # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
@@ -196,6 +219,13 @@ proc fileMeta(request: Request, filepath: string): Future[Option[tuple[info: Fil
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   return some((info: info.get, headers: headers))
 
+proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]]): int =
+  for b in ranges:
+    if b[1] > 0:
+      result = result + b[1] - b[0] + 1
+    else:
+      result = result + abs(b[1])
+
 proc sendFile*(request: Request, filepath: string) {.async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
@@ -204,10 +234,28 @@ proc sendFile*(request: Request, filepath: string) {.async.} =
     return
   var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext)
-  meta.unsafeGet.headers["Content-Type"] = mime
-  var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-  discard await request.transp.write(msg)
-  await request.writeFile(filepath, meta.unsafeGet.info.size.int)
+  let rangeRequest = request.headers.hasKey("Range")
+  var parseRangeOk = false
+  var ranges = newSeq[tuple[starts: int, ends: int]]()
+  if rangeRequest:
+    let parser = rangeParser()
+    let rng: string = request.headers["Range"]
+    let r = parser.match(rng, ranges)
+    parseRangeOk = r.ok
+  if not rangeRequest or not parseRangeOk:
+    meta.unsafeGet.headers["Content-Type"] = mime
+    var msg = generateHeaders(meta.unsafeGet.headers, Http200)
+    discard await request.transp.write(msg)
+    await request.writeFile(filepath, meta.unsafeGet.info.size.int)
+  else:
+    let boundary = "--" & $genOid()
+    meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
+    let contentLength = calcContentLength(ranges)
+    meta.unsafeGet.headers["Content-Length"] = $contentLength
+    var msg = generateHeaders(meta.unsafeGet.headers, Http206)
+    discard await request.transp.write(msg)
+    await request.writePartialFile(filepath, ranges, meta, boundary, mime)
+    request.server.logSub.next(request.formatCommon(Http206, contentLength))
 
 proc sendDownload*(request: Request, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
