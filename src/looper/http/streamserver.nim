@@ -8,7 +8,7 @@
 import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
-import urlencodedparser, multipartparser, acceptparser, rangeparser,oids, httpform, httpdate, httpcore, urlly, router,
+import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
     netunit, constant
 import std / [os, options, strformat, times, mimetypes, json, sequtils, macros]
 import rx_nim
@@ -171,13 +171,13 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     discard await request.transp.write(boundary & CRLF)
     discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
     if b.ends > 0:
-      discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF)
+      discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF & CRLF)
     else:
-      discard await request.transp.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF)
+      discard await request.transp.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
     let offset = if b.ends > 0: b.starts else: fullSize + b.ends - 1
     let size = if b.ends > 0: b.ends - b.starts + 1 else: abs(b.ends)
     discard await request.transp.writeFile(handle, offset.uint, size)
-  discard await request.transp.write(boundary & "--")
+  discard await request.transp.write(CRLF & boundary & "--")
   close(fhandle)
 
 proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
