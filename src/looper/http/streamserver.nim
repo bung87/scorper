@@ -231,6 +231,7 @@ proc sendFile*(request: Request, filepath: string) {.async.} =
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
+    await request.respError(Http404)
     return
   var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext)
@@ -283,13 +284,25 @@ proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.
   await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
 proc serveStatic*(request: Request) {.async.} =
-  if request.meth != HttpGet:
+  if request.meth != HttpGet and request.meth != HttpHead:
     await request.respError(Http405)
     return
   let relPath = request.url.path.relativePath(request.prefix)
   let absPath = absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
     await request.respError(Http404)
+    return
+  if request.meth == HttpHead:
+    var meta = await fileMeta(request, absPath)
+    if meta.isNone:
+      await request.respError(Http404)
+      return
+    var (_, _, ext) = splitFile(absPath)
+    let mime = request.server.mimeDb.getMimetype(ext)
+    meta.unsafeGet.headers["Content-Type"] = mime
+    meta.unsafeGet.headers["Accept-Ranges"] = "bytes"
+    var msg = generateHeaders(meta.unsafeGet.headers, Http206)
+    discard await request.transp.write(msg)
     return
   await request.sendFile(absPath)
 
