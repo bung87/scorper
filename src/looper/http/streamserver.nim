@@ -113,7 +113,7 @@ proc resp*(req: Request, content: string,
   if needCompress:
     headers["Content-Encoding"] = "gzip"
   let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let flen = if needCompress : $(ctn.len) else: $originalLen
+  let flen = if needCompress: $(ctn.len) else: $originalLen
   headers.hasKeyOrPut("Content-Length"):
     flen
   headers.hasKeyOrPut("Date"):
@@ -131,7 +131,7 @@ proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.a
   if needCompress:
     headers["Content-Encoding"] = "gzip"
   let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let flen = if needCompress : $(ctn.len) else: $originalLen
+  let flen = if needCompress: $(ctn.len) else: $originalLen
   headers.hasKeyOrPut("Content-Length"):
     flen
   var msg = generateHeaders(headers, code)
@@ -244,13 +244,15 @@ proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]]): int =
     else:
       result = result + abs(b[1])
 
-proc sendFile*(request: Request, filepath: string) {.async.} =
+proc sendFile*(request: Request, filepath: string,extroHeaders:HttpHeaders = newHttpHeaders()) {.async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
     await request.respError(Http404)
     return
+  for key,val in extroHeaders:
+    meta.unsafeGet.headers[key] = val
   var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext)
   let rangeRequest = request.headers.hasKey("Range")
@@ -289,19 +291,12 @@ proc sendDownload*(request: Request, filepath: string) {.async.} =
   await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
 proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.async.} =
-  var meta = await fileMeta(request, filepath)
-  if meta.isNone:
-    await request.respError(Http404)
-    return
-  var (_, _, ext) = splitFile(filepath)
-  let mime = request.server.mimeDb.getMimetype(ext)
-  meta.unsafeGet.headers["Content-Type"] = mime
-  var msg = generateHeaders(meta.unsafeGet.headers, Http200)
   let filename = if asName.len == 0: filepath.extractFilename else: asName
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
-  msg.add &"""Content-Disposition: attachment;filename="{filename}";{encodedFilename} """ & CRLF & CRLF
-  discard await request.transp.write(msg)
-  await request.writeFile(filepath, meta.unsafeGet.info.size.int)
+  let extroHeaders = newHttpHeaders({
+    "Content-Disposition": &"""attachment;filename="{filename}";{encodedFilename}"""
+  })
+  await sendFile(request, filepath,extroHeaders)
 
 proc serveStatic*(request: Request) {.async.} =
   if request.meth != HttpGet and request.meth != HttpHead:
