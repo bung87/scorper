@@ -244,14 +244,14 @@ proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]]): int =
     else:
       result = result + abs(b[1])
 
-proc sendFile*(request: Request, filepath: string,extroHeaders:HttpHeaders = newHttpHeaders()) {.async.} =
+proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(request, filepath)
   if meta.isNone:
     await request.respError(Http404)
     return
-  for key,val in extroHeaders:
+  for key, val in extroHeaders:
     meta.unsafeGet.headers[key] = val
   var (_, _, ext) = splitFile(filepath)
   let mime = request.server.mimeDb.getMimetype(ext)
@@ -268,6 +268,7 @@ proc sendFile*(request: Request, filepath: string,extroHeaders:HttpHeaders = new
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     discard await request.transp.write(msg)
     await request.writeFile(filepath, meta.unsafeGet.info.size.int)
+    request.server.logSub.next(request.formatCommon(Http200, meta.unsafeGet.info.size.int))
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
@@ -296,7 +297,7 @@ proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.
   let extroHeaders = newHttpHeaders({
     "Content-Disposition": &"""attachment;filename="{filename}";{encodedFilename}"""
   })
-  await sendFile(request, filepath,extroHeaders)
+  await sendFile(request, filepath, extroHeaders)
 
 proc serveStatic*(request: Request) {.async.} =
   if request.meth != HttpGet and request.meth != HttpHead:
