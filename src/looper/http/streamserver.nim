@@ -190,10 +190,12 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
     if b.ends > 0:
       discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF & CRLF)
+    elif b.ends == 0:
+      discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{fullSize - 1}/{fullSize}" & CRLF & CRLF)
     else:
       discard await request.transp.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
-    let offset = if b.ends > 0: b.starts else: fullSize + b.ends - 1
-    let size = if b.ends > 0: b.ends - b.starts + 1 else: abs(b.ends)
+    let offset = if b.ends >= 0: b.starts else: fullSize + b.ends
+    let size = if b.ends > 0: b.ends - b.starts + 1: elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
     discard await request.transp.writeFile(handle, offset.uint, size)
   discard await request.transp.write(CRLF & boundary & "--")
   close(fhandle)
@@ -272,7 +274,17 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
-    let contentLength = calcContentLength(ranges)
+    var contentLength = calcContentLength(ranges)
+    for b in ranges:
+      contentLength = contentLength + len(boundary & CRLF)
+      contentLength = contentLength + len(fmt"Content-Type: {mime}" & CRLF)
+      if b.ends > 0:
+        contentLength = contentLength + len(fmt"Content-Range: bytes {b.starts}-{b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
+      elif b.ends == 0:
+        contentLength = contentLength + len(fmt"Content-Range: bytes {b.starts}-{meta.unsafeGet.info.size - 1}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
+      else:
+       contentLength = contentLength + len(fmt"Content-Range: bytes {b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
+    contentLength = contentLength + len(CRLF & boundary & "--")
     meta.unsafeGet.headers["Content-Length"] = $contentLength
     var msg = generateHeaders(meta.unsafeGet.headers, Http206)
     discard await request.transp.write(msg)
