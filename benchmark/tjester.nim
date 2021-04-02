@@ -1,5 +1,5 @@
 import jester
-import looper/http/httpdate
+import scorper/http/httpdate
 const port{.intdefine.} = 8888
 
 router myrouter:

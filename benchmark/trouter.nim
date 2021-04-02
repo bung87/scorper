@@ -1,5 +1,5 @@
 import jester/patterns, tables
-import looper/http/router
+import scorper/http/router
 
 import times
 let t1 = cpuTime()
