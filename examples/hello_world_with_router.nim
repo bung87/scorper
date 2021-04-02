@@ -1,4 +1,4 @@
-import looper
+import scorper
 const port{.intdefine.} = 8888
 when isMainModule:
   type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
@@ -11,6 +11,6 @@ when isMainModule:
   r.addRoute(cb, "get", "/{p1}/{p2}")
   const address = "127.0.0.1:" & $port
   const flags = {ReuseAddr}
-  var server = newLooper(address, r, flags)
+  var server = newScorper(address, r, flags)
   server.start()
   waitFor server.join()

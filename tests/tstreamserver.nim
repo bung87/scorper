@@ -7,19 +7,19 @@ discard """
 
 import strutils
 from net import TimeoutError
-include ./looper/http/streamserver
-include ./looper/http/streamclient
+include ./scorper/http/streamserver
+include ./scorper/http/streamclient
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Looper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse],
     test: proc (response: AsyncResponse, body: string): Future[void]) =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
-  var server = newLooper(address, handler, flags)
+  var server = newScorper(address, handler, flags)
   server.start()
   let
     response = waitFor(request(server))
@@ -34,7 +34,7 @@ proc test200() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.resp("Hello World, 200")
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
@@ -54,7 +54,7 @@ proc test404() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.resp("Hello World, 404", code = Http404)
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
@@ -74,7 +74,7 @@ proc testCustomEmptyHeaders() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.resp("Hello World, 200", newHttpHeaders())
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
@@ -96,7 +96,7 @@ proc testCustomContentLength() {.async.} =
     headers["Content-Length"] = "0"
     await request.resp("Hello World, 200", headers)
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
@@ -118,7 +118,7 @@ proc testPost() {.async.} =
     doAssert(body == "hello")
     await request.resp("Hello World, 200")
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.post(TestUrl, body = "hello")

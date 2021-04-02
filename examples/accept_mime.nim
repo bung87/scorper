@@ -1,4 +1,4 @@
-import looper
+import scorper
 
 when isMainModule:
   proc cb(req: Request) {.async.} =

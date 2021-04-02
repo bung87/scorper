@@ -1,5 +1,5 @@
 import asynchttpserver, asyncdispatch
-import looper/http/httpdate
+import scorper/http/httpdate
 const port{.intdefine.} = 8888
 
 proc main {.async.} =

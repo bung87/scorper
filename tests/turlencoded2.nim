@@ -1,20 +1,20 @@
 
-import ./looper/http/streamserver
-import ./looper/http/streamclient
-import ./looper/http/httpform
-import ./looper/http/urlly
-import ./looper/http/httpcore, chronos
+import ./scorper/http/streamserver
+import ./scorper/http/streamclient
+import ./scorper/http/httpform
+import ./scorper/http/urlly
+import ./scorper/http/httpcore, chronos
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Looper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse],
     test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
-  var server = newLooper(address, handler, flags)
+  var server = newScorper(address, handler, flags)
   server.start()
   let
     response = await(request(server))
@@ -34,7 +34,7 @@ proc testMultipart() {.async.} =
     doAssert form.data["MailAddress"] == "test@example.com"
     await request.resp("Hello World, 200")
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
     var headers = newHttpHeaders([(key: "Content-Type", val: "application/x-www-form-urlencoded")])

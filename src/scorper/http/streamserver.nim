@@ -33,7 +33,7 @@ type
     httpParser: MofuParser
     contentLength: BiggestUInt # as RFC no limit
     contentType: string
-    server: Looper
+    server: Scorper
     prefix: string
     parsedJson: Option[JsonNode]
     parsedForm: Option[Form]
@@ -42,7 +42,7 @@ type
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
 
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
-  Looper* = ref object of StreamServer
+  Scorper* = ref object of StreamServer
     callback: AsyncCallback
     maxBody: int
     router: Router[AsyncCallback]
@@ -150,7 +150,7 @@ proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =
 proc pairParam(x: tuple[key: string, value: string]): string =
   result = x[0] & '=' & '"' & x[1] & '"'
 
-proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Looper", params: seq[tuple[key: string,
+proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: seq[tuple[key: string,
     value: string]] = @[], code = Http401): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
   var headers = genericHeaders()
@@ -185,6 +185,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     handle = int(get_osfhandle(getFileHandle(fhandle)))
   else:
     handle = int(getFileHandle(fhandle))
+  echo ranges
   for b in ranges:
     discard await request.transp.write(boundary & CRLF)
     discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
@@ -279,11 +280,13 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
       contentLength = contentLength + len(boundary & CRLF)
       contentLength = contentLength + len(fmt"Content-Type: {mime}" & CRLF)
       if b.ends > 0:
-        contentLength = contentLength + len(fmt"Content-Range: bytes {b.starts}-{b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
+        contentLength = contentLength + len(fmt"Content-Range: bytes {b.starts}-{b.ends}/{meta.unsafeGet.info.size}" &
+            CRLF & CRLF)
       elif b.ends == 0:
-        contentLength = contentLength + len(fmt"Content-Range: bytes {b.starts}-{meta.unsafeGet.info.size - 1}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
+        contentLength = contentLength + len(fmt"Content-Range: bytes {b.starts}-{meta.unsafeGet.info.size - 1}/{meta.unsafeGet.info.size}" &
+            CRLF & CRLF)
       else:
-       contentLength = contentLength + len(fmt"Content-Range: bytes {b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
+        contentLength = contentLength + len(fmt"Content-Range: bytes {b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
     contentLength = contentLength + len(CRLF & boundary & "--")
     meta.unsafeGet.headers["Content-Length"] = $contentLength
     var msg = generateHeaders(meta.unsafeGet.headers, Http206)
@@ -401,7 +404,7 @@ proc form*(request: Request): Future[Form] {.async.} =
   request.parsed = true
 
 proc processRequest(
-  looper: Looper,
+  scorper: Scorper,
   request: Request,
 ): Future[bool] {.async.} =
   request.parsed = false
@@ -482,7 +485,7 @@ proc processRequest(
       except ValueError:
         await request.respStatus(Http400, "Invalid Content-Length.")
         return true
-      if request.contentLength.int > looper.maxBody:
+      if request.contentLength.int > scorper.maxBody:
         await request.respStatus(Http413)
         return false
       if request.headers.hasKey("Content-Type"):
@@ -491,10 +494,10 @@ proc processRequest(
       await request.respStatus(Http411)
       return true
   # Call the user's callback.
-  if looper.callback != nil:
-    await looper.callback(request)
-  elif looper.router != nil:
-    let matched = looper.router.match($request.meth, request.url.path)
+  if scorper.callback != nil:
+    await scorper.callback(request)
+  elif scorper.router != nil:
+    let matched = scorper.router.match($request.meth, request.url.path)
     if matched.success:
       request.params = matched.route.params[]
       shallowCopy(request.query, request.url.query)
@@ -524,9 +527,9 @@ proc processRequest(
     return false
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
-  var looper = cast[Looper](server)
+  var scorper = cast[Scorper](server)
   var req = Request()
-  req.server = looper
+  req.server = scorper
   req.headers = newHttpHeaders()
   req.transp = transp
   req.hostname = $req.transp.localAddress
@@ -534,7 +537,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   req.privAccpetParser = accpetParser()
   req.httpParser = MofuParser()
   while not transp.atEof():
-    let retry = await processRequest(looper, req)
+    let retry = await processRequest(scorper, req)
     if not retry:
       transp.close
       break
@@ -547,23 +550,23 @@ proc serve*(address: string,
             flags: set[ServerFlags] = {ReuseAddr},
             maxBody = 8.Mb
             ) {.async.} =
-  var server = Looper()
+  var server = Scorper()
   server.mimeDb = newMimetypes()
   server.callback = callback
   server.maxBody = maxBody
   let address = initTAddress(address)
-  server = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
+  server = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
   server.logSub = subject[string]()
   server.start()
   when not defined(release):
     discard server.logSub.subscribe logSubOnNext
-  server.logSub.next("Looper serve at http://" & $address)
+  server.logSub.next("Scorper serve at http://" & $address)
   await server.join()
 
-proc newLooper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
+proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
                 maxBody = 8.Mb
-                ): Looper =
+                ): Scorper =
   new result
   result.mimeDb = newMimetypes()
   when handler is AsyncCallback:
@@ -575,8 +578,8 @@ proc newLooper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
   result.logSub = subject[string]()
   when not defined(release):
     discard result.logSub.subscribe logSubOnNext
-  result.logSub.next("Looper serve at http://" & $address)
-  result = cast[Looper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
+  result.logSub.next("Scorper serve at http://" & $address)
+  result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
 
-proc isClosed*(server: Looper): bool =
+proc isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed

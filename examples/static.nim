@@ -1,4 +1,4 @@
-import looper
+import scorper
 
 when isMainModule:
   type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
@@ -8,6 +8,6 @@ when isMainModule:
   let address = "127.0.0.1:8888"
   echo "check " & "http://127.0.0.1:8888/static/README.md"
   let flags = {ReuseAddr}
-  var server = newLooper(address, r, flags)
+  var server = newScorper(address, r, flags)
   server.start()
   waitFor server.join()

@@ -2,7 +2,7 @@
 
 version       = "0.1.0"
 author        = "bung87"
-description   = "Another web framework written in Nim"
+description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
 srcDir        = "src"
 skipDirs      = @["tests","examples"]
@@ -19,7 +19,7 @@ requires "zippy"
   # exec "testament --megatest:off pattern 'tests/*.nim'"
 
 task docs,"a":
-  exec "nim doc --project src/looper.nim"
+  exec "nim doc --project src/scorper.nim"
 
 task ghpage,"gh page":
   cd "src/htmldocs" 
@@ -28,7 +28,7 @@ task ghpage,"gh page":
   exec "git config user.name \"bung87\""
   exec "git config user.email \"crc32@qq.com\""
   exec "git commit -m \"docs(docs): update gh-pages\""
-  let url = "\"https://bung87@github.com/bung87/looper.git\""
+  let url = "\"https://bung87@github.com/bung87/scorper.git\""
   exec "git push --force --quiet " & url & " master:gh-pages"
 
 task benchmark,"benchmark":

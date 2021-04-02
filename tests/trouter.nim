@@ -1,8 +1,8 @@
 
-import ./looper/http/streamserver
-import ./looper/http/streamclient
-import ./looper/http/router
-import ./looper/http/httpcore, chronos
+import ./scorper/http/streamserver
+import ./scorper/http/streamclient
+import ./scorper/http/router
+import ./scorper/http/httpcore, chronos
 import tables
 
 const TestUrl = "http://127.0.0.1:64124/basic/foo/ba?q=qux"
@@ -10,7 +10,7 @@ type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Looper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse],
     test: proc (response: AsyncResponse, body: string): Future[void]) =
 
   let address = "127.0.0.1:64124"
@@ -18,7 +18,7 @@ proc runTest(
   let r = newRouter[AsyncCallback]()
   r.addRoute(handler, "get", "/basic/{p1}/{p2}")
   r.addRoute(handler, "get", "/code/{codex}")
-  var server = newLooper(address, r, flags)
+  var server = newScorper(address, r, flags)
   server.start()
   let
     response = waitFor(request(server))
@@ -33,7 +33,7 @@ proc testParams() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.resp($request.params & $request.query.toTable)
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
@@ -55,7 +55,7 @@ proc testParamEncode() {.async.} =
     doAssert request.params["codex"] == "ß"
     await request.resp("")
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       codeUrl = "http://127.0.0.1:64124/code/%C3%9F"
@@ -74,7 +74,7 @@ proc testParamRaw() {.async.} =
     doAssert request.params["code"] == "ß"
     await request.resp("")
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       codeUrl = "http://127.0.0.1:64124/code/ß"

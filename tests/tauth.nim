@@ -1,8 +1,8 @@
 
-import ./looper/http/streamserver
-import ./looper/http/streamclient
-import ./looper/http/router
-import ./looper/http/httpcore,chronos
+import ./scorper/http/streamserver
+import ./scorper/http/streamclient
+import ./scorper/http/router
+import ./scorper/http/httpcore,chronos
 import tables
 import strformat
 import base64
@@ -11,7 +11,7 @@ type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Looper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse],
     test: proc (response: AsyncResponse, body: string): Future[void])  =
 
   let address = "127.0.0.1:64124"
@@ -19,7 +19,7 @@ proc runTest(
   let r = newRouter[AsyncCallback]()
   r.addRoute(handler, "get","/auth/ok")
   r.addRoute(handler, "get","/auth/error")
-  var server = newLooper(address, r, flags)
+  var server = newScorper(address, r, flags)
   server.start()
   let
     response = waitFor(request(server))
@@ -37,7 +37,7 @@ proc testAuthOk() {.async.} =
     else:
       await req.respBasicAuth()
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request("http://127.0.0.1:64124/auth/ok")

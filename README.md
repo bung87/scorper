@@ -1,13 +1,13 @@
-# Looper  ![Build Status](https://github.com/bung87/Looper/workflows/Test/badge.svg)  
+# scorper  ![Build Status](https://github.com/bung87/scorper/workflows/Test/badge.svg)  
 
 
-[travis]: https://travis-ci.org/bung87/Looper.svg?branch=master
+[travis]: https://travis-ci.org/bung87/scorper.svg?branch=master
 
-Looper is a micro and elegant web framework written in Nim  
+scorper is a micro and elegant web framework written in Nim  
 
 Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
 
-`Looper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
+`scorper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
 
 
 ## Compile flags  

@@ -1,8 +1,8 @@
 
-import ./looper/http/streamserver
-import ./looper/http/router
-import ./looper/http/streamclient
-import ./looper/http/httpcore,chronos
+import ./scorper/http/streamserver
+import ./scorper/http/router
+import ./scorper/http/streamclient
+import ./scorper/http/httpcore,chronos
 import os
 
 const TestUrl = "http://127.0.0.1:64124/static/README.md"
@@ -10,14 +10,14 @@ const root = currentSourcePath.parentDir().parentDir()
 const source = staticRead(root / "README.md")
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Looper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse],
     test: proc (response: AsyncResponse, body: string): Future[void])  =
 
   let r = newRouter[proc (request: Request): Future[void] {.gcsafe.}]()
   r.addRoute(serveStatic, "get", "/static/*$")
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
-  var server = newLooper(address, r, flags)
+  var server = newScorper(address, r, flags)
   server.start()
   let
     response = waitFor(request(server))
@@ -32,7 +32,7 @@ proc testStatic() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.sendFile(currentSourcePath)
 
-  proc request(server: Looper): Future[AsyncResponse] {.async.} =
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
     
