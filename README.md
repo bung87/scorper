@@ -43,9 +43,9 @@ requires `wrk`
 
 ### Report  
 runs on my MBP Dual-Core Intel Core i5 2.7 GHz ,8 GB memory.  
-scorper: 1.0.2
-chronos: 3.0.1
-nim version: 1.5.1, 1.4.4
+scorper: `1.0.2`  
+chronos: `3.0.1`  
+nim version: `1.5.1`, `1.4.4`  
 ```
 Running 30s test @ http://127.0.0.1:8888/
   4 threads and 100 connections
