@@ -20,9 +20,8 @@ jobs:
         include:
           - os: windows-latest
             experimental: true
-
-        exclude:
           - os: macos-latest
+            experimental: true
             # nim-version: stable
     steps:
     - name: Checkout
