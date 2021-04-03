@@ -20,6 +20,7 @@ jobs:
         include:
           - os: windows-latest
             experimental: true
+        # exclude:
           - os: macos-latest
             experimental: true
             # nim-version: stable
@@ -29,19 +30,19 @@ jobs:
 
     - name: Cache choosenim
       id: cache-choosenim
-      uses: actions/cache@v2
+      uses: actions/cache@v1
       with:
         path: ~/.choosenim
         key: ${{ runner.os }}-choosenim-${{ matrix.nim-version}}
 
     - name: Cache nimble
       id: cache-nimble
-      uses: actions/cache@v2
+      uses: actions/cache@v1
       with:
         path: ~/.nimble
         key: ${{ runner.os }}-nimble-${{ matrix.nim-version}}-${{ hashFiles('*.nimble') }}
-        restore-keys: |
-          ${{ runner.os }}-nimble-${{ matrix.nim-version}}-
+        # restore-keys: |
+        #   ${{ runner.os }}-nimble-${{ matrix.nim-version}}-
       # if: runner.os != 'Windows'
     - name: Setup nim
       uses: jiro4989/setup-nim-action@v1.3.2
