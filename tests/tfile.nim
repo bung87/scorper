@@ -2,9 +2,10 @@
 import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore,chronos
+import os
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
-const source = staticRead(currentSourcePath)
+const source = staticRead(currentSourcePath.parentDir / "range.txt")
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Scorper): Future[AsyncResponse],
@@ -25,7 +26,7 @@ proc runTest(
 
 proc testSendFIle() {.async.} =
   proc handler(request: Request) {.async.} =
-    await request.sendFile(currentSourcePath)
+    await request.sendFile(currentSourcePath.parentDir / "range.txt")
 
   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let

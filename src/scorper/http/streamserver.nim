@@ -57,13 +57,13 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
-proc formatCommon*(r: Request, status: HttpCode, size: int): string {.gcsafe.} =
+proc formatCommon*(r: Request, status: HttpCode, size: int): string  =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
   # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined
   let remoteUser = os.getEnv("REMOTE_USER", "-")
   result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
-proc genericHeaders(): HttpHeaders =
+proc genericHeaders(): HttpHeaders {.tags: [TimeEffect].} =
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   result = newHttpHeaders()
   result["Date"] = httpDate()
@@ -165,16 +165,27 @@ proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void
 proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
   discard await request.transp.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
 
-proc writeFile(request: Request, fname: string, size: int) {.async.} =
+proc writeFile(request: Request, fname: string, size: int): Future[void] {.async.} =
   var handle = 0
-  var fhandle = open(fname)
+  var fhandle:File
+  try:
+    fhandle = open(fname)
+  except IOError as e:
+    echo e.msg
+    return
+  except CatchableError as e:
+    echo e.msg
+    return
+  except Exception as e:
+    echo e.msg
+    return
   when defined(windows):
     handle = int(get_osfhandle(getFileHandle(fhandle)))
   else:
     handle = int(getFileHandle(fhandle))
-  discard await request.transp.writeFile(handle, 0'u, size)
-  close(fhandle)
   request.server.logSub.next(request.formatCommon(Http200, size))
+  discard await request.transp.writeFile(handle, 0.uint, size)
+  close(fhandle)
 
 proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
     info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
@@ -204,7 +215,13 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
 proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
   # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
-  let info = getFileInfo(filepath)
+  if not fileExists(filepath):
+    return none(FileInfo)
+  var info:FileInfo
+  try:
+    info = getFileInfo(filepath)
+  except:
+    return none(FileInfo)
   if fpOthersRead notin info.permissions:
     await request.respError(Http403)
     return none(FileInfo)
@@ -346,7 +363,7 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
     str = await request.transp.readLine(limit = request.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await request.respStatus(Http400, ContentLengthMismatch)
-    raise e
+    return 
   result = parseJson(str)
   request.parsedJson = some(result)
   request.parsed = true
@@ -358,7 +375,7 @@ proc body*(request: Request): Future[string] {.async.} =
     result = await request.transp.readLine(limit = request.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await request.respStatus(Http400, ContentLengthMismatch)
-    raise e
+    return
   request.parsed = true
 
 proc stream*(request: Request): AsyncStreamReader =
@@ -384,10 +401,10 @@ proc form*(request: Request): Future[Form] {.async.} =
           parsed = parseBoundary(request.contentType)
         except BoundaryMissingError as e:
           await request.respError(Http400, e.msg)
-          raise e
+          return
         except BoundaryInvalidError as e:
           await request.respError(Http400, e.msg)
-          raise e
+          return
         var parser = newMultipartParser(parsed.boundary, request.transp, request.buf.addr, request.contentLength.int)
         await parser.parse()
         if parser.state == boundaryEnd:
@@ -448,7 +465,7 @@ proc processRequest(
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)[]
   except ValueError:
-    asyncCheck request.respError(Http400)
+    asyncSpawn request.respError(Http400)
     return true
   case request.httpParser.major[]:
     of '1':
@@ -532,8 +549,14 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   req.server = scorper
   req.headers = newHttpHeaders()
   req.transp = transp
-  req.hostname = $req.transp.localAddress
-  req.ip = $req.transp.remoteAddress
+  try:
+    req.hostname = $req.transp.localAddress
+  except TransportError:
+    discard
+  try:
+    req.ip = $req.transp.remoteAddress
+  except TransportError:
+    discard
   req.privAccpetParser = accpetParser()
   req.httpParser = MofuParser()
   while not transp.atEof():

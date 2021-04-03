@@ -7,7 +7,7 @@ import tables
 import strformat
 import base64
 
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
+type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe,raises: [].}
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
