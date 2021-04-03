@@ -138,7 +138,12 @@ type
 proc sendFile(transp: StreamTransport, fname: string) {.async.} =
   var handle = 0
   var size = int(getFileSize(fname))
-  var fhandle = open(fname)
+  var fhandle:File = open(fname)
+  # try:
+  #   fhandle = open(fname)
+  # except IOError as e:
+  #   echo e.msg
+  #   return
   when defined(windows):
     handle = int(get_osfhandle(getFileHandle(fhandle)))
   else:
@@ -180,10 +185,14 @@ proc newAsyncHttpClient*(userAgent = defUserAgent, maxRedirects = 5,
   when defined(ssl):
     result.sslContext = sslContext
 
-proc close*(client: AsyncHttpClient) =
+proc close*(client: AsyncHttpClient) {.async.} =
   ## Closes any connections held by the HTTP client.
   if client.connected:
+    # await client.transp.closeWait()
+    # client.bodyStream.complete()
+    # asyncSpawn client.transp.closeWait()
     client.transp.close()
+    await client.transp.join()
     client.connected = false
 
 proc reportProgress(client: AsyncHttpClient,
@@ -211,7 +220,7 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
     try:
       await client.transp.readExactly(client.buf[0].addr, sizeToRecv)
     except TransportIncompleteError:
-      client.close()
+      await client.close()
 
     readLen.inc(sizeToRecv)
     if keep:
@@ -280,7 +289,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
       if length > 0:
         let recvLen = await client.recvFull(length, client.timeout, true)
         if recvLen == 0:
-          client.close()
+          await client.close()
           httpError("Got disconnected while trying to read body.")
         if recvLen != length:
           httpError("Received length doesn't match expected length. Wanted " &
@@ -298,7 +307,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
         while true:
           let recvLen = await client.recvFull(4000, client.timeout, true)
           if recvLen != 4000:
-            client.close()
+            await client.close()
             break
 
   client.bodyStream.complete()
@@ -306,7 +315,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
   # If the server will close our connection, then no matter the method of
   # reading the body, we need to close our socket.
   if headers.getOrDefault"Connection" == "close":
-    client.close()
+    await client.close()
 
 proc parseResponse(client: AsyncHttpClient,
                    getBody: bool): Future[AsyncResponse]
@@ -381,7 +390,7 @@ proc newConnection(client: AsyncHttpClient,
         "SSL support is not available. Cannot connect over SSL. Compile with -d:ssl to enable.")
 
     if client.connected:
-      client.close()
+      await client.close()
       client.connected = false
 
     # TODO: I should be able to write 'net.Port' here...
@@ -689,7 +698,7 @@ proc downloadFileEx(client: AsyncHttpClient,
   var file = open(filename, fmWrite)
   # Let `parseBody` write response data into client.bodyStream in the
   # background.
-  asyncCheck parseBody(client, resp.headers, resp.version)
+  asyncSpawn parseBody(client, resp.headers, resp.version)
   # The `writeFromStream` proc will complete once all the data in the
   # `bodyStream` has been written to the file.
   await file.writeFromStream(client.bodyStream)

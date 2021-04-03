@@ -41,7 +41,7 @@ proc testAuthOk() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request("http://127.0.0.1:64124/auth/ok")
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -57,7 +57,7 @@ proc testAuthOk() {.async.} =
       clientResponse = await client.request("http://127.0.0.1:64124/auth/ok",headers=headers)
     echo clientResponse.code
     doassert clientResponse.code == Http200
-    client.close()
+    await client.close()
 
   runTest(handler, request, test)
 

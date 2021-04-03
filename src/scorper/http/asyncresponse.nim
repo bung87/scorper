@@ -49,5 +49,5 @@ proc readBody*(response: AsyncResponse): Future[string] {.async.} =
   ## Reads the response's body and caches it. The read is performed only
   ## once.
   if response.body.len == 0:
-    response.body = await readAll(response.bodyStream)
+    response.body = await response.bodyStream.readAll()
   return response.body

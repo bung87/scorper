@@ -40,7 +40,7 @@ proc testMultipart() {.async.} =
     var headers = newHttpHeaders([(key: "Content-Type", val: "application/x-www-form-urlencoded")])
     const body = "UserName=test&UserNameKana=%E3%83%86%E3%82%B9%E3%83%88&MailAddress=test%40example.com"
     let clientResponse = await client.request(TestUrl, HttpPost, body = body, headers = headers)
-    client.close()
+    await client.close()
 
     return clientResponse
 

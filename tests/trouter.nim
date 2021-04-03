@@ -37,7 +37,7 @@ proc testParams() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -60,7 +60,7 @@ proc testParamEncode() {.async.} =
       client = newAsyncHttpClient()
       codeUrl = "http://127.0.0.1:64124/code/%C3%9F"
       clientResponse = await client.request(codeUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -79,7 +79,7 @@ proc testParamRaw() {.async.} =
       client = newAsyncHttpClient()
       codeUrl = "http://127.0.0.1:64124/code/ß"
       clientResponse = await client.request(codeUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 

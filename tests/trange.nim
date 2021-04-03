@@ -8,20 +8,20 @@ const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
+    test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
 
   let address = "127.0.0.1:64124"
   let flags:set[ServerFlags] = {ReuseAddr}
   var server = newScorper(address, handler, flags)
   server.start()
   let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+    response = await(request(server))
+    body = await(response.readBody())
 
-  waitFor test(response, body)
+  await test(response, body)
   server.stop()
   server.close()
-  waitFor server.join()
+  await server.join()
 
 proc testFull() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -30,8 +30,8 @@ proc testFull() {.async.} =
   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
-    let clientResponse = await client.request(TestUrl, headers = {"Range": "bytes=0-9"}.newHttpHeaders())
-    client.close()
+    let clientResponse = await client.request(TestUrl, headers = {"Range": "bytes=0-9","Connection":"close"}.newHttpHeaders())
+    await client.close()
 
     return clientResponse
 
@@ -39,7 +39,7 @@ proc testFull() {.async.} =
     doAssert(response.code == Http206)
     doAssert body.contains("0123456789")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 proc testStarts() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -49,8 +49,8 @@ proc testStarts() {.async.} =
     let
       client = newAsyncHttpClient()
 
-    let clientResponse = await client.request(TestUrl, headers = {"Range": "bytes=5-"}.newHttpHeaders())
-    client.close()
+    let clientResponse = await client.request(TestUrl, headers = {"Range": "bytes=5-","Connection":"close"}.newHttpHeaders())
+    await client.close()
 
     return clientResponse
 
@@ -58,7 +58,7 @@ proc testStarts() {.async.} =
     doAssert(response.code == Http206)
     doAssert body.contains("56789")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 proc testEnds() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -68,8 +68,8 @@ proc testEnds() {.async.} =
     let
       client = newAsyncHttpClient()
 
-    let clientResponse = await client.request(TestUrl, headers = {"Range": "bytes=-4"}.newHttpHeaders())
-    client.close()
+    let clientResponse = await client.request(TestUrl, headers = {"Range": "bytes=-4","Connection":"close"}.newHttpHeaders())
+    await client.close()
 
     return clientResponse
 
@@ -77,7 +77,7 @@ proc testEnds() {.async.} =
     doAssert(response.code == Http206)
     doAssert body.contains("6789")
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
 
 waitfor(testFull())
 waitfor(testStarts())

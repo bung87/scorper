@@ -190,13 +190,17 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
 proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
     info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
   var handle = 0
-  var fhandle = open(fname)
+  var fhandle:File
+  try:
+    fhandle = open(fname)
+  except IOError as e:
+    echo e.msg
+    return
   let fullSize = meta.unsafeGet.info.size.int
   when defined(windows):
     handle = int(get_osfhandle(getFileHandle(fhandle)))
   else:
     handle = int(getFileHandle(fhandle))
-  echo ranges
   for b in ranges:
     discard await request.transp.write(boundary & CRLF)
     discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)

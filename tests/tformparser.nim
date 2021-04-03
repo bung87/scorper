@@ -49,7 +49,7 @@ proc testMultipart() {.async.} =
     data["author"] = "bung"
     data["uploaded_file"] = ("README.md", "text/markdown", readFile getCurrentDir() / "README.md")
     let clientResponse = await client.post(TestUrl, multipart = data)
-    client.close()
+    await client.close()
 
     return clientResponse
 

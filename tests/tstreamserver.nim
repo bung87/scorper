@@ -38,7 +38,7 @@ proc test200() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -58,7 +58,7 @@ proc test404() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -78,7 +78,7 @@ proc testCustomEmptyHeaders() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -100,7 +100,7 @@ proc testCustomContentLength() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 
@@ -122,7 +122,7 @@ proc testPost() {.async.} =
     let
       client = newAsyncHttpClient()
       clientResponse = await client.post(TestUrl, body = "hello")
-    client.close()
+    await client.close()
     return clientResponse
 
   proc test(response: AsyncResponse, body: string) {.async.} =

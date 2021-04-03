@@ -33,7 +33,7 @@ proc testSendFIle() {.async.} =
       client = newAsyncHttpClient()
     
     let clientResponse = await client.request(TestUrl)
-    client.close()
+    await client.close()
 
     return clientResponse
 

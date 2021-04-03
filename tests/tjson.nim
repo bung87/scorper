@@ -34,7 +34,7 @@ proc testJson() {.async.} =
       client = newAsyncHttpClient()
     
     let clientResponse = await client.sendJson(TestUrl,body = """{ "name": "Nim", "age": 12 }""")
-    client.close()
+    await client.close()
 
     return clientResponse
 
