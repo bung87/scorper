@@ -57,7 +57,7 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
-proc formatCommon*(r: Request, status: HttpCode, size: int): string  =
+proc formatCommon*(r: Request, status: HttpCode, size: int): string =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
   # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined
   let remoteUser = os.getEnv("REMOTE_USER", "-")
@@ -167,7 +167,7 @@ proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11)
 
 proc writeFile(request: Request, fname: string, size: int): Future[void] {.async.} =
   var handle = 0
-  var fhandle:File
+  var fhandle: File
   try:
     fhandle = open(fname)
   except IOError as e:
@@ -190,7 +190,7 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
 proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
     info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
   var handle = 0
-  var fhandle:File
+  var fhandle: File
   try:
     fhandle = open(fname)
   except IOError as e:
@@ -222,7 +222,7 @@ proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.a
   # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
   if not fileExists(filepath):
     return none(FileInfo)
-  var info:FileInfo
+  var info: FileInfo
   try:
     info = getFileInfo(filepath)
   except:
@@ -262,7 +262,7 @@ proc fileMeta(request: Request, filepath: string): Future[Option[tuple[info: Fil
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   return some((info: info.get, headers: headers))
 
-proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]],size:int): int =
+proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): int =
   for b in ranges:
     if b[1] > 0:
       result = result + b[1] - b[0] + 1
@@ -299,7 +299,7 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
-    var contentLength = calcContentLength(ranges,meta.unsafeGet.info.size.int)
+    var contentLength = calcContentLength(ranges, meta.unsafeGet.info.size.int)
     for b in ranges:
       contentLength = contentLength + len(boundary & CRLF)
       contentLength = contentLength + len(fmt"Content-Type: {mime}" & CRLF)
@@ -370,7 +370,7 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
     str = await request.transp.readLine(limit = request.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await request.respStatus(Http400, ContentLengthMismatch)
-    return 
+    return
   result = parseJson(str)
   request.parsedJson = some(result)
   request.parsed = true

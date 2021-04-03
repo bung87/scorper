@@ -138,7 +138,7 @@ type
 proc sendFile(transp: StreamTransport, fname: string) {.async.} =
   var handle = 0
   var size = int(getFileSize(fname))
-  var fhandle:File = open(fname)
+  var fhandle: File = open(fname)
   # try:
   #   fhandle = open(fname)
   # except IOError as e:

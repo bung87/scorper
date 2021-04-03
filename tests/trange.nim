@@ -11,7 +11,7 @@ proc runTest(
     test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
 
   let address = "127.0.0.1:64124"
-  let flags:set[ServerFlags] = {ReuseAddr, ReusePort}
+  let flags: set[ServerFlags] = {ReuseAddr, ReusePort}
   var server = newScorper(address, handler, flags)
   server.start()
   let
