@@ -188,11 +188,7 @@ proc newAsyncHttpClient*(userAgent = defUserAgent, maxRedirects = 5,
 proc close*(client: AsyncHttpClient) {.async.} =
   ## Closes any connections held by the HTTP client.
   if client.connected:
-    # await client.transp.closeWait()
-    # client.bodyStream.complete()
-    # asyncSpawn client.transp.closeWait()
-    client.transp.close()
-    await client.transp.join()
+    await client.transp.closeWait()
     client.connected = false
 
 proc reportProgress(client: AsyncHttpClient,
@@ -304,11 +300,12 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
         # This doesn't match the HTTP spec, but it fixes issues for non-conforming servers.
         (httpVersion == "1.1" and headers.getOrDefault"Connection" == "")
       if headers.getOrDefault"Connection" == "close" or implicitConnectionClose:
-        while true:
-          let recvLen = await client.recvFull(4000, client.timeout, true)
-          if recvLen != 4000:
-            await client.close()
-            break
+        await client.close()
+        # while true:
+        #   let recvLen = await client.recvFull(4000, client.timeout, true)
+        #   if recvLen != 4000:
+        #     await client.close()
+        #     break
 
   client.bodyStream.complete()
 

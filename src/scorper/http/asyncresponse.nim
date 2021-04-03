@@ -48,6 +48,7 @@ proc lastModified*(response: AsyncResponse): DateTime =
 proc readBody*(response: AsyncResponse): Future[string] {.async.} =
   ## Reads the response's body and caches it. The read is performed only
   ## once.
+  echo response.status
   if response.body.len == 0:
     response.body = await response.bodyStream.readAll()
   return response.body

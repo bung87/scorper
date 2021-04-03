@@ -201,6 +201,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     handle = int(get_osfhandle(getFileHandle(fhandle)))
   else:
     handle = int(getFileHandle(fhandle))
+
   for b in ranges:
     discard await request.transp.write(boundary & CRLF)
     discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
@@ -261,10 +262,12 @@ proc fileMeta(request: Request, filepath: string): Future[Option[tuple[info: Fil
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   return some((info: info.get, headers: headers))
 
-proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]]): int =
+proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]],size:int): int =
   for b in ranges:
     if b[1] > 0:
       result = result + b[1] - b[0] + 1
+    elif b[1] == 0:
+      result = result + size - b[0]
     else:
       result = result + abs(b[1])
 
@@ -296,7 +299,7 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
-    var contentLength = calcContentLength(ranges)
+    var contentLength = calcContentLength(ranges,meta.unsafeGet.info.size.int)
     for b in ranges:
       contentLength = contentLength + len(boundary & CRLF)
       contentLength = contentLength + len(fmt"Content-Type: {mime}" & CRLF)
@@ -308,12 +311,12 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
             CRLF & CRLF)
       else:
         contentLength = contentLength + len(fmt"Content-Range: bytes {b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
-    contentLength = contentLength + len(CRLF & boundary & "--")
-    meta.unsafeGet.headers["Content-Length"] = $contentLength
-    var msg = generateHeaders(meta.unsafeGet.headers, Http206)
-    discard await request.transp.write(msg)
-    await request.writePartialFile(filepath, ranges, meta, boundary, mime)
-    request.server.logSub.next(request.formatCommon(Http206, contentLength))
+      contentLength = contentLength + len(CRLF & boundary & "--")
+      meta.unsafeGet.headers["Content-Length"] = $contentLength
+      var msg = generateHeaders(meta.unsafeGet.headers, Http206)
+      discard await request.transp.write(msg)
+      await request.writePartialFile(filepath, ranges, meta, boundary, mime)
+      request.server.logSub.next(request.formatCommon(Http206, contentLength))
 
 proc sendDownload*(request: Request, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
@@ -468,7 +471,8 @@ proc processRequest(
 
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)[]
-  except ValueError:
+  except ValueError as e:
+    echo e.msg
     asyncSpawn request.respError(Http400)
     return true
   case request.httpParser.major[]:
