@@ -301,7 +301,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
         (httpVersion == "1.1" and headers.getOrDefault"Connection" == "")
       if headers.getOrDefault"Connection" == "close" or implicitConnectionClose:
         while true:
-          let recvLen = await client.recvFull( net.BufferSize, client.timeout, true)
+          let recvLen = await client.recvFull(net.BufferSize, client.timeout, true)
           if recvLen != net.BufferSize:
             await client.close()
             break
