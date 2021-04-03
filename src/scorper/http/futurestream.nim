@@ -7,7 +7,7 @@ type
                                 ## subject to change.
     queue: Deque[T]
     finished: bool
-    cb: proc (arg: pointer = nil) {.closure, gcsafe.}
+    cb: proc (arg: pointer = nil) {.closure, gcsafe,raises: [].}
 
 proc newFutureStream*[T](fromProc = "unspecified"): FutureStream[T] =
   ## Create a new ``FutureStream``. This future's callback is activated when
@@ -36,7 +36,7 @@ proc complete*[T](future: FutureStream[T]) =
     future.cb()
 
 proc `callback=`*[T](future: FutureStream[T],
-    cb: proc (future: FutureStream[T]) {.closure, gcsafe.}) =
+    cb: proc (future: FutureStream[T]) {.closure, gcsafe,raises: [].}) =
   ## Sets the callback proc to be called when data was placed inside the
   ## future stream.
   ##
@@ -45,7 +45,7 @@ proc `callback=`*[T](future: FutureStream[T],
   ##
   ## If the future stream already has data or is finished then ``cb`` will be
   ## called immediately.
-  proc named(arg: pointer = nil) = cb(future)
+  proc named(arg: pointer = nil){.closure, gcsafe.} = cb(future)
   future.cb = named
   if future.queue.len > 0 or future.finished:
     callSoon(future.cb)
@@ -82,7 +82,7 @@ proc read*[T](future: FutureStream[T]): owned(Future[(bool, T)]) =
   ## ``FutureStream``.
   var resFut = newFuture[(bool, T)]("FutureStream.take")
   let savedCb = future.cb
-  proc newCb(fs: FutureStream[T]) =
+  proc newCb(fs: FutureStream[T]){.closure,gcsafe, raises: [].} =
     # Exit early if `resFut` is already complete. (See #8994).
     if resFut.finished: return
 

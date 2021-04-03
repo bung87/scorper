@@ -58,7 +58,7 @@ template debug(a: varargs[untyped]) =
 template `-`[T](p: ptr T, p2: ptr T): int =
   cast[int](p) - cast[int](p2)
 
-proc processChar(parser: UrlEncodedParser, o: var seq[tuple[key, value: TaintedString]]) =
+proc processChar(parser: UrlEncodedParser, o: var seq[tuple[key, value: string]]) =
   var name, value: string
   var old = parser.buf
   while true:
@@ -101,7 +101,7 @@ proc processChar(parser: UrlEncodedParser, o: var seq[tuple[key, value: TaintedS
         debug "allEnd"
         break
 
-proc parse*(parser: UrlEncodedParser): Future[seq[tuple[key, value: TaintedString]]] {.async.} =
+proc parse*(parser: UrlEncodedParser): Future[seq[tuple[key, value: string]]] {.async.} =
   while not parser.transp.atEof():
     if parser.needReadLen == 0:
       break

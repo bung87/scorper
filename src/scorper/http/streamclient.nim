@@ -703,7 +703,7 @@ proc downloadFile*(client: AsyncHttpClient, url: string,
   result = newFuture[void]("downloadFile")
   try:
     result = downloadFileEx(client, url, filename)
-  except Exception as exc:
+  except CatchableError as exc:
     result.fail(exc)
   finally:
     result.addCallback(

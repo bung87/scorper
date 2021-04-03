@@ -16,7 +16,7 @@ type
 
 proc open*(x: FormFile): File = open(x.filepath)
 
-proc readFile*(x: FormFile): TaintedString =
+proc readFile*(x: FormFile): string =
   readFile(x.filepath)
 
 proc add*(x: FormData | FormFiles, y: sink ContentDisposition) =

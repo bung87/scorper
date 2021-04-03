@@ -10,7 +10,7 @@ skipDirs      = @["tests","examples"]
 # Dependencies
 
 requires "nim >= 1.2.0"
-requires "chronos"
+requires "chronos >= 3.0.1" # initial 2.6.1
 requires "npeg"
 requires "https://github.com/nortero-code/rx-nim.git"
 requires "zippy"
