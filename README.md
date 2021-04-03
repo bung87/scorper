@@ -43,18 +43,21 @@ requires `wrk`
 
 ### Report  
 runs on my MBP Dual-Core Intel Core i5 2.7 GHz ,8 GB memory.  
+scorper: 1.0.2
+chronos: 3.0.1
+nim version: 1.5.1, 1.4.4
 ```
 Running 30s test @ http://127.0.0.1:8888/
   4 threads and 100 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     5.00ms    2.87ms  84.54ms   96.99%
-    Req/Sec     5.11k   757.13     6.55k    74.75%
-  610863 requests in 30.06s, 66.99MB read
-Requests/sec:  20322.20
-Transfer/sec:      2.23MB
+    Latency     3.51ms    1.00ms  66.66ms   92.16%
+    Req/Sec     7.15k   518.66    10.94k    85.67%
+  854619 requests in 30.05s, 93.73MB read
+Requests/sec:  28441.14
+Transfer/sec:      3.12MB
 ```
 ### Conclusion
-*qps* thousands faster than `jester` with stdlib.  it even thousand faster than `asynchttpserver`
+*qps* almost ten thousands faster than `jester` with stdlib.  it even thousand faster than `asynchttpserver`
 
 ## Limitations  
 

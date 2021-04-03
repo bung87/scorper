@@ -64,7 +64,7 @@ proc pa(){.thread.} =
 initLock(L)
 createThread(thr[0], proj)
 discard workerChan.recv()
-sleep(2000)
+# sleep(2000)
 createThread(thr[1], root)
 when not defined(serverTest):
   createThread(thr[2], pa)
