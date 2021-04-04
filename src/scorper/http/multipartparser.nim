@@ -248,11 +248,12 @@ proc readLine(parser: MultipartParser): Future[int] {.async.} =
 
   var j = 0
   const sep = ['\c', '\l']
+  const sepLen = len(sep)
   while result < needed:
     discard await parser.transp.readOnce(parser.src[result].addr, 1)
     if sep[j] == parser.src[result]:
       inc(j)
-      if j == len(sep):
+      if j == sepLen:
         inc result
         break
     else:
@@ -270,150 +271,169 @@ proc readUntilBoundary(parser: MultipartParser): Future[int] {.async.} =
   debug "contentLength:" & $parser.contentLength
 
   var j = 0
-  let sep = "\c\l" & parser.boundaryBegin
+  let beginSep = "\c\l" & parser.boundaryBegin
+  let beginSepLen = len(beginSep)
   while result < needed:
     discard await parser.transp.readOnce(parser.src[result].addr, 1)
-    if sep[j] == parser.src[result]:
+    if beginSep[j] == parser.src[result]:
       inc(j)
-      if j == len(sep):
+      if j == beginSepLen:
         inc result
         break
     else:
       j = 0
     inc result
-  if j < sep.len:
+  if j < beginSep.len:
     raise newException(LineIncompleteError, "")
 
 proc parse*(parser: MultipartParser) {.async.} =
-  while not parser.transp.atEof():
-    case parser.state:
-      of boundaryBegin:
-        debug "boundaryBegin state"
-        parser.read += await parser.readLine
-        assert parser.isBoundaryBegin
-        parser.skipBeginTok
-        parser.skipLineEnd
-        parser.state = disposition
-      of disposition:
-        # https://www.ietf.org/rfc/rfc1806.txt
-        # skip Content-Disposition:
-        debug "disposition state"
-        parser.tmpRead = await parser.readLine
-        parser.read += parser.tmpRead
-        debug "tmp:" & $parser.tmpRead
-        parser.resetSlices
-        parser.skipContentDispositionFlag
-        parser.incBSlice ContentDispoitionFlagLen
-        parser.skipWhiteSpaceAndIncBSlice
-        # skip form-data;
-        parser.skipFormDataFlag
-        parser.incBSlice FormDataFlagLen
-        parser.skipWhiteSpaceAndIncBSlice
-        parser.processName
-        if parser.hasMoreField:
-          var disposition = ContentDisposition(kind: file)
-          disposition.name = parser.bStr
-          parser.incBSlice # for end quote
-          parser.bSlice.a = parser.bSlice.b
-          parser.incBSlice # for ;
-          parser.incBSlice # next pos
-          parser.skipWhiteSpaceAndIncBSlice
-          parser.processFileName
-          disposition.filename = parser.bStr
-          disposition.filepath = getTempDir() / $genOid()
-          disposition.file = openFileStream(disposition.filepath, fmWrite)
-          parser.dispositions.add disposition
-        else:
-          parser.dispositions.add ContentDisposition(kind: data, name: parser.bStr)
-        parser.skipLineEnd
-        parser.tmpRead = await parser.readLine
-        parser.read += parser.tmpRead
-        debug "tmp:" & $parser.tmpRead
-        if parser.tmpRead == 2:
+  block outterloop:
+    while not parser.transp.atEof():
+      case parser.state:
+        of boundaryBegin:
+          debug "boundaryBegin state"
+          parser.read += await parser.readLine
+          assert parser.isBoundaryBegin
+          parser.skipBeginTok
           parser.skipLineEnd
-          parser.state = contentBegin
-          # content followed
-        else:
-          # extro meta data
-          parser.parseParam()
-          parser.skipLineEnd
-          while true:
-            parser.tmpRead = await parser.readLine
-            parser.read += parser.tmpRead
-            if parser.tmpRead == 2:
-              parser.skipLineEnd
-              debug "extro meta data skipLineEnd"
-              break
-            parser.parseParam()
-          parser.skipLineEnd
-          debug "extro meta data handled"
-          parser.state = contentBegin
-      of contentBegin:
-        debug "contentBegin state"
-        var needReload = false
-        block contentReadLoop:
-          while true:
-            try:
-              debug "start readLine"
-              parser.tmpRead = await parser.readUntilBoundary()
-              needReload = false
-            except LineIncompleteError:
-              debug "LineIncompleteError parser.needReadLen:" & $parser.needReadLen
-              parser.tmpRead = parser.needReadLen
-              needReload = true
-            parser.read += parser.tmpRead
-            if parser.remainLen == 0:
-              needReload = false
-            debug "read:" & $parser.read
-            debug "needReload:" & $needReload
-            debug "contentReadLoop tmp:" & $parser.tmpRead
-            debug "end readLine"
-            if needReload == false:
-              # read content complete
-              debug "read content complete"
-              if parser.currentDisposition.kind == data:
-                parser.currentDisposition.value = cast[string](parser.src[0 ..< parser.tmpRead - 2 -
-                    parser.boundaryBeginLen])
-              elif parser.currentDisposition.kind == file:
-                parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - 2 -
-                    parser.boundaryBeginLen)
-              parser.buf = parser.src[parser.tmpRead - 1].addr
-              parser.state = contentEnd
-              break contentReadLoop
-            else:
-              # read partial content
-              debug "read partial content"
-
-              if parser.currentDisposition.kind == data:
-                parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead])
-              elif parser.currentDisposition.kind == file:
-                parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead)
-              parser.buf = parser.src[parser.tmpRead - 1].addr
-            debug "inner loop end"
-      of contentEnd:
-        debug "contentEnd state"
-        debug "content length:" & $ parser.contentLength
-        debug "remain length:" & $ parser.remainLen
-
-        if parser.remainLen != 0:
-          try:
-            parser.tmpRead = await parser.readLine()
-          except LineIncompleteError:
-            if parser.currentDisposition.kind == file:
-              parser.currentDisposition.file.flush
-              parser.currentDisposition.file.close
-            parser.state = boundaryEnd
-            continue
-          debug "contentEnd tmp:" & $parser.tmpRead
-          parser.read += parser.tmpRead
-          inc parser.dispositionIndex
           parser.state = disposition
-          continue
+        of disposition:
+          # https://www.ietf.org/rfc/rfc1806.txt
+          # skip Content-Disposition:
+          debug "disposition state"
+          parser.tmpRead = await parser.readLine
+          parser.read += parser.tmpRead
+          debug "tmp:" & $parser.tmpRead
+          parser.resetSlices
+          parser.skipContentDispositionFlag
+          parser.incBSlice ContentDispoitionFlagLen
+          parser.skipWhiteSpaceAndIncBSlice
+          # skip form-data;
+          parser.skipFormDataFlag
+          parser.incBSlice FormDataFlagLen
+          parser.skipWhiteSpaceAndIncBSlice
+          parser.processName
+          if parser.hasMoreField:
+            var disposition = ContentDisposition(kind: file)
+            disposition.name = parser.bStr
+            parser.incBSlice # for end quote
+            parser.bSlice.a = parser.bSlice.b
+            parser.incBSlice # for ;
+            parser.incBSlice # next pos
+            parser.skipWhiteSpaceAndIncBSlice
+            parser.processFileName
+            disposition.filename = parser.bStr
+            disposition.filepath = getTempDir() / $genOid()
+            disposition.file = openFileStream(disposition.filepath, fmWrite)
+            parser.dispositions.add disposition
+          else:
+            parser.dispositions.add ContentDisposition(kind: data, name: parser.bStr)
+          parser.skipLineEnd
+          parser.tmpRead = await parser.readLine
+          parser.read += parser.tmpRead
+          debug "tmp:" & $parser.tmpRead
+          if parser.tmpRead == 2:
+            parser.skipLineEnd
+            parser.state = contentBegin
+            # content followed
+          else:
+            # extro meta data
+            parser.parseParam()
+            parser.skipLineEnd
+            while true:
+              parser.tmpRead = await parser.readLine
+              parser.read += parser.tmpRead
+              if parser.tmpRead == 2:
+                parser.skipLineEnd
+                debug "extro meta data skipLineEnd"
+                break
+              parser.parseParam()
+            parser.skipLineEnd
+            debug "extro meta data handled"
+            parser.state = contentBegin
+        of contentBegin:
+          debug "contentBegin state"
+          var needReload = false
+          block contentReadLoop:
+            while true:
+              try:
+                debug "start readLine"
+                parser.tmpRead = await parser.readUntilBoundary()
+                needReload = false
+              except LineIncompleteError:
+                debug "LineIncompleteError parser.needReadLen:" & $parser.needReadLen
+                parser.tmpRead = parser.needReadLen
+                needReload = true
+              parser.read += parser.tmpRead
+              if parser.remainLen == 0:
+                needReload = false
+              debug "read:" & $parser.read
+              debug "needReload:" & $needReload
+              debug "contentReadLoop tmp:" & $parser.tmpRead
+              debug "end readLine"
+              if needReload == false:
+                # read content complete
+                debug "read content complete"
+                if parser.currentDisposition.kind == data:
+                  parser.currentDisposition.value = cast[string](parser.src[0 ..< parser.tmpRead - 2 -
+                      parser.boundaryBeginLen])
+                elif parser.currentDisposition.kind == file:
+                  parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - 2 -
+                      parser.boundaryBeginLen)
+                parser.buf = parser.src[parser.tmpRead - 1].addr
+                parser.state = contentEnd
+                break contentReadLoop
+              else:
+                # read partial content
+                debug "read partial content"
+                if parser.currentDisposition.kind == data:
+                  if parser.needReadLen == parser.remainLen and parser.needReadLen < parser.boundaryBeginLen:
+                    # have partial of boundary end here
+                    let reduceBack = parser.boundaryEndLen - parser.remainLen + 2
+                    debug "reduceBack:",$reduceBack 
+                    parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead - reduceBack])
+                    parser.state = boundaryEnd
+                    break outterloop
+                  parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead])
+                elif parser.currentDisposition.kind == file:
+                  debug "partial next need:",parser.needReadLen
+                  debug "remain:",parser.remainLen
+                  if parser.needReadLen == parser.remainLen and parser.needReadLen < parser.boundaryBeginLen:
+                    # have partial of boundary end here
+                    let reduceBack = parser.boundaryEndLen - parser.remainLen + 2
+                    debug "reduceBack:",$reduceBack 
+                    parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - reduceBack)
+                    parser.currentDisposition.file.flush
+                    parser.currentDisposition.file.close
+                    parser.state = boundaryEnd
+                    break outterloop
+                    # break contentReadLoop
+                  parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead)
+                parser.buf = parser.src[parser.tmpRead - 1].addr
+              debug "inner loop end"
+        of contentEnd:
+          debug "contentEnd state"
+          debug "content length:" & $ parser.contentLength
+          debug "remain length:" & $ parser.remainLen
 
-      of boundaryEnd:
-        debug "boundaryEnd state"
-        parser.skipEndTok
-        break
+          if parser.remainLen != 0:
+            try:
+              parser.tmpRead = await parser.readLine()
+            except LineIncompleteError:
+              if parser.currentDisposition.kind == file:
+                parser.currentDisposition.file.flush
+                parser.currentDisposition.file.close
+              parser.state = boundaryEnd
+              continue
+            debug "contentEnd tmp:" & $parser.tmpRead
+            parser.read += parser.tmpRead
+            inc parser.dispositionIndex
+            parser.state = disposition
+            continue
+        of boundaryEnd:
+          debug "boundaryEnd state"
+          parser.skipEndTok
+          break
 
 when isMainModule:
   let a = parseBoundary("""multipart/form-data; boundary="---- next message ----"""")
