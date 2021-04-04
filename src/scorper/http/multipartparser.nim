@@ -390,18 +390,18 @@ proc parse*(parser: MultipartParser) {.async.} =
                   if parser.needReadLen == parser.remainLen and parser.needReadLen < parser.boundaryBeginLen:
                     # have partial of boundary end here
                     let reduceBack = parser.boundaryEndLen - parser.remainLen + 2
-                    debug "reduceBack:",$reduceBack 
+                    debug "reduceBack:", $reduceBack
                     parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead - reduceBack])
                     parser.state = boundaryEnd
                     break outterloop
                   parser.currentDisposition.value.add cast[string](parser.src[0 ..< parser.tmpRead])
                 elif parser.currentDisposition.kind == file:
-                  debug "partial next need:",parser.needReadLen
-                  debug "remain:",parser.remainLen
+                  debug "partial next need:", parser.needReadLen
+                  debug "remain:", parser.remainLen
                   if parser.needReadLen == parser.remainLen and parser.needReadLen < parser.boundaryBeginLen:
                     # have partial of boundary end here
                     let reduceBack = parser.boundaryEndLen - parser.remainLen + 2
-                    debug "reduceBack:",$reduceBack 
+                    debug "reduceBack:", $reduceBack
                     parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - reduceBack)
                     parser.currentDisposition.file.flush
                     parser.currentDisposition.file.close
