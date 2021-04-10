@@ -5,24 +5,53 @@ import nativesockets
 export asyncresponse
 export multipart
 export httpcore except parseHeader # TODO: The ``except`` doesn't work
+import results
+import logging
+
+type R = Result[int, string]
+
 when defined(windows):
   import winlean
 const headerLimit = 10_000
+
+type
+  ProgressChangedProc*[ReturnType] =
+    proc (total, progress, speed: BiggestInt):
+      ReturnType {.closure, gcsafe.}
 
 type
   Proxy* = ref object
     url*: Url
     auth*: string
 
+type
+  AsyncHttpClient* = ref object
+    connected: bool
+    currentURL: Url       ## Where we are currently connected.
+    headers*: HttpHeaders ## Headers to send in requests.
+    maxRedirects: Natural ## Maximum redirects, set to ``0`` to disable.
+    userAgent: string
+    timeout*: int         ## Only used for blocking HttpClient for now.
+    proxy: Proxy
+    ## ``nil`` or the callback to call when request progress changes.
+    onProgressChanged*: ProgressChangedProc[Future[void]]
+    when defined(ssl):
+      sslContext: net.SslContext
+    contentTotal: BiggestInt
+    contentProgress: BiggestInt
+    oneSecondProgress: BiggestInt
+    lastProgressReport: MonoTime
+    transp: StreamTransport
+    getBody: bool         ## When `false`, the body is never read in requestAux.
+    bodyStream: FutureStream[string]
+    parseBodyFut: Future[void]
+    buf: array[net.BufferSize, char]
+    logger: ConsoleLogger
+
 const defUserAgent* = "Nim httpclient/" & NimVersion
 
-proc httpError(msg: string) =
-  var e: ref ProtocolError
-  new(e)
-  e.msg = msg
-  raise e
 
-proc fileError(msg: string) =
+proc fileError(msg: string) {.inline.}=
   var e: ref IOError
   new(e)
   e.msg = msg
@@ -50,9 +79,9 @@ proc redirection(status: string): bool =
     if status.startsWith(i):
       return true
 
-proc getNewLocation(lastURL: string, headers: HttpHeaders): string =
+proc getNewLocation(client: AsyncHttpClient,lastURL: string, headers: HttpHeaders): string =
   result = headers.getOrDefault"Location"
-  if result == "": httpError("location header expected")
+  if result == "": client.logger.log lvlError,"location header expected"
   # Relative URLs. (Not part of the spec, but soon will be.)
   let r = parseUrl(result)
   if r.hostname == "" and r.path != "":
@@ -107,43 +136,11 @@ proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
 
   add(result, CRLF)
 
-type
-  ProgressChangedProc*[ReturnType] =
-    proc (total, progress, speed: BiggestInt):
-      ReturnType {.closure, gcsafe.}
-
-type
-  AsyncHttpClient* = ref object
-    connected: bool
-    currentURL: Url       ## Where we are currently connected.
-    headers*: HttpHeaders ## Headers to send in requests.
-    maxRedirects: Natural ## Maximum redirects, set to ``0`` to disable.
-    userAgent: string
-    timeout*: int         ## Only used for blocking HttpClient for now.
-    proxy: Proxy
-    ## ``nil`` or the callback to call when request progress changes.
-    onProgressChanged*: ProgressChangedProc[Future[void]]
-    when defined(ssl):
-      sslContext: net.SslContext
-    contentTotal: BiggestInt
-    contentProgress: BiggestInt
-    oneSecondProgress: BiggestInt
-    lastProgressReport: MonoTime
-    transp: StreamTransport
-    getBody: bool         ## When `false`, the body is never read in requestAux.
-    bodyStream: FutureStream[string]
-    parseBodyFut: Future[void]
-    buf: array[net.BufferSize, char]
 
 proc sendFile(transp: StreamTransport, fname: string) {.async.} =
   var handle = 0
   var size = int(getFileSize(fname))
   var fhandle: File = open(fname)
-  # try:
-  #   fhandle = open(fname)
-  # except IOError as e:
-  #   echo e.msg
-  #   return
   when defined(windows):
     handle = int(get_osfhandle(getFileHandle(fhandle)))
   else:
@@ -182,6 +179,7 @@ proc newAsyncHttpClient*(userAgent = defUserAgent, maxRedirects = 5,
   result.onProgressChanged = nil
   result.bodyStream = newFutureStream[string]("newAsyncHttpClient")
   result.getBody = true
+  result.logger = newConsoleLogger()
   when defined(ssl):
     result.sslContext = sslContext
 
@@ -204,27 +202,48 @@ proc reportProgress(client: AsyncHttpClient,
       client.lastProgressReport = getMonoTime()
 
 proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
-              keep: bool): Future[int] {.async.} =
+              keep: bool): Future[R] {.async.} =
   ## Ensures that all the data requested is read and returned.
   var readLen = 0
-
   while not client.transp.atEof():
     if size == readLen: break
-
     let remainingSize = size - readLen
     let sizeToRecv = min(remainingSize, net.BufferSize)
+    var hasError = false
     try:
       await client.transp.readExactly(client.buf[0].addr, sizeToRecv)
-    except TransportIncompleteError:
+    except TransportIncompleteError as e:
+      client.logger.log lvlError, e.msg
+      result.err e.msg
+      hasError = true
       await client.close()
+    except TransportUseClosedError as e:
+      client.logger.log lvlError, e.msg
+      result.err e.msg
+      hasError = true
+      await client.close()
+    except CatchableError as e:
+      client.logger.log lvlError, e.msg
+      result.err e.msg
+      hasError = true
+      await client.close()
+    except AsyncStreamReadError as e:
+      client.logger.log lvlError, e.msg
+      result.err e.msg
+      hasError = true
+      await client.close()
+    except AsyncStreamIncompleteError as e:
+      client.logger.log lvlError, e.msg
+      result.err e.msg
+      hasError = true
+      await client.close()
+    if not hasError:
+      readLen.inc(sizeToRecv)
+      if keep:
+        await client.bodyStream.write(cast[string](client.buf[0 ..< sizeToRecv]))
 
-    readLen.inc(sizeToRecv)
-    if keep:
-      await client.bodyStream.write(cast[string](client.buf[0 ..< sizeToRecv]))
-
-    await reportProgress(client, sizeToRecv)
-
-  return readLen
+      await reportProgress(client, sizeToRecv)
+  return R.ok readLen
 
 proc parseChunks(client: AsyncHttpClient): Future[void]
                  {.async.} =
@@ -233,7 +252,7 @@ proc parseChunks(client: AsyncHttpClient): Future[void]
     var chunkSizeStr = await client.transp.readLine()
     var i = 0
     if chunkSizeStr == "":
-      httpError("Server terminated connection prematurely")
+      client.logger.log lvlError,"Server terminated connection prematurely"
     while i < chunkSizeStr.len:
       case chunkSizeStr[i]
       of '0'..'9':
@@ -247,18 +266,28 @@ proc parseChunks(client: AsyncHttpClient): Future[void]
         # We don't care about chunk-extensions.
         break
       else:
-        httpError("Invalid chunk size: " & chunkSizeStr)
+        client.logger.log lvlError,"Invalid chunk size: " & chunkSizeStr
       inc(i)
     if chunkSize <= 0:
       discard await recvFull(client, 2, client.timeout, false) # Skip \c\L
       break
-    var bytesRead = await recvFull(client, chunkSize, client.timeout, true)
-    if bytesRead != chunkSize:
-      httpError("Server terminated connection prematurely")
+    var r = await recvFull(client, chunkSize, client.timeout, true)
+    var bytesRead:int
+    if r.isOk():
+      bytesRead = r.get() 
+    else:
+      client.logger.log lvlError,"Server terminated connection prematurely"
 
-    bytesRead = await recvFull(client, 2, client.timeout, false) # Skip \c\L
+    if bytesRead != chunkSize:
+      client.logger.log lvlError,"Server terminated connection prematurely"
+
+    let r2 = await recvFull(client, 2, client.timeout, false) # Skip \c\L
+    if r2.isOk:
+      bytesRead = r.get()
+    else:
+      client.logger.log lvlError,"Server terminated connection prematurely"
     if bytesRead != 2:
-      httpError("Server terminated connection prematurely")
+      client.logger.log lvlError,"Server terminated connection prematurely"
 
     # Trailer headers will only be sent if the request specifies that we want
     # them: http://tools.ietf.org/html/rfc2616#section-3.6.1
@@ -283,25 +312,38 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
       var length = contentLengthHeader.parseInt()
       client.contentTotal = length
       if length > 0:
-        let recvLen = await client.recvFull(length, client.timeout, true)
+        let r = await client.recvFull(length, client.timeout, true)
+        var recvLen:int
+        if r.isOk():
+          recvLen = r.get()
+        else:
+          client.logger.log lvlError,"Got disconnected while trying to read body."
         if recvLen == 0:
           await client.close()
-          httpError("Got disconnected while trying to read body.")
+          client.logger.log lvlError,"Got disconnected while trying to read body."
+          return 
         if recvLen != length:
-          httpError("Received length doesn't match expected length. Wanted " &
-                    $length & " got " & $recvLen)
+          client.logger.log lvlError,"Received length doesn't match expected length. Wanted " &
+                    $length & " got " & $recvLen
+          return
     else:
       # (http://tools.ietf.org/html/rfc2616#section-4.4) NR.4 TODO
 
       # -REGION- Connection: Close
       # (http://tools.ietf.org/html/rfc2616#section-4.4) NR.5
       let implicitConnectionClose =
-        httpVersion == "1.0" or
+        httpVersion == "1.0" #or
         # This doesn't match the HTTP spec, but it fixes issues for non-conforming servers.
-        (httpVersion == "1.1" and headers.getOrDefault"Connection" == "")
+        #(httpVersion == "1.1" and headers.getOrDefault"Connection" == "")
       if headers.getOrDefault"Connection" == "close" or implicitConnectionClose:
         while true:
-          let recvLen = await client.recvFull(net.BufferSize, client.timeout, true)
+          let r = await client.recvFull(net.BufferSize, client.timeout, true)
+          var recvLen:int
+          if r.isOk :
+            recvLen = r.get
+          else:
+            client.logger.log lvlError,"Got disconnected while trying to read body."
+            return
           if recvLen != net.BufferSize:
             await client.close()
             break
@@ -332,13 +374,13 @@ proc parseResponse(client: AsyncHttpClient,
       # Parse HTTP version info and status code.
       var le = skip(line, "HTTP/", linei)
       if le <= 0:
-        httpError("invalid http version, `" & line & "`")
+        client.logger.log lvlError,"invalid http version, `" & line & "`"
       inc(linei, le)
       le = skip(line, "1.1", linei)
       if le > 0: result.version = "1.1"
       else:
         le = skip(line, "1.0", linei)
-        if le <= 0: httpError("unsupported http version")
+        if le <= 0: client.logger.log lvlError,"unsupported http version"
         result.version = "1.0"
       inc(linei, le)
       # Status code
@@ -350,17 +392,17 @@ proc parseResponse(client: AsyncHttpClient,
       var name = ""
       if line.len > 0:
         var le = parseUntil(line, name, ':', linei)
-        if le <= 0: httpError("invalid headers")
+        if le <= 0: client.logger.log lvlError,"invalid headers"
         inc(linei, le)
-        if line[linei] != ':': httpError("invalid headers")
+        if line[linei] != ':': client.logger.log lvlError,"invalid headers"
         inc(linei) # Skip :
 
         result.headers.add(name, line[linei .. ^1].strip())
         if result.headers.len > headerLimit:
-          httpError("too many headers")
+          client.logger.log lvlError,"too many headers"
 
   if not fullyRead:
-    httpError("Connection was closed before full request has been made")
+    client.logger.log lvlError,"Connection was closed before full request has been made"
 
   if getBody and result.code != Http204:
     client.bodyStream = newFutureStream[string]("parseResponse")
@@ -557,7 +599,7 @@ proc request*(client: AsyncHttpClient, url: string,
   var lastURL = url
   for i in 1..client.maxRedirects:
     if result.status.redirection():
-      let redirectTo = getNewLocation(lastURL, result.headers)
+      let redirectTo = getNewLocation(client, lastURL, result.headers)
       # Guarantee method for HTTP 307: see https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/307
       var meth = if result.status == "307": httpMethod else: "GET"
       result = await client.requestAux(redirectTo, meth, body, headers, multipart)

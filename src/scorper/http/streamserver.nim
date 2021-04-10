@@ -198,7 +198,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     return
   let fullSize = meta.unsafeGet.info.size.int
   when defined(windows):
-    handle = int(get_osfhandle(getFileHandle(fhandle)))
+    handle = int(getOsFileHandle(getFileHandle(fhandle)))
   else:
     handle = int(getFileHandle(fhandle))
 
@@ -213,7 +213,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
       discard await request.transp.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
     let offset = if b.ends >= 0: b.starts else: fullSize + b.ends
     let size = if b.ends > 0: b.ends - b.starts + 1: elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
-    discard await request.transp.writeFile(handle, offset.uint, size)
+    let written = await request.transp.writeFile(handle, offset.uint, size)
   discard await request.transp.write(CRLF & boundary & "--")
   close(fhandle)
 
@@ -593,6 +593,24 @@ proc serve*(address: string,
     discard server.logSub.subscribe logSubOnNext
   server.logSub.next("Scorper serve at http://" & $address)
   await server.join()
+
+proc setHandler*(self:Scorper,  handler: AsyncCallback) = 
+  self.callback = handler
+
+proc newScorper*(address: string,
+                flags: set[ServerFlags] = {ReuseAddr},
+                maxBody = 8.Mb
+                ): Scorper =
+  new result
+  result.mimeDb = newMimetypes()
+  result.maxBody = maxBody
+  let address = initTAddress(address)
+  result.logSub = subject[string]()
+  when not defined(release):
+    discard result.logSub.subscribe logSubOnNext
+  result.logSub.next("Scorper serve at http://" & $address)
+  result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
+
 
 proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},

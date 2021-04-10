@@ -10,11 +10,11 @@ skipDirs      = @["tests","examples","experiments","benchmark"]
 # Dependencies
 
 requires "nim >= 1.2.0"
-requires "chronos >= 3.0.1" # initial 2.6.1
+requires "chronos >= 3.0.2" # initial 2.6.1
 requires "npeg"
 requires "https://github.com/nortero-code/rx-nim.git"
 requires "zippy"
-
+requires "result"
 # task test, "Runs the test suite":
   # exec "testament --megatest:off pattern 'tests/*.nim'"
 
