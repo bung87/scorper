@@ -180,7 +180,7 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
     echo e.msg
     return
   when defined(windows):
-    handle = int(get_osfhandle(getFileHandle(fhandle)))
+    handle = int(getOsFileHandle(fhandle))
   else:
     handle = int(getFileHandle(fhandle))
   request.server.logSub.next(request.formatCommon(Http200, size))
@@ -198,7 +198,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     return
   let fullSize = meta.unsafeGet.info.size.int
   when defined(windows):
-    handle = int(getOsFileHandle(getFileHandle(fhandle)))
+    handle = int(getOsFileHandle(fhandle))
   else:
     handle = int(getFileHandle(fhandle))
 

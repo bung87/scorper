@@ -142,7 +142,7 @@ proc sendFile(transp: StreamTransport, fname: string) {.async.} =
   var size = int(getFileSize(fname))
   var fhandle: File = open(fname)
   when defined(windows):
-    handle = int(get_osfhandle(getFileHandle(fhandle)))
+    handle = int(getOsFileHandle(fhandle))
   else:
     handle = int(getFileHandle(fhandle))
   var checksize = await transp.writeFile(handle, 0'u, size)
