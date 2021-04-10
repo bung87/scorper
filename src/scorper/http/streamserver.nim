@@ -594,7 +594,7 @@ proc serve*(address: string,
   server.logSub.next("Scorper serve at http://" & $address)
   await server.join()
 
-proc setHandler*(self:Scorper,  handler: AsyncCallback) = 
+proc setHandler*(self: Scorper, handler: AsyncCallback) =
   self.callback = handler
 
 proc newScorper*(address: string,
