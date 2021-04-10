@@ -51,7 +51,7 @@ type
 const defUserAgent* = "Nim httpclient/" & NimVersion
 
 
-proc fileError(msg: string) {.inline.}=
+proc fileError(msg: string) {.inline.} =
   var e: ref IOError
   new(e)
   e.msg = msg
@@ -79,9 +79,9 @@ proc redirection(status: string): bool =
     if status.startsWith(i):
       return true
 
-proc getNewLocation(client: AsyncHttpClient,lastURL: string, headers: HttpHeaders): string =
+proc getNewLocation(client: AsyncHttpClient, lastURL: string, headers: HttpHeaders): string =
   result = headers.getOrDefault"Location"
-  if result == "": client.logger.log lvlError,"location header expected"
+  if result == "": client.logger.log lvlError, "location header expected"
   # Relative URLs. (Not part of the spec, but soon will be.)
   let r = parseUrl(result)
   if r.hostname == "" and r.path != "":
@@ -252,7 +252,7 @@ proc parseChunks(client: AsyncHttpClient): Future[void]
     var chunkSizeStr = await client.transp.readLine()
     var i = 0
     if chunkSizeStr == "":
-      client.logger.log lvlError,"Server terminated connection prematurely"
+      client.logger.log lvlError, "Server terminated connection prematurely"
     while i < chunkSizeStr.len:
       case chunkSizeStr[i]
       of '0'..'9':
@@ -266,28 +266,28 @@ proc parseChunks(client: AsyncHttpClient): Future[void]
         # We don't care about chunk-extensions.
         break
       else:
-        client.logger.log lvlError,"Invalid chunk size: " & chunkSizeStr
+        client.logger.log lvlError, "Invalid chunk size: " & chunkSizeStr
       inc(i)
     if chunkSize <= 0:
       discard await recvFull(client, 2, client.timeout, false) # Skip \c\L
       break
     var r = await recvFull(client, chunkSize, client.timeout, true)
-    var bytesRead:int
+    var bytesRead: int
     if r.isOk():
-      bytesRead = r.get() 
+      bytesRead = r.get()
     else:
-      client.logger.log lvlError,"Server terminated connection prematurely"
+      client.logger.log lvlError, "Server terminated connection prematurely"
 
     if bytesRead != chunkSize:
-      client.logger.log lvlError,"Server terminated connection prematurely"
+      client.logger.log lvlError, "Server terminated connection prematurely"
 
     let r2 = await recvFull(client, 2, client.timeout, false) # Skip \c\L
     if r2.isOk:
       bytesRead = r.get()
     else:
-      client.logger.log lvlError,"Server terminated connection prematurely"
+      client.logger.log lvlError, "Server terminated connection prematurely"
     if bytesRead != 2:
-      client.logger.log lvlError,"Server terminated connection prematurely"
+      client.logger.log lvlError, "Server terminated connection prematurely"
 
     # Trailer headers will only be sent if the request specifies that we want
     # them: http://tools.ietf.org/html/rfc2616#section-3.6.1
@@ -313,17 +313,17 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
       client.contentTotal = length
       if length > 0:
         let r = await client.recvFull(length, client.timeout, true)
-        var recvLen:int
+        var recvLen: int
         if r.isOk():
           recvLen = r.get()
         else:
-          client.logger.log lvlError,"Got disconnected while trying to read body."
+          client.logger.log lvlError, "Got disconnected while trying to read body."
         if recvLen == 0:
           await client.close()
-          client.logger.log lvlError,"Got disconnected while trying to read body."
-          return 
+          client.logger.log lvlError, "Got disconnected while trying to read body."
+          return
         if recvLen != length:
-          client.logger.log lvlError,"Received length doesn't match expected length. Wanted " &
+          client.logger.log lvlError, "Received length doesn't match expected length. Wanted " &
                     $length & " got " & $recvLen
           return
     else:
@@ -333,16 +333,16 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
       # (http://tools.ietf.org/html/rfc2616#section-4.4) NR.5
       let implicitConnectionClose =
         httpVersion == "1.0" #or
-        # This doesn't match the HTTP spec, but it fixes issues for non-conforming servers.
-        #(httpVersion == "1.1" and headers.getOrDefault"Connection" == "")
+                             # This doesn't match the HTTP spec, but it fixes issues for non-conforming servers.
+                             #(httpVersion == "1.1" and headers.getOrDefault"Connection" == "")
       if headers.getOrDefault"Connection" == "close" or implicitConnectionClose:
         while true:
           let r = await client.recvFull(net.BufferSize, client.timeout, true)
-          var recvLen:int
-          if r.isOk :
+          var recvLen: int
+          if r.isOk:
             recvLen = r.get
           else:
-            client.logger.log lvlError,"Got disconnected while trying to read body."
+            client.logger.log lvlError, "Got disconnected while trying to read body."
             return
           if recvLen != net.BufferSize:
             await client.close()
@@ -374,13 +374,13 @@ proc parseResponse(client: AsyncHttpClient,
       # Parse HTTP version info and status code.
       var le = skip(line, "HTTP/", linei)
       if le <= 0:
-        client.logger.log lvlError,"invalid http version, `" & line & "`"
+        client.logger.log lvlError, "invalid http version, `" & line & "`"
       inc(linei, le)
       le = skip(line, "1.1", linei)
       if le > 0: result.version = "1.1"
       else:
         le = skip(line, "1.0", linei)
-        if le <= 0: client.logger.log lvlError,"unsupported http version"
+        if le <= 0: client.logger.log lvlError, "unsupported http version"
         result.version = "1.0"
       inc(linei, le)
       # Status code
@@ -392,17 +392,17 @@ proc parseResponse(client: AsyncHttpClient,
       var name = ""
       if line.len > 0:
         var le = parseUntil(line, name, ':', linei)
-        if le <= 0: client.logger.log lvlError,"invalid headers"
+        if le <= 0: client.logger.log lvlError, "invalid headers"
         inc(linei, le)
-        if line[linei] != ':': client.logger.log lvlError,"invalid headers"
+        if line[linei] != ':': client.logger.log lvlError, "invalid headers"
         inc(linei) # Skip :
 
         result.headers.add(name, line[linei .. ^1].strip())
         if result.headers.len > headerLimit:
-          client.logger.log lvlError,"too many headers"
+          client.logger.log lvlError, "too many headers"
 
   if not fullyRead:
-    client.logger.log lvlError,"Connection was closed before full request has been made"
+    client.logger.log lvlError, "Connection was closed before full request has been made"
 
   if getBody and result.code != Http204:
     client.bodyStream = newFutureStream[string]("parseResponse")

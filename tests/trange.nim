@@ -6,7 +6,7 @@ import os, strutils
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 
-var server{.threadvar.}:Scorper 
+var server{.threadvar.}: Scorper
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
@@ -17,7 +17,7 @@ proc runTest(
     response = await(request(server))
     body = await(response.readBody())
   await test(response, body)
-  
+
 
 proc testFull(client: AsyncHttpClient) {.async.} =
   proc handler(request: Request) {.async.} =
