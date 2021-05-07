@@ -206,7 +206,7 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
   ## Ensures that all the data requested is read and returned.
   var readLen = 0
   while true:
-    if client.transp.atEof():break
+    if client.transp.atEof(): break
     if size == readLen: break
     let remainingSize = size - readLen
     let sizeToRecv = min(remainingSize, net.BufferSize)
@@ -312,7 +312,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
     if contentLengthHeader != "":
       var length = contentLengthHeader.parseInt()
       client.contentTotal = length
-      var r:R
+      var r: R
       if length > 0:
         try:
           r = await client.recvFull(length, client.timeout, true)
