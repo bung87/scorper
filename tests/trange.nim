@@ -4,7 +4,7 @@ import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import os, strutils
 
-const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
+const TestUrl = "http://127.0.0.1:64125/foo?bar=qux"
 
 var server{.threadvar.}: Scorper
 
@@ -65,7 +65,7 @@ proc testEnds(client: AsyncHttpClient) {.async.} =
 
   await runTest(handler, request, test)
 
-let address = "127.0.0.1:64124"
+let address = "127.0.0.1:64125"
 let flags: set[ServerFlags] = {ReuseAddr, ReusePort}
 
 server = newScorper(address, flags)

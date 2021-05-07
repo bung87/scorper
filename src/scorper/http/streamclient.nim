@@ -205,7 +205,8 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
               keep: bool): Future[R] {.async.} =
   ## Ensures that all the data requested is read and returned.
   var readLen = 0
-  while not client.transp.atEof():
+  while true:
+    if client.transp.atEof():break
     if size == readLen: break
     let remainingSize = size - readLen
     let sizeToRecv = min(remainingSize, net.BufferSize)
@@ -311,8 +312,12 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
     if contentLengthHeader != "":
       var length = contentLengthHeader.parseInt()
       client.contentTotal = length
+      var r:R
       if length > 0:
-        let r = await client.recvFull(length, client.timeout, true)
+        try:
+          r = await client.recvFull(length, client.timeout, true)
+        except Exception as e:
+          discard
         var recvLen: int
         if r.isOk():
           recvLen = r.get()
@@ -345,6 +350,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
             client.logger.log lvlError, "Got disconnected while trying to read body."
             return
           if recvLen != net.BufferSize:
+            client.logger.log lvlError, "Got disconnected while trying to read body."
             await client.close()
             break
 
@@ -409,7 +415,7 @@ proc parseResponse(client: AsyncHttpClient,
     result.bodyStream = client.bodyStream
     assert(client.parseBodyFut.isNil or client.parseBodyFut.finished)
     client.parseBodyFut = parseBody(client, result.headers, result.version)
-      # do not wait here for the body request to complete
+    await client.parseBodyFut
 
 proc newConnection(client: AsyncHttpClient,
                    url: Url) {.async.} =
@@ -541,10 +547,10 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
   else:
     client.headers["Content-Length"] = $body.len
 
-  if not client.parseBodyFut.isNil:
-    # let the current operation finish before making another request
-    await client.parseBodyFut
-    client.parseBodyFut = nil
+  # if not client.parseBodyFut.isNil:
+  #   # let the current operation finish before making another request
+  #   await client.parseBodyFut
+  #   client.parseBodyFut = nil
 
   await newConnection(client, requestUrl)
   let newHeaders = client.headers.override(headers)

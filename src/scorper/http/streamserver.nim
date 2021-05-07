@@ -201,7 +201,6 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     handle = int(getOsFileHandle(fhandle))
   else:
     handle = int(getFileHandle(fhandle))
-
   for b in ranges:
     discard await request.transp.write(boundary & CRLF)
     discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
@@ -316,7 +315,7 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
       var msg = generateHeaders(meta.unsafeGet.headers, Http206)
       discard await request.transp.write(msg)
       await request.writePartialFile(filepath, ranges, meta, boundary, mime)
-      request.server.logSub.next(request.formatCommon(Http206, contentLength))
+      # request.server.logSub.next(request.formatCommon(Http206, contentLength))
 
 proc sendDownload*(request: Request, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
