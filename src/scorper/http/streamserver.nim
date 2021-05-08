@@ -518,6 +518,7 @@ proc processRequest(
       return true
   # Call the user's callback.
   if scorper.callback != nil:
+    shallowCopy(request.query, request.url.query)
     await scorper.callback(request)
   elif scorper.router != nil:
     let matched = scorper.router.match($request.meth, request.url.path)

@@ -783,9 +783,11 @@ proc uploadResumable*(client: AsyncHttpClient, filepath: string, url: string,
   var bin: File
   if not open(bin, filepath): return
   var buf = newSeq[uint](chunkSize)
+  parsedUrl.query[encodeUrlComponent(resumableKeys.totalChunks)] = encodeUrlComponent($maxOffset)
   while i < maxOffset:
     parsedUrl.query[encodeUrlComponent(resumableKeys.chunkIndex)] = encodeUrlComponent($(i + 1))
     var readBytes = bin.readBuffer(buf[0].addr, chunkSize)
+    parsedUrl.query[encodeUrlComponent(resumableKeys.currentChunkSize)] = encodeUrlComponent($readBytes)
     tseq.add client.request($(parsedUrl[]), httpMethod, cast[string](buf[0 ..< readBytes]), headers)
     if readBytes != chunkSize: break
     inc i

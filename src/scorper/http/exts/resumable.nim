@@ -9,7 +9,7 @@ type ResumableKeys* = object
   totalChunks*: string # Positive
 
 
-proc newResumableKeys*(chunkIndex = "chunkIndex", chunkSize = "flowChunkSize",
+proc newResumableKeys*(chunkIndex = "flowChunkIndex", chunkSize = "flowChunkSize",
     currentChunkSize = "flowCurrentChunkSize", totalSize = "flowTotalSize", identifier = "flowIdentifier",
     filename = "flowFilename", relativePath = "flowRelativePath", totalChunks = "flowTotalChunks"): ResumableKeys =
   result.chunkIndex = chunkIndex
