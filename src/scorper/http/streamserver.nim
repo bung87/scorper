@@ -53,6 +53,9 @@ type
     secureFlags: set[TLSFlags]
     tlsPrivateKey: TLSPrivateKey
     tlsCertificate: TLSCertificate
+    tlsMinVersion: TLSVersion
+    tlsMaxVersion: TLSVersion
+    isSecurity: bool
     logSub: Subject[string]
 
 proc `$`*(r: Request): string =
@@ -128,7 +131,9 @@ proc resp*(req: Request, content: string,
     httpDate()
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
+  echo "resp"
   discard await req.transp.write(msg)
+  echo "resp done"
 
 proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
@@ -446,6 +451,7 @@ proc processRequest(
   # note: headers field name is case-insensitive, field value is case sensitive
   const HeaderSep = @[byte('\c'), byte('\L'), byte('\c'), byte('\L')]
   var count: int
+  echo "process request count", $count
   try:
     count = await request.transp.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
   except TransportIncompleteError:
@@ -454,6 +460,7 @@ proc processRequest(
     await request.respStatus(Http400, BufferLimitExceeded)
     request.transp.close()
     return false
+  echo "process request count", $count
   # Headers
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
   if headerEnd == -1:
@@ -574,13 +581,14 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     discard
   req.privAccpetParser = accpetParser()
   req.httpParser = MofuParser()
-  req.tlsStream =
-    newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
-                            scorper.tlsPrivateKey,
-                            scorper.tlsCertificate,
-                            minVersion = TLSVersion.TLS12,
-                            flags = scorper.secureFlags)
-  await handshake(req.tlsStream)
+  if scorper.isSecurity:
+    req.tlsStream =
+      newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
+                              scorper.tlsPrivateKey,
+                              scorper.tlsCertificate,
+                              minVersion = scorper.tlsMinVersion,
+                              maxVersion = scorper.tlsMaxVersion,
+                              flags = scorper.secureFlags)
   while not transp.atEof():
     let retry = await processRequest(scorper, req)
     if not retry:
@@ -594,11 +602,12 @@ proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
             maxBody = 8.Mb,
-            privateKey: string,
-            certificate: string,
+            isSecurity = false,
+            privateKey: string = "",
+            certificate: string = "",
             secureFlags: set[TLSFlags] = {},
-            minVersion = TLSVersion.TLS11,
-            maxVersion = TLSVersion.TLS12,
+            tlsMinVersion = TLSVersion.TLS11,
+            tlsMaxVersion = TLSVersion.TLS12,
             cache: TLSSessionCache = nil,
             ) {.async.} =
   var server = Scorper()
@@ -607,9 +616,13 @@ proc serve*(address: string,
   server.maxBody = maxBody
   let address = initTAddress(address)
   server = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
-  server.secureFlags = secureFlags
-  server.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-  server.tlsCertificate = TLSCertificate.init(certificate)
+  if isSecurity:
+    server.isSecurity = true
+    server.secureFlags = secureFlags
+    server.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+    server.tlsCertificate = TLSCertificate.init(certificate)
+    server.tlsMinVersion = tlsMinVersion
+    server.tlsMaxVersion = tlsMaxVersion
   server.logSub = subject[string]()
   server.start()
   when not defined(release):
@@ -622,7 +635,14 @@ proc setHandler*(self: Scorper, handler: AsyncCallback) =
 
 proc newScorper*(address: string,
                 flags: set[ServerFlags] = {ReuseAddr},
-                maxBody = 8.Mb
+                maxBody = 8.Mb,
+                isSecurity = false,
+                privateKey: string = "",
+                certificate: string = "",
+                secureFlags: set[TLSFlags] = {},
+                tlsMinVersion = TLSVersion.TLS11,
+                tlsMaxVersion = TLSVersion.TLS12,
+                cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
   result.mimeDb = newMimetypes()
@@ -633,11 +653,24 @@ proc newScorper*(address: string,
     discard result.logSub.subscribe logSubOnNext
   result.logSub.next("Scorper serve at http://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
-
+  if isSecurity:
+    result.isSecurity = true
+    result.secureFlags = secureFlags
+    result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+    result.tlsCertificate = TLSCertificate.init(certificate)
+    result.tlsMinVersion = tlsMinVersion
+    result.tlsMaxVersion = tlsMaxVersion
 
 proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
-                maxBody = 8.Mb
+                maxBody = 8.Mb,
+                isSecurity = false,
+                privateKey: string = "",
+                certificate: string = "",
+                secureFlags: set[TLSFlags] = {},
+                tlsMinVersion = TLSVersion.TLS11,
+                tlsMaxVersion = TLSVersion.TLS12,
+                cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
   result.mimeDb = newMimetypes()
@@ -652,6 +685,13 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
     discard result.logSub.subscribe logSubOnNext
   result.logSub.next("Scorper serve at http://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
+  if isSecurity:
+    result.secureFlags = secureFlags
+    result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+    result.tlsCertificate = TLSCertificate.init(certificate)
+    result.tlsMinVersion = tlsMinVersion
+    result.tlsMaxVersion = tlsMaxVersion
+    result.isSecurity = true
 
 proc isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed

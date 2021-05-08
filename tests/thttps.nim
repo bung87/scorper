@@ -2,10 +2,12 @@ include ./cert
 
 import strutils
 from net import TimeoutError
-include ./scorper/http/streamserver
-include ./scorper/http/streamclient
+import ./scorper/http/streamserver
+import ./scorper/http/streamclient
+import chronos
+import chronos / streams/tlsstream
 
-const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
+const TestUrl = "https://127.0.0.1:64124/foo?bar=qux"
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
@@ -14,7 +16,14 @@ proc runTest(
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
-  var server = newScorper(address, handler, flags)
+  var server = newScorper(address,
+    handler,
+    flags,
+    isSecurity = true,
+    privateKey = HttpsSelfSignedRsaKey,
+    certificate = HttpsSelfSignedRsaCert,
+    secureFlags = {NoVerifyHost, NoVerifyServerName}
+    )
   server.start()
   let
     response = waitFor(request(server))
@@ -34,7 +43,6 @@ proc test200() {.async.} =
       client = newAsyncHttpClient()
       clientResponse = await client.request(TestUrl)
     await client.close()
-
     return clientResponse
 
   proc test(response: AsyncResponse, body: string) {.async.} =
