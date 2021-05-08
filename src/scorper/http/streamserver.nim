@@ -466,8 +466,7 @@ proc processRequest(
       await request.respError(Http501)
       return true
 
-  request.path = request.httpParser.getPath
-  # TODO Fix request path lose '&'
+  request.path = request.httpParser.getPath()
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)[]
   except ValueError as e:

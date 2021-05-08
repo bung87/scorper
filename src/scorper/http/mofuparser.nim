@@ -515,8 +515,9 @@ when isMainModule:
     discard parseRequest(a)
   echo "httputils:" & $(cpuTime() - old2)
 
-  var pdata = "POST /foo HTTP/1.1\r\n" &
+  var pdata = "POST /foo?bar=qux&flowTotalSize=10&flowIdentifier=6096232d3fbba13520df90e6&flowFilename=range.txt&flowRelativePath=%252FUsers%252Fbung%252Fnim_works%252Fscorper%252Ftests&chunkIndex=1 HTTP/1.1\r\n" &
     "Content-Length: 68137\r\n" &
     "Content-Type: multipart/form-data; boundary=--AaB03x\r\n\r\n"
   discard mhreq.parseHeader(addr pdata[0], pdata.len)
+  echo mhreq.getPath()
   echo mhreq.toHttpHeaders()

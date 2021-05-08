@@ -1,4 +1,4 @@
-import net, strutils, urlly, parseutils, base64, os, streams,
+import net, strutils,sequtils, urlly, parseutils, base64, os, streams,
   math, random, ./httpcore, times, tables, streams, std/monotimes
 import asyncnet, chronos, ./futurestream, asyncresponse, multipart
 import nativesockets
@@ -106,8 +106,7 @@ proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
     result.add(requestUrl.path)
     if requestUrl.query.len > 0:
       result.add("?")
-      for (k, v) in requestUrl.query:
-        result.add k & "=" & v
+      result.add requestUrl.query.mapIt( it[0] & "=" & it[1] ).join("&")
   else:
     # Remove the 'http://' from the URL for CONNECT requests for TLS connections.
     var modifiedUrl = requestUrl
@@ -771,15 +770,15 @@ proc uploadResumable*(client: AsyncHttpClient, filepath: string, url: string,
               {.async.} =
   var parsedUrl = parseUrl(url)
   let totalSize = int(getFileSize(filepath))
-  parsedUrl.query.add (encodeUrlComponent(resumableKeys.totalSize) , encodeUrlComponent($totalSize))
-  let identifier =  $genOid()
-  parsedUrl.query.add (encodeUrlComponent(resumableKeys.identifier) , encodeUrlComponent(identifier))
+  parsedUrl.query.add (encodeUrlComponent(resumableKeys.totalSize), encodeUrlComponent($totalSize))
+  let identifier = $genOid()
+  parsedUrl.query.add (encodeUrlComponent(resumableKeys.identifier), encodeUrlComponent(identifier))
   let (path, fName, ext) = splitFile(filepath)
   let fileName = fName & ext
   parsedUrl.query.add (encodeUrlComponent(resumableKeys.filename), encodeUrlComponent(fileName))
   parsedUrl.query.add (encodeUrlComponent(resumableKeys.relativePath), encodeUrlComponent(path))
   var tseq = newSeq[Future[AsyncResponse]]()
-  let maxOffset = max(round(totalSize / chunkSize),1).int
+  let maxOffset = max(round(totalSize / chunkSize), 1).int
   var i = 0
   var bin: File
   if not open(bin, filepath): return
@@ -787,10 +786,10 @@ proc uploadResumable*(client: AsyncHttpClient, filepath: string, url: string,
   while i < maxOffset:
     parsedUrl.query[encodeUrlComponent(resumableKeys.chunkIndex)] = encodeUrlComponent($(i + 1))
     var readBytes = bin.readBuffer(buf[0].addr, chunkSize)
-    tseq.add client.request($(parsedUrl[]),httpMethod,cast[string](buf[0 ..< readBytes]),headers)
+    tseq.add client.request($(parsedUrl[]), httpMethod, cast[string](buf[0 ..< readBytes]), headers)
     if readBytes != chunkSize: break
     inc i
   let a = allFutures(tseq)
   a.addCallback proc (arg: pointer = nil) {.closure, gcsafe.} = close(bin)
   await a
-  
+
