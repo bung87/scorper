@@ -7,6 +7,8 @@ export multipart
 export httpcore except parseHeader # TODO: The ``except`` doesn't work
 import results
 import logging
+import exts/resumable
+import oids
 
 type R = Result[int, string]
 
@@ -762,3 +764,33 @@ proc downloadFile*(client: AsyncHttpClient, url: string,
     result.addCallback(
       proc (arg: pointer = nil) {.closure, gcsafe.} = client.getBody = true
     )
+
+proc uploadResumable*(client: AsyncHttpClient, filepath: string, url: string,
+              httpMethod = HttpPost, chunkSize = 1*1024*1024, headers: HttpHeaders = nil,
+              resumableKeys = newResumableKeys()): Future[void]
+              {.async.} =
+  var parsedUrl = parseUrl(url)
+  let totalSize = int(getFileSize(filepath))
+  parsedUrl.query.add (encodeUrlComponent(resumableKeys.totalSize) , encodeUrlComponent($totalSize))
+  let identifier =  $genOid()
+  parsedUrl.query.add (encodeUrlComponent(resumableKeys.identifier) , encodeUrlComponent(identifier))
+  let (path, fName, ext) = splitFile(filepath)
+  let fileName = fName & ext
+  parsedUrl.query.add (encodeUrlComponent(resumableKeys.filename), encodeUrlComponent(fileName))
+  parsedUrl.query.add (encodeUrlComponent(resumableKeys.relativePath), encodeUrlComponent(path))
+  var tseq = newSeq[Future[AsyncResponse]]()
+  let maxOffset = max(round(totalSize / chunkSize),1).int
+  var i = 0
+  var bin: File
+  if not open(bin, filepath): return
+  var buf = newSeq[uint](chunkSize)
+  while i < maxOffset:
+    parsedUrl.query[encodeUrlComponent(resumableKeys.chunkIndex)] = encodeUrlComponent($(i + 1))
+    var readBytes = bin.readBuffer(buf[0].addr, chunkSize)
+    tseq.add client.request($(parsedUrl[]),httpMethod,cast[string](buf[0 ..< readBytes]),headers)
+    if readBytes != chunkSize: break
+    inc i
+  let a = allFutures(tseq)
+  a.addCallback proc (arg: pointer = nil) {.closure, gcsafe.} = close(bin)
+  await a
+  

@@ -305,9 +305,9 @@ proc parseHeader*(mhr: MofuParser, req: ptr char, reqLen: int): int =
       # skip whitespace
       buf += 1
       break
-    else:
-      if not URI_TOKEN[buf[].int].bool:
-        return -1
+    # else:
+    #   if not URI_TOKEN[buf[].int].bool:
+    #     return -1
     buf += 1
 
   mhr.path = start
