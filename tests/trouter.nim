@@ -84,7 +84,7 @@ proc testParamRaw() {.async.} =
     return clientResponse
 
   proc test(response: AsyncResponse, body: string) {.async.} =
-    doAssert(response.code == Http400)
+    doAssert(response.code == Http404)
 
   runTest(handler, request, test)
 
