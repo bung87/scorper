@@ -3,7 +3,7 @@ import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import ./scorper/http/exts/resumable
-import os, parseutils,streams
+import os, parseutils, streams
 import ./scorper/http/urlly
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
@@ -26,23 +26,23 @@ proc testSendFIle() {.async.} =
     echo request.query
     let resumableKeys = newResumableKeys()
     let total = request.query[resumableKeys.totalChunks]
-    var totalChunks:BiggestUInt
-    discard parseBiggestUInt(total,totalChunks)
+    var totalChunks: BiggestUInt
+    discard parseBiggestUInt(total, totalChunks)
     let current = request.query[resumableKeys.chunkIndex]
-    var currentIndex:BiggestUInt
-    discard parseBiggestUInt(current,currentIndex)
+    var currentIndex: BiggestUInt
+    discard parseBiggestUInt(current, currentIndex)
     let tmpDir = getTempDir()
     let identifier = request.query[resumableKeys.identifier]
     let chunkKey = identifier & "." & $currentIndex
-    
+
     if fileExists(tmpDir / chunkKey):
       await request.respStatus(Http201)
     else:
-      let file = open(tmpDir / chunkKey,fmWrite)
+      let file = open(tmpDir / chunkKey, fmWrite)
       file.write(await request.body)
       file.close
       await request.respStatus(Http200)
-    var i:BiggestUInt = 0
+    var i: BiggestUInt = 0
     var complete = true
     while i < totalChunks.BiggestUInt:
       let chunkKey = identifier & "." & $(i+1)
@@ -51,17 +51,17 @@ proc testSendFIle() {.async.} =
       inc i
     var buffer: array[6, char]
     if complete:
-      var totalSize:BiggestUInt
+      var totalSize: BiggestUInt
       let tsize = request.query[resumableKeys.totalSize]
-      discard parseBiggestUInt(tsize,totalSize)
-      let file = newFileStream(tmpDir / identifier,fmWrite)
-      var j:BiggestUInt = 0
+      discard parseBiggestUInt(tsize, totalSize)
+      let file = newFileStream(tmpDir / identifier, fmWrite)
+      var j: BiggestUInt = 0
       while j < totalChunks.BiggestUInt:
         let chunkKey = identifier & "." & $(j+1)
-        let s = openFileStream( tmpDir / chunkKey)
+        let s = openFileStream(tmpDir / chunkKey)
         while not s.atEnd:
-          let readLen = s.readData(buffer.addr,buffer.len)
-          file.writeData(buffer.addr,readLen)
+          let readLen = s.readData(buffer.addr, buffer.len)
+          file.writeData(buffer.addr, readLen)
         s.flush
         s.close
         inc j
