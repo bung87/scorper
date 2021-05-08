@@ -13,6 +13,8 @@ import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpf
 import std / [os, options, strformat, times, mimetypes, json, sequtils, macros]
 import rx_nim
 import zippy
+import chronos / streams/tlsstream
+
 when defined(windows):
   import winlean
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
@@ -40,6 +42,7 @@ type
     parsed: bool
     rawBody: Option[string]
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
+    tlsStream: TLSAsyncStream
 
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
@@ -47,6 +50,9 @@ type
     maxBody: int
     router: Router[AsyncCallback]
     mimeDb: MimeDB
+    secureFlags: set[TLSFlags]
+    tlsPrivateKey: TLSPrivateKey
+    tlsCertificate: TLSCertificate
     logSub: Subject[string]
 
 proc `$`*(r: Request): string =
@@ -568,6 +574,13 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     discard
   req.privAccpetParser = accpetParser()
   req.httpParser = MofuParser()
+  req.tlsStream =
+    newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
+                            scorper.tlsPrivateKey,
+                            scorper.tlsCertificate,
+                            minVersion = TLSVersion.TLS12,
+                            flags = scorper.secureFlags)
+  await handshake(req.tlsStream)
   while not transp.atEof():
     let retry = await processRequest(scorper, req)
     if not retry:
@@ -580,7 +593,13 @@ proc logSubOnNext(v: string) =
 proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
-            maxBody = 8.Mb
+            maxBody = 8.Mb,
+            privateKey: string,
+            certificate: string,
+            secureFlags: set[TLSFlags] = {},
+            minVersion = TLSVersion.TLS11,
+            maxVersion = TLSVersion.TLS12,
+            cache: TLSSessionCache = nil,
             ) {.async.} =
   var server = Scorper()
   server.mimeDb = newMimetypes()
@@ -588,6 +607,9 @@ proc serve*(address: string,
   server.maxBody = maxBody
   let address = initTAddress(address)
   server = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
+  server.secureFlags = secureFlags
+  server.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+  server.tlsCertificate = TLSCertificate.init(certificate)
   server.logSub = subject[string]()
   server.start()
   when not defined(release):
