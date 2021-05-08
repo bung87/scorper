@@ -57,6 +57,8 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
+proc len*(r: Request): BiggestUInt = r.contentLength
+
 proc formatCommon*(r: Request, status: HttpCode, size: int): string =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
   # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined

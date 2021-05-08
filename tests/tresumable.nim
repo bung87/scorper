@@ -45,6 +45,8 @@ proc testSendFIle() {.async.} =
       var nbytes: int
       var reads: BiggestUInt
       while not stream.atEof():
+        if reads == request.len:
+          break
         if reads == currentChunkSize:
           break
         nbytes = await stream.readOnce(buffer[0].addr, buffer.len)
