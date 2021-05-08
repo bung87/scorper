@@ -31,15 +31,25 @@ proc testSendFIle() {.async.} =
     let current = request.query[resumableKeys.chunkIndex]
     var currentIndex: BiggestUInt
     discard parseBiggestUInt(current, currentIndex)
+    var currentChunkSize: BiggestUInt
+    discard parseBiggestUInt(request.query[resumableKeys.currentChunkSize], currentChunkSize)
     let tmpDir = getTempDir()
     let identifier = request.query[resumableKeys.identifier]
     let chunkKey = identifier & "." & $currentIndex
-
+    var buffer: array[6, char]
     if fileExists(tmpDir / chunkKey):
       await request.respStatus(Http201)
     else:
       let file = open(tmpDir / chunkKey, fmWrite)
-      file.write(await request.body)
+      let stream = request.stream()
+      var nbytes: int
+      var reads: BiggestUInt
+      while not stream.atEof():
+        if reads == currentChunkSize:
+          break
+        nbytes = await stream.readOnce(buffer[0].addr, buffer.len)
+        reads.inc nbytes
+        discard file.writeBuffer(buffer[0].addr, nbytes)
       file.close
       await request.respStatus(Http200)
     var i: BiggestUInt = 0
@@ -49,7 +59,7 @@ proc testSendFIle() {.async.} =
       if not fileExists(tmpDir / chunkKey):
         complete = false
       inc i
-    var buffer: array[6, char]
+
     if complete:
       var totalSize: BiggestUInt
       let tsize = request.query[resumableKeys.totalSize]
