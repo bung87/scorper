@@ -32,7 +32,7 @@ const gzipMinLength* {.intdefine.} = 20
 - [ ] Better error control flow.  
 - [ ] CLI tool generate object oriented controller and routes.  
 - [ ] Auto render response respect client accepted content type.  
-- [ ] Chuncked file upload handle for large file.  
+- [x] Chuncked file upload handle for large file.  
 
 ## Benchmark  
 
