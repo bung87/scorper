@@ -1,4 +1,4 @@
-import net, strutils,sequtils, urlly, parseutils, base64, os, streams,
+import net, strutils, sequtils, urlly, parseutils, base64, os, streams,
   math, random, ./httpcore, times, tables, streams, std/monotimes
 import asyncnet, chronos, ./futurestream, asyncresponse, multipart
 import nativesockets
@@ -106,7 +106,7 @@ proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
     result.add(requestUrl.path)
     if requestUrl.query.len > 0:
       result.add("?")
-      result.add requestUrl.query.mapIt( it[0] & "=" & it[1] ).join("&")
+      result.add requestUrl.query.mapIt(it[0] & "=" & it[1]).join("&")
   else:
     # Remove the 'http://' from the URL for CONNECT requests for TLS connections.
     var modifiedUrl = requestUrl
