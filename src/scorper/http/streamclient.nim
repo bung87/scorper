@@ -377,9 +377,12 @@ proc parseResponse*(client: AsyncHttpClient,
   result.headers = newHttpHeaders()
   while not client.transp.atEof():
     linei = 0
-    echo "before readLine"
-    line = await client.transp.readLine()
-    echo "line", line
+    try:
+      line = await client.transp.readLine()
+    except:
+      line = ""
+      await sleepAsync(0)
+      continue
     if line == "":
       fullyRead = true
       break
@@ -416,15 +419,13 @@ proc parseResponse*(client: AsyncHttpClient,
 
   if not fullyRead:
     client.logger.log lvlError, "Connection was closed before full request has been made"
-  echo result.code
   result.bodyStream = newFutureStream[string]("parseResponse") #client.bodyStream
   if getBody and result.code != Http204:
     client.bodyStream = result.bodyStream
     # client.bodyStream = newFutureStream[string]("parseResponse")
-
     assert(client.parseBodyFut.isNil or client.parseBodyFut.finished)
     client.parseBodyFut = parseBody(client, result.headers, result.version)
-    # await client.parseBodyFut
+    await client.parseBodyFut
     # client.parseBodyFut.addCallback do():
     #     if client.parseBodyFut.failed:
     #       client.bodyStream.fail(client.parseBodyFut.error)
@@ -457,9 +458,7 @@ proc newConnection(client: AsyncHttpClient,
         else:
           nativesockets.Port(80)
       else: nativesockets.Port(connectionUrl.port.parseInt)
-    echo "transp connect"
     client.transp = await connect(initTAddress(connectionUrl.hostname, port))
-    echo "transp connect"
     when defined(ssl):
       if isSsl:
         client.tlsstream = newTLSClientAsyncStream(newAsyncStreamReader(client.transp), newAsyncStreamWriter(
@@ -480,7 +479,6 @@ proc newConnection(client: AsyncHttpClient,
 
         let proxyHeaderString = generateHeaders(connectUrl, $HttpConnect,
             newHttpHeaders(), client.proxy)
-        echo "proxyHeaderString", proxyHeaderString
         discard await client.transp.write(proxyHeaderString)
         let proxyResp = await parseResponse(client, false)
 
@@ -565,9 +563,7 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
   #   # let the current operation finish before making another request
   #   await client.parseBodyFut
   #   client.parseBodyFut = nil
-  echo "newConnection"
   await newConnection(client, requestUrl)
-  echo "newConnection done"
   let newHeaders = client.headers.override(headers)
   if not newHeaders.hasKey("user-agent") and client.userAgent.len > 0:
     newHeaders["User-Agent"] = client.userAgent
@@ -575,9 +571,6 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
   let headerString = generateHeaders(requestUrl, httpMethod, newHeaders,
                                      client.proxy)
   discard await client.transp.write(headerString)
-  echo "headerString write done"
-  echo "data.len", data.len
-  echo "body.len", body.len
   if data.len > 0:
     var buffer: string
     for i, entry in multipart.entries:
@@ -595,10 +588,8 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
     discard await client.transp.write(buffer & data[^1])
   elif body.len > 0:
     discard await client.transp.write(body)
-  echo "before getBody"
   let getBody = httpMethod.toLowerAscii() notin ["head", "connect"] and
                 client.getBody
-  echo "before parseResponse"
   result = await parseResponse(client, getBody)
 
 proc request*(client: AsyncHttpClient, url: string,

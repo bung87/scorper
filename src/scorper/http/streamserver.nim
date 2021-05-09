@@ -131,9 +131,7 @@ proc resp*(req: Request, content: string,
     httpDate()
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
-  echo "resp"
   discard await req.transp.write(msg)
-  echo "resp done"
 
 proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
@@ -451,7 +449,6 @@ proc processRequest(
   # note: headers field name is case-insensitive, field value is case sensitive
   const HeaderSep = @[byte('\c'), byte('\L'), byte('\c'), byte('\L')]
   var count: int
-  echo "process request count", $count
   try:
     count = await request.transp.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
   except TransportIncompleteError:
@@ -460,9 +457,9 @@ proc processRequest(
     await request.respStatus(Http400, BufferLimitExceeded)
     request.transp.close()
     return false
-  echo "process request count", $count
   # Headers
   let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
+  assert headerEnd != -1
   if headerEnd == -1:
     await request.respError(Http400)
     return true
