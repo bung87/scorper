@@ -9,7 +9,8 @@ import results
 import logging
 import exts/resumable
 import oids
-import chronos / streams/tlsstream
+when defined(ssl):
+  import chronos / streams/tlsstream
 
 type R = Result[int, string]
 

@@ -42,7 +42,8 @@ type
     parsed: bool
     rawBody: Option[string]
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
-    tlsStream: TLSAsyncStream
+    when defined(ssl):
+      tlsStream: TLSAsyncStream
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 
@@ -52,11 +53,12 @@ type
     maxBody: int
     router: Router[AsyncCallback]
     mimeDb: MimeDB
-    secureFlags: set[TLSFlags]
-    tlsPrivateKey: TLSPrivateKey
-    tlsCertificate: TLSCertificate
-    tlsMinVersion: TLSVersion
-    tlsMaxVersion: TLSVersion
+    when defined(ssl):
+      secureFlags: set[TLSFlags]
+      tlsPrivateKey: TLSPrivateKey
+      tlsCertificate: TLSCertificate
+      tlsMinVersion: TLSVersion
+      tlsMaxVersion: TLSVersion
     isSecurity: bool
     logSub: Subject[string]
 
@@ -586,17 +588,21 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     discard
   req.privAccpetParser = accpetParser()
   req.httpParser = MofuParser()
-  if scorper.isSecurity:
-    req.tlsStream =
-      newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
-                              scorper.tlsPrivateKey,
-                              scorper.tlsCertificate,
-                              minVersion = scorper.tlsMinVersion,
-                              maxVersion = scorper.tlsMaxVersion,
-                              flags = scorper.secureFlags)
-    req.reader = req.tlsStream.reader
-    req.writer = req.tlsStream.writer
-    await handshake(req.tlsStream)
+  when defined(ssl):
+    if scorper.isSecurity:
+      req.tlsStream =
+        newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
+                                scorper.tlsPrivateKey,
+                                scorper.tlsCertificate,
+                                minVersion = scorper.tlsMinVersion,
+                                maxVersion = scorper.tlsMaxVersion,
+                                flags = scorper.secureFlags)
+      req.reader = req.tlsStream.reader
+      req.writer = req.tlsStream.writer
+      await handshake(req.tlsStream)
+    else:
+      req.reader = req.transp.newAsyncStreamReader
+      req.writer = req.transp.newAsyncStreamWriter
   else:
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
@@ -629,13 +635,14 @@ proc serve*(address: string,
   server.maxBody = maxBody
   let address = initTAddress(address)
   server = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
-  if isSecurity:
-    server.isSecurity = true
-    server.secureFlags = secureFlags
-    server.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-    server.tlsCertificate = TLSCertificate.init(certificate)
-    server.tlsMinVersion = tlsMinVersion
-    server.tlsMaxVersion = tlsMaxVersion
+  when defined(ssl):
+    if isSecurity:
+      server.isSecurity = true
+      server.secureFlags = secureFlags
+      server.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+      server.tlsCertificate = TLSCertificate.init(certificate)
+      server.tlsMinVersion = tlsMinVersion
+      server.tlsMaxVersion = tlsMaxVersion
   server.logSub = subject[string]()
   server.start()
   when not defined(release):
@@ -666,13 +673,14 @@ proc newScorper*(address: string,
     discard result.logSub.subscribe logSubOnNext
   result.logSub.next("Scorper serve at http://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
-  if isSecurity:
-    result.isSecurity = true
-    result.secureFlags = secureFlags
-    result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-    result.tlsCertificate = TLSCertificate.init(certificate)
-    result.tlsMinVersion = tlsMinVersion
-    result.tlsMaxVersion = tlsMaxVersion
+  when defined(ssl):
+    if isSecurity:
+      result.isSecurity = true
+      result.secureFlags = secureFlags
+      result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+      result.tlsCertificate = TLSCertificate.init(certificate)
+      result.tlsMinVersion = tlsMinVersion
+      result.tlsMaxVersion = tlsMaxVersion
 
 proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
@@ -698,13 +706,14 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
     discard result.logSub.subscribe logSubOnNext
   result.logSub.next("Scorper serve at http://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
-  if isSecurity:
-    result.secureFlags = secureFlags
-    result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-    result.tlsCertificate = TLSCertificate.init(certificate)
-    result.tlsMinVersion = tlsMinVersion
-    result.tlsMaxVersion = tlsMaxVersion
-    result.isSecurity = true
+  when defined(ssl):
+    if isSecurity:
+      result.secureFlags = secureFlags
+      result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+      result.tlsCertificate = TLSCertificate.init(certificate)
+      result.tlsMinVersion = tlsMinVersion
+      result.tlsMaxVersion = tlsMaxVersion
+      result.isSecurity = true
 
 proc isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed
