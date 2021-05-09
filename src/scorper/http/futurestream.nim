@@ -7,7 +7,7 @@ type
                                 ## subject to change.
     queue: Deque[T]
     finished: bool
-    cb: proc (arg: pointer = nil) {.closure, gcsafe,raises: [].}
+    cb: proc (arg: pointer = nil) {.closure, gcsafe, raises: [].}
 
 proc newFutureStream*[T](fromProc = "unspecified"): FutureStream[T] =
   ## Create a new ``FutureStream``. This future's callback is activated when
@@ -36,7 +36,7 @@ proc complete*[T](future: FutureStream[T]) =
     future.cb()
 
 proc `callback=`*[T](future: FutureStream[T],
-    cb: proc (future: FutureStream[T]) {.closure, gcsafe,raises: [].}) =
+    cb: proc (future: FutureStream[T]) {.closure, gcsafe, raises: [].}) =
   ## Sets the callback proc to be called when data was placed inside the
   ## future stream.
   ##
@@ -82,7 +82,7 @@ proc read*[T](future: FutureStream[T]): owned(Future[(bool, T)]) =
   ## ``FutureStream``.
   var resFut = newFuture[(bool, T)]("FutureStream.take")
   let savedCb = future.cb
-  proc newCb(fs: FutureStream[T]){.closure,gcsafe, raises: [].} =
+  proc newCb(fs: FutureStream[T]){.closure, gcsafe, raises: [].} =
     # Exit early if `resFut` is already complete. (See #8994).
     if resFut.finished: return
 
@@ -101,7 +101,11 @@ proc read*[T](future: FutureStream[T]): owned(Future[(bool, T)]) =
     resFut.complete(res)
 
     # If the saved callback isn't nil then let's call it.
-    if not savedCb.isNil: savedCb()
+    if not savedCb.isNil:
+      if fs.queue.len > 0:
+        savedCb()
+      else:
+        future.cb = savedCb
 
   if future.queue.len > 0 or future.finished:
     newCb(future)
