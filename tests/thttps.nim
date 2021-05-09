@@ -15,14 +15,13 @@ proc runTest(
     test: proc (response: AsyncResponse, body: string): Future[void]): Future[void]{.async.} =
 
   let address = "127.0.0.1:64124"
-  let flags: set[ServerFlags] = {ReuseAddr, ServerFlags.TcpNoDelay}
+  let flags: set[ServerFlags] = {ReuseAddr}
   var server = newScorper(address,
     handler,
     flags,
     isSecurity = true,
     privateKey = HttpsSelfSignedRsaKey,
-    certificate = HttpsSelfSignedRsaCert,
-    secureFlags = {NoVerifyHost, NoVerifyServerName}
+    certificate = HttpsSelfSignedRsaCert
     )
   server.start()
   let
@@ -124,13 +123,9 @@ proc testPost() {.async.} =
   await runTest(handler, request, test)
 
 waitfor(test200())
-echo 1
 waitfor(test404())
-echo 2
 waitfor(testCustomEmptyHeaders())
-echo 3
 waitfor(testCustomContentLength())
-echo 4
 waitfor(testPost())
 
 echo "OK"

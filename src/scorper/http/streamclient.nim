@@ -463,7 +463,6 @@ proc newConnection(client: AsyncHttpClient,
     client.transp = await connect(initTAddress(connectionUrl.hostname, port))
     when defined(ssl):
       if isSsl:
-        echo "hostname", connectionUrl.hostname
         let flags = {NoVerifyHost, NoVerifyServerName}
         client.tlsstream = newTLSClientAsyncStream(newAsyncStreamReader(client.transp), newAsyncStreamWriter(
             client.transp), connectionUrl.hostname, flags = flags) # flags = flags

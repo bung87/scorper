@@ -198,6 +198,7 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
     handle = int(getFileHandle(fhandle))
   request.server.logSub.next(request.formatCommon(Http200, size))
   discard await request.transp.writeFile(handle, 0.uint, size)
+  # discard await request.writer.writeFile(handle, 0.uint, size)
   close(fhandle)
 
 proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
@@ -215,18 +216,19 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
   else:
     handle = int(getFileHandle(fhandle))
   for b in ranges:
-    discard await request.transp.write(boundary & CRLF)
-    discard await request.transp.write(fmt"Content-Type: {mime}" & CRLF)
+    await request.writer.write(boundary & CRLF)
+    await request.writer.write(fmt"Content-Type: {mime}" & CRLF)
     if b.ends > 0:
-      discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF & CRLF)
+      await request.writer.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF & CRLF)
     elif b.ends == 0:
-      discard await request.transp.write(fmt"Content-Range: bytes {b.starts}-{fullSize - 1}/{fullSize}" & CRLF & CRLF)
+      await request.writer.write(fmt"Content-Range: bytes {b.starts}-{fullSize - 1}/{fullSize}" & CRLF & CRLF)
     else:
-      discard await request.transp.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
+      await request.writer.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
     let offset = if b.ends >= 0: b.starts else: fullSize + b.ends
     let size = if b.ends > 0: b.ends - b.starts + 1: elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
     let written = await request.transp.writeFile(handle, offset.uint, size)
-  discard await request.transp.write(CRLF & boundary & "--")
+    # let written = await request.writer.writeFile(handle, offset.uint, size)
+  await request.writer.write(CRLF & boundary & "--")
   close(fhandle)
 
 proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
@@ -305,7 +307,7 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
   if not rangeRequest or not parseRangeOk:
     meta.unsafeGet.headers["Content-Type"] = mime
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-    discard await request.transp.write(msg)
+    await request.writer.write(msg)
     await request.writeFile(filepath, meta.unsafeGet.info.size.int)
     request.server.logSub.next(request.formatCommon(Http200, meta.unsafeGet.info.size.int))
   else:
@@ -326,7 +328,7 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
       contentLength = contentLength + len(CRLF & boundary & "--")
       meta.unsafeGet.headers["Content-Length"] = $contentLength
       var msg = generateHeaders(meta.unsafeGet.headers, Http206)
-      discard await request.transp.write(msg)
+      await request.writer.write(msg)
       await request.writePartialFile(filepath, ranges, meta, boundary, mime)
       # request.server.logSub.next(request.formatCommon(Http206, contentLength))
 
@@ -339,7 +341,7 @@ proc sendDownload*(request: Request, filepath: string) {.async.} =
     return
   meta.unsafeGet.headers["Content-Type"] = "application/x-download"
   var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-  discard await request.transp.write(msg)
+  await request.writer.write(msg)
   await request.writeFile(filepath, meta.unsafeGet.info.size.int)
 
 proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.async.} =
@@ -453,10 +455,11 @@ proc processRequest(
   var count: int
   try:
     count = await request.reader.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
-  except AsyncStreamIncompleteError:
+  except AsyncStreamIncompleteError, TransportIncompleteError:
+  # except TransportIncompleteError:
     return true
-  except TransportIncompleteError:
-    return true
+  # except TransportIncompleteError:
+    # return true
   except TransportLimitError:
     await request.respStatus(Http400, BufferLimitExceeded)
     request.transp.close()
