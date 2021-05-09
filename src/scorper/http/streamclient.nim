@@ -1,10 +1,10 @@
-import net, strutils, sequtils, urlly, parseutils, base64, os, streams,
-  math, random, ./httpcore, times, tables, streams, std/monotimes
-import asyncnet, chronos, ./futurestream, asyncresponse, multipart
+import net, strutils, sequtils, urlly, parseutils, base64, os,
+  math, random, ./httpcore, times, tables, std/monotimes
+import chronos, ./futurestream, asyncresponse, multipart
 import nativesockets
 export asyncresponse
 export multipart
-export httpcore except parseHeader # TODO: The ``except`` doesn't work
+export httpcore except parseHeader
 import results
 import logging
 import exts/resumable
@@ -54,13 +54,6 @@ type
     logger: ConsoleLogger
 
 const defUserAgent* = "Nim httpclient/" & NimVersion
-
-
-proc fileError(msg: string) {.inline.} =
-  var e: ref IOError
-  new(e)
-  e.msg = msg
-  raise e
 
 proc newProxy*(url: string, auth = ""): Proxy =
   ## Constructs a new ``TProxy`` object.
@@ -204,17 +197,7 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
     var hasError = false
     try:
       await client.reader.readExactly(client.buf[0].addr, sizeToRecv)
-    except TransportIncompleteError as e:
-      client.logger.log lvlError, e.msg
-      result.err e.msg
-      hasError = true
-      await client.close()
-    except TransportUseClosedError as e:
-      client.logger.log lvlError, e.msg
-      result.err e.msg
-      hasError = true
-      await client.close()
-    except CatchableError as e:
+    except AsyncStreamIncompleteError as e:
       client.logger.log lvlError, e.msg
       result.err e.msg
       hasError = true
@@ -224,11 +207,12 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
       result.err e.msg
       hasError = true
       await client.close()
-    except AsyncStreamIncompleteError as e:
+    except CatchableError as e:
       client.logger.log lvlError, e.msg
       result.err e.msg
       hasError = true
       await client.close()
+
     if not hasError:
       readLen.inc(sizeToRecv)
       if keep:
@@ -408,7 +392,6 @@ proc parseResponse*(client: AsyncHttpClient,
   result.bodyStream = newFutureStream[string]("parseResponse") #client.bodyStream
   if getBody and result.code != Http204:
     client.bodyStream = result.bodyStream
-    # client.bodyStream = newFutureStream[string]("parseResponse")
     assert(client.parseBodyFut.isNil or client.parseBodyFut.finished)
     client.parseBodyFut = parseBody(client, result.headers, result.version)
     await client.parseBodyFut
@@ -436,14 +419,13 @@ proc newConnection(client: AsyncHttpClient,
       await client.close()
       client.connected = false
 
-    # TODO: I should be able to write 'net.Port' here...
     let port =
       if connectionUrl.port == "":
         if isSsl:
-          nativesockets.Port(443)
+          443
         else:
-          nativesockets.Port(80)
-      else: nativesockets.Port(connectionUrl.port.parseInt)
+          80
+      else: connectionUrl.port.parseInt
     client.transp = await connect(initTAddress(connectionUrl.hostname, port))
     when defined(ssl):
       if isSsl:
