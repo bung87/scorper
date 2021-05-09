@@ -192,6 +192,8 @@ proc close*(client: AsyncHttpClient) {.async.} =
   ## Closes any connections held by the HTTP client.
   if client.connected:
     await client.transp.closeWait()
+    await client.reader.closeWait()
+    await client.writer.closeWait()
     client.connected = false
 
 proc reportProgress(client: AsyncHttpClient,
@@ -211,13 +213,13 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
   ## Ensures that all the data requested is read and returned.
   var readLen = 0
   while true:
-    if client.transp.atEof(): break
+    if client.reader.atEof(): break
     if size == readLen: break
     let remainingSize = size - readLen
     let sizeToRecv = min(remainingSize, net.BufferSize)
     var hasError = false
     try:
-      await client.transp.readExactly(client.buf[0].addr, sizeToRecv)
+      await client.reader.readExactly(client.buf[0].addr, sizeToRecv)
     except TransportIncompleteError as e:
       client.logger.log lvlError, e.msg
       result.err e.msg
@@ -255,7 +257,7 @@ proc parseChunks(client: AsyncHttpClient): Future[void]
                  {.async.} =
   while true:
     var chunkSize = 0
-    var chunkSizeStr = await client.transp.readLine()
+    var chunkSizeStr = await client.reader.readLine()
     var i = 0
     if chunkSizeStr == "":
       client.logger.log lvlError, "Server terminated connection prematurely"
@@ -375,10 +377,10 @@ proc parseResponse*(client: AsyncHttpClient,
   var fullyRead = false
   var line = ""
   result.headers = newHttpHeaders()
-  while not client.transp.atEof():
+  while not client.reader.atEof():
     linei = 0
     try:
-      line = await client.transp.readLine()
+      line = await client.reader.readLine()
     except:
       line = ""
       await sleepAsync(0)
@@ -461,14 +463,19 @@ proc newConnection(client: AsyncHttpClient,
     client.transp = await connect(initTAddress(connectionUrl.hostname, port))
     when defined(ssl):
       if isSsl:
+        echo "hostname", connectionUrl.hostname
+        let flags = {NoVerifyHost, NoVerifyServerName}
         client.tlsstream = newTLSClientAsyncStream(newAsyncStreamReader(client.transp), newAsyncStreamWriter(
-            client.transp), connectionUrl.hostname) # flags = flags
+            client.transp), connectionUrl.hostname, flags = flags) # flags = flags
         client.reader = client.tlsstream.reader
         client.writer = client.tlsstream.writer
+        await client.tlsstream.handshake()
       else:
         client.reader = newAsyncStreamReader(client.transp)
         client.writer = newAsyncStreamWriter(client.transp)
-
+    else:
+      client.reader = newAsyncStreamReader(client.transp)
+      client.writer = newAsyncStreamWriter(client.transp)
     # If need to CONNECT through proxy
     if isSsl and not client.proxy.isNil:
       when defined(ssl):
@@ -479,7 +486,7 @@ proc newConnection(client: AsyncHttpClient,
 
         let proxyHeaderString = generateHeaders(connectUrl, $HttpConnect,
             newHttpHeaders(), client.proxy)
-        discard await client.transp.write(proxyHeaderString)
+        await client.writer.write(proxyHeaderString)
         let proxyResp = await parseResponse(client, false)
 
         if not proxyResp.status.startsWith("200"):
@@ -570,24 +577,24 @@ proc requestAux(client: AsyncHttpClient, url, httpMethod: string,
 
   let headerString = generateHeaders(requestUrl, httpMethod, newHeaders,
                                      client.proxy)
-  discard await client.transp.write(headerString)
+  await client.writer.write(headerString)
   if data.len > 0:
     var buffer: string
     for i, entry in multipart.entries:
       buffer.add data[i]
       if not entry.isFile: continue
       if buffer.len > 0:
-        discard await client.transp.write(buffer)
+        await client.writer.write(buffer)
         buffer.setLen(0)
       if entry.isStream:
         await client.transp.sendFile(entry)
       else:
-        discard await client.transp.write(entry.content)
+        await client.writer.write(entry.content)
       buffer.add CRLF
     # send the rest and the last boundary
-    discard await client.transp.write(buffer & data[^1])
+    await client.writer.write(buffer & data[^1])
   elif body.len > 0:
-    discard await client.transp.write(body)
+    await client.writer.write(body)
   let getBody = httpMethod.toLowerAscii() notin ["head", "connect"] and
                 client.getBody
   result = await parseResponse(client, getBody)

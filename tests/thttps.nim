@@ -124,9 +124,13 @@ proc testPost() {.async.} =
   await runTest(handler, request, test)
 
 waitfor(test200())
+echo 1
 waitfor(test404())
+echo 2
 waitfor(testCustomEmptyHeaders())
+echo 3
 waitfor(testCustomContentLength())
+echo 4
 waitfor(testPost())
 
 echo "OK"

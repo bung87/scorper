@@ -43,6 +43,8 @@ type
     rawBody: Option[string]
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
     tlsStream: TLSAsyncStream
+    reader: AsyncStreamReader
+    writer: AsyncStreamWriter
 
   AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
@@ -131,7 +133,7 @@ proc resp*(req: Request, content: string,
     httpDate()
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
-  discard await req.transp.write(msg)
+  await req.writer.write(msg)
 
 proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
@@ -147,7 +149,7 @@ proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.a
     flen
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
-  discard await req.transp.write(msg)
+  await req.writer.write(msg)
 
 proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =
   ## Responds to the request with the specified ``HttpCode``.
@@ -156,7 +158,7 @@ proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =
   headers["Content-Length"] = $content.len
   var msg = generateHeaders(headers, code)
   msg.add(content)
-  discard await req.transp.write(msg)
+  await req.writer.write(msg)
 
 proc pairParam(x: tuple[key: string, value: string]): string =
   result = x[0] & '=' & '"' & x[1] & '"'
@@ -168,13 +170,13 @@ proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: s
   let extro = if params.len > 0: "," & params.map(pairParam).join(",") else: ""
   headers["WWW-Authenticate"] = &"{scheme} realm={realm}" & extro
   let msg = generateHeaders(headers, code)
-  discard await req.transp.write(msg)
+  await req.writer.write(msg)
 
 proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
-  discard await request.transp.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
+  await request.writer.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
 
 proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
-  discard await request.transp.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
+  await request.writer.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
 
 proc writeFile(request: Request, fname: string, size: int): Future[void] {.async.} =
   var handle = 0
@@ -377,7 +379,7 @@ proc json*(request: Request): Future[JsonNode] {.async.} =
     return request.parsedJson.unSafeGet
   var str: string
   try:
-    str = await request.transp.readLine(limit = request.contentLength.int)
+    str = await request.reader.readLine(limit = request.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await request.respStatus(Http400, ContentLengthMismatch)
     return
@@ -389,7 +391,7 @@ proc body*(request: Request): Future[string] {.async.} =
   if request.rawBody.isSome:
     return request.rawBody.unSafeGet
   try:
-    result = await request.transp.readLine(limit = request.contentLength.int)
+    result = await request.reader.readLine(limit = request.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await request.respStatus(Http400, ContentLengthMismatch)
     return
@@ -397,7 +399,7 @@ proc body*(request: Request): Future[string] {.async.} =
 
 proc stream*(request: Request): AsyncStreamReader =
   doAssert request.transp.closed == false
-  newAsyncStreamReader(request.transp)
+  request.reader
 
 proc form*(request: Request): Future[Form] {.async.} =
   if request.parsedForm.isSome:
@@ -450,11 +452,17 @@ proc processRequest(
   const HeaderSep = @[byte('\c'), byte('\L'), byte('\c'), byte('\L')]
   var count: int
   try:
-    count = await request.transp.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
+    count = await request.reader.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
+  except AsyncStreamIncompleteError:
+    return true
   except TransportIncompleteError:
     return true
   except TransportLimitError:
     await request.respStatus(Http400, BufferLimitExceeded)
+    request.transp.close()
+    return false
+  except TransportError as e:
+    await request.respStatus(Http400, e.msg)
     request.transp.close()
     return false
   # Headers
@@ -559,7 +567,7 @@ proc processRequest(
     # Unless the connection header states otherwise.
     return true
   else:
-    request.transp.close()
+    await request.transp.closeWait()
     return false
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
@@ -586,10 +594,18 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
                               minVersion = scorper.tlsMinVersion,
                               maxVersion = scorper.tlsMaxVersion,
                               flags = scorper.secureFlags)
+    req.reader = req.tlsStream.reader
+    req.writer = req.tlsStream.writer
+    await handshake(req.tlsStream)
+  else:
+    req.reader = req.transp.newAsyncStreamReader
+    req.writer = req.transp.newAsyncStreamWriter
   while not transp.atEof():
     let retry = await processRequest(scorper, req)
     if not retry:
-      transp.close
+      await transp.closeWait
+      await req.reader.closeWait
+      await req.writer.closeWait
       break
 
 proc logSubOnNext(v: string) =
