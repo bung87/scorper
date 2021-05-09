@@ -184,13 +184,13 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
   try:
     fhandle = open(fname)
   except IOError as e:
-    echo e.msg
+    request.server.logSub.next(e.msg)
     return
   except CatchableError as e:
-    echo e.msg
+    request.server.logSub.next(e.msg)
     return
   except Exception as e:
-    echo e.msg
+    request.server.logSub.next(e.msg)
     return
   when defined(windows):
     handle = int(getOsFileHandle(fhandle))
@@ -208,7 +208,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
   try:
     fhandle = open(fname)
   except IOError as e:
-    echo e.msg
+    request.server.logSub.next(e.msg)
     return
   let fullSize = meta.unsafeGet.info.size.int
   when defined(windows):
@@ -435,7 +435,7 @@ proc form*(request: Request): Future[Form] {.async.} =
             elif disp.kind == ContentDispositionKind.file:
               result.files.add disp
         else:
-          echo "form parse error: " & $parser.state
+          request.server.logSub.next("form parse error: " & $parser.state)
       else:
         discard
   request.parsedForm = some(result)
@@ -455,16 +455,13 @@ proc processRequest(
   var count: int
   try:
     count = await request.reader.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
-  except AsyncStreamIncompleteError, TransportIncompleteError:
-  # except TransportIncompleteError:
+  except AsyncStreamIncompleteError:
     return true
-  # except TransportIncompleteError:
-    # return true
-  except TransportLimitError:
+  except AsyncStreamLimitError:
     await request.respStatus(Http400, BufferLimitExceeded)
     request.transp.close()
     return false
-  except TransportError as e:
+  except AsyncStreamError as e:
     await request.respStatus(Http400, e.msg)
     request.transp.close()
     return false
@@ -493,7 +490,7 @@ proc processRequest(
   try:
     request.url = parseUrl("http://" & request.hostname & request.path)[]
   except ValueError as e:
-    echo e.msg
+    request.server.logSub.next(e.msg)
     asyncSpawn request.respError(Http400)
     return true
   case request.httpParser.major[]:
