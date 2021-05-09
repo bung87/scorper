@@ -39,7 +39,6 @@ type
     ## ``nil`` or the callback to call when request progress changes.
     onProgressChanged*: ProgressChangedProc[Future[void]]
     when defined(ssl):
-      sslContext: net.SslContext
       tlsstream: TLSAsyncStream
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
@@ -62,18 +61,6 @@ proc fileError(msg: string) {.inline.} =
   new(e)
   e.msg = msg
   raise e
-
-when not defined(ssl):
-  type SslContext = ref object
-var defaultSslContext {.threadvar.}: SslContext
-
-proc getDefaultSSL(): SslContext =
-  result = defaultSslContext
-  when defined(ssl):
-    if result == nil:
-      defaultSslContext = newContext(verifyMode = CVerifyNone)
-      result = defaultSslContext
-      doAssert result != nil, "failure to initialize the SSL context"
 
 proc newProxy*(url: string, auth = ""): Proxy =
   ## Constructs a new ``TProxy`` object.
@@ -159,7 +146,7 @@ proc sendFile(transp: StreamTransport,
   await sendFile(transp, entry.content)
 
 proc newAsyncHttpClient*(userAgent = defUserAgent, maxRedirects = 5,
-                         sslContext = getDefaultSSL(), proxy: Proxy = nil,
+                         proxy: Proxy = nil,
                          headers = newHttpHeaders()): AsyncHttpClient =
   ## Creates a new AsyncHttpClient instance.
   ##
@@ -169,7 +156,6 @@ proc newAsyncHttpClient*(userAgent = defUserAgent, maxRedirects = 5,
   ## ``maxRedirects`` specifies the maximum amount of redirects to follow,
   ## default is 5.
   ##
-  ## ``sslContext`` specifies the SSL context to use for HTTPS requests.
   ##
   ## ``proxy`` specifies an HTTP proxy to use for this HTTP client's
   ## connections.
@@ -185,8 +171,6 @@ proc newAsyncHttpClient*(userAgent = defUserAgent, maxRedirects = 5,
   result.bodyStream = newFutureStream[string]("newAsyncHttpClient")
   result.getBody = true
   result.logger = newConsoleLogger()
-  when defined(ssl):
-    result.sslContext = sslContext
 
 proc close*(client: AsyncHttpClient) {.async.} =
   ## Closes any connections held by the HTTP client.
@@ -492,8 +476,6 @@ proc newConnection(client: AsyncHttpClient,
           raise newException(HttpRequestError,
                             "The proxy server rejected a CONNECT request, " &
                             "so a secure connection could not be established.")
-        # client.sslContext.wrapConnectedSocket(
-        #   client.socket, handshakeAsClient, url.hostname)
       else:
         raise newException(HttpRequestError,
         "SSL support is not available. Cannot connect over SSL. Compile with -d:ssl to enable.")
