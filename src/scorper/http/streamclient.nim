@@ -199,21 +199,20 @@ proc recvFull(client: AsyncHttpClient, size: int, timeout: int,
     try:
       await client.reader.readExactly(client.buf[0].addr, sizeToRecv)
     except AsyncStreamIncompleteError as e:
-      client.logger.log lvlError, e.msg
+      client.logger.log lvlError, $AsyncStreamIncompleteError & ":" & e.msg
       result.err e.msg
       hasError = true
       await client.close()
     except AsyncStreamReadError as e:
-      client.logger.log lvlError, e.msg
+      client.logger.log lvlError, $type(e) & ":" & e.msg
       result.err e.msg
       hasError = true
       await client.close()
     except CatchableError as e:
-      client.logger.log lvlError, e.msg
+      client.logger.log lvlError, $type(e) & ":" & e.msg
       result.err e.msg
       hasError = true
       await client.close()
-
     if not hasError:
       readLen.inc(sizeToRecv)
       if keep:
@@ -290,10 +289,7 @@ proc parseBody(client: AsyncHttpClient, headers: HttpHeaders,
       client.contentTotal = length
       var r: R
       if length > 0:
-        try:
-          r = await client.recvFull(length, client.timeout, true)
-        except Exception as e:
-          discard
+        r = await client.recvFull(length, client.timeout, true)
         var recvLen: int
         if r.isOk():
           recvLen = r.get()
@@ -387,7 +383,6 @@ proc parseResponse*(client: AsyncHttpClient,
         result.headers.add(name, line[linei .. ^1].strip())
         if result.headers.len > headerLimit:
           client.logger.log lvlError, "too many headers"
-
   if not fullyRead:
     client.logger.log lvlError, "Connection was closed before full request has been made"
   result.bodyStream = newFutureStream[string]("parseResponse") #client.bodyStream

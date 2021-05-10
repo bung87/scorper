@@ -11,8 +11,7 @@ type
     body: string
     bodyStream*: FutureStream[string]
 
-proc code*(response: AsyncResponse): HttpCode
-           {.raises: [ValueError, OverflowDefect].} =
+proc code*(response: AsyncResponse): HttpCode =
   ## Retrieves the specified response's ``HttpCode``.
   ##
   ## Raises a ``ValueError`` if the response's ``status`` does not have a

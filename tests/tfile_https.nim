@@ -9,8 +9,8 @@ const TestUrl = "https://127.0.0.1:64124/foo?bar=qux"
 const source = staticRead(currentSourcePath.parentDir / "range.txt")
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
+    request: proc (client: AsyncHttpClient): Future[AsyncResponse],
+    test: proc (response: AsyncResponse, body: string): Future[void]){.async.} =
 
   let address = "127.0.0.1:64124"
   let flags: set[ServerFlags] = {ReuseAddr}
@@ -19,10 +19,13 @@ proc runTest(
     certificate = HttpsSelfSignedRsaCert)
   server.start()
   let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+    client = newAsyncHttpClient()
+  let
+    response = await request(client)
+    body = await response.readBody()
+  await client.close
+  await test(response, body)
 
-  waitFor test(response, body)
   server.stop()
   server.close()
   waitFor server.join()
@@ -31,13 +34,8 @@ proc testSendFIle() {.async.} =
   proc handler(request: Request) {.async.} =
     await request.sendFile(currentSourcePath.parentDir / "range.txt")
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
-    let
-      client = newAsyncHttpClient()
-
+  proc request(client: AsyncHttpClient): Future[AsyncResponse] {.async.} =
     let clientResponse = await client.request(TestUrl)
-    await client.close()
-
     return clientResponse
 
   proc test(response: AsyncResponse, body: string) {.async.} =
@@ -45,7 +43,8 @@ proc testSendFIle() {.async.} =
     let body = await response.readBody
     doAssert body == source
 
-  runTest(handler, request, test)
+  await runTest(handler, request, test)
+
 waitfor(testSendFIle())
 
 echo "OK"
