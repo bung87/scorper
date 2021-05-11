@@ -34,6 +34,7 @@ const gzipMinLength* {.intdefine.} = 20
 - [ ] Auto render response respect client accepted content type.  
 - [x] Chuncked file upload handle for large file. 
 - [x] https support 
+- [x] handle Resumable upload
 
 ## Benchmark  
 
