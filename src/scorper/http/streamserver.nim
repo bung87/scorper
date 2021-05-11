@@ -656,6 +656,15 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
 proc logSubOnNext(v: string) =
   echo v
 
+template initSecurityScorper(scorper: var Scorper; secureFlags: set[TLSFlags]; privateKey, certificate: string;
+    tlsMinVersion, tlsMaxVersion: TLSVersion) =
+  scorper.isSecurity = true
+  scorper.secureFlags = secureFlags
+  scorper.tlsPrivateKey = TLSPrivateKey.init(privateKey)
+  scorper.tlsCertificate = TLSCertificate.init(certificate)
+  scorper.tlsMinVersion = tlsMinVersion
+  scorper.tlsMaxVersion = tlsMaxVersion
+
 proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
@@ -676,12 +685,7 @@ proc serve*(address: string,
   server = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
   when defined(ssl):
     if isSecurity:
-      server.isSecurity = true
-      server.secureFlags = secureFlags
-      server.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-      server.tlsCertificate = TLSCertificate.init(certificate)
-      server.tlsMinVersion = tlsMinVersion
-      server.tlsMaxVersion = tlsMaxVersion
+      server.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
   server.logSub = subject[string]()
   server.start()
   when not defined(release):
@@ -714,12 +718,7 @@ proc newScorper*(address: string,
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
   when defined(ssl):
     if isSecurity:
-      result.isSecurity = true
-      result.secureFlags = secureFlags
-      result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-      result.tlsCertificate = TLSCertificate.init(certificate)
-      result.tlsMinVersion = tlsMinVersion
-      result.tlsMaxVersion = tlsMaxVersion
+      result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
 
 proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
@@ -747,12 +746,7 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
   when defined(ssl):
     if isSecurity:
-      result.secureFlags = secureFlags
-      result.tlsPrivateKey = TLSPrivateKey.init(privateKey)
-      result.tlsCertificate = TLSCertificate.init(certificate)
-      result.tlsMinVersion = tlsMinVersion
-      result.tlsMaxVersion = tlsMaxVersion
-      result.isSecurity = true
+      result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
 
 proc isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed
