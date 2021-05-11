@@ -210,8 +210,8 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
   if request.server.isSecurity:
     writeFileBuffered(request, fhandle)
   else:
-    when declared(sendfile.sendfile):
-      var s = size
+    var s = size
+    when compiles(sendfile(request.writer.tsource.fd.FileHandle.int, handle, 0, s)):
       discard sendfile(request.writer.tsource.fd.FileHandle.int, handle, 0, s)
     else:
       writeFileBuffered(request, fhandle)
@@ -263,8 +263,8 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     if request.server.isSecurity:
       writeFileStream(request, fname, offset, size)
     else:
-      when declared(sendfile.sendfile):
-        var written = size
+      var written = size
+      when compiles(sendfile(request.writer.tsource.fd.FileHandle.int, handle, offset, written)):
         let ret = sendfile(request.writer.tsource.fd.FileHandle.int, handle, offset, written)
       else:
         writeFileStream(request, fname, offset, size)
