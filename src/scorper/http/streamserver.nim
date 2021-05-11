@@ -181,19 +181,22 @@ proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void
 proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
   await request.writer.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
 
-template writeFileBuffered(request: Request, fhandle: File) =
+template writeFileFull(request: Request, file: File, size: int) =
   const bufSize = 8192
-  var buf {.noinit.}: array[bufSize, char]
-  while true:
-    var readBytes = fhandle.readBuffer(buf[0].addr, bufSize)
-    await request.writer.write(buf.addr, readBytes)
-    if readBytes != bufSize: break
+  if size < bufSize:
+    await request.writer.write(file.readAll)
+  else:
+    var buf {.noinit.}: array[bufSize, char]
+    while true:
+      var readBytes = file.readBuffer(buf[0].addr, bufSize)
+      await request.writer.write(buf.addr, readBytes)
+      if readBytes != bufSize: break
 
 proc writeFile(request: Request, fname: string, size: int): Future[void] {.async.} =
   var handle = 0
-  var fhandle: File
+  var file: File
   try:
-    fhandle = open(fname)
+    file = open(fname)
   except IOError as e:
     request.server.logSub.next(e.msg)
     return
@@ -204,18 +207,18 @@ proc writeFile(request: Request, fname: string, size: int): Future[void] {.async
     request.server.logSub.next(e.msg)
     return
   when defined(windows):
-    handle = int(getOsFileHandle(fhandle))
+    handle = int(getOsFileHandle(file))
   else:
-    handle = int(getFileHandle(fhandle))
+    handle = int(getFileHandle(file))
   if request.server.isSecurity:
-    writeFileBuffered(request, fhandle)
+    writeFileFull(request, file, size)
   else:
     var s = size
     when compiles(sendfile(request.writer.tsource.fd.FileHandle.int, handle, 0, s)):
       discard sendfile(request.writer.tsource.fd.FileHandle.int, handle, 0, s)
     else:
-      writeFileBuffered(request, fhandle)
-  close(fhandle)
+      writeFileFull(request, file, size)
+  close(file)
 
 template writeFileStream(request: Request, fname: string, offset: int, size: int) =
   const bufSize = 8192
@@ -223,7 +226,7 @@ template writeFileStream(request: Request, fname: string, offset: int, size: int
   var totalRead = 0
   let fs = openFileStream(fname, fmRead, bufSize)
   fs.setPosition(offset)
-  let rlen = min(size, buf.len)
+  let rlen = min(size, bufSize)
   while true:
     var readBytes = fs.readData(buf[0].addr, rlen)
     if readBytes == 0:
@@ -238,17 +241,17 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
     info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
   let fullSize = meta.unsafeGet.info.size.int
   var handle = 0
-  var fhandle: File
+  var file: File
   if not request.server.isSecurity:
     try:
-      fhandle = open(fname)
+      file = open(fname)
     except IOError as e:
       request.server.logSub.next(e.msg)
       return
     when defined(windows):
-      handle = int(getOsFileHandle(fhandle))
+      handle = int(getOsFileHandle(file))
     else:
-      handle = int(getFileHandle(fhandle))
+      handle = int(getFileHandle(file))
   for b in ranges:
     await request.writer.write(boundary & CRLF)
     await request.writer.write(fmt"Content-Type: {mime}" & CRLF)
@@ -270,7 +273,7 @@ proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts:
         writeFileStream(request, fname, offset, size)
   await request.writer.write(CRLF & boundary & "--")
   if handle != 0:
-    close(fhandle)
+    close(file)
 
 proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
