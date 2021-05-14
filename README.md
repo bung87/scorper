@@ -41,6 +41,7 @@ when isMainModule:
 when isMainModule:
   let r = newRouter[AsyncCallback]()
   r.addRoute(serveStatic, "get", "/static/*$")
+  let address = "127.0.0.1:8888"
   let flags = {ReuseAddr}
   var server = newScorper(address, r, flags)
   server.start()
