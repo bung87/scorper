@@ -9,4 +9,5 @@ export router, streamserver, urlly, httpform, cookies
 # import chronos
 # export chronos
 export httpcore
+export routermacros
 
