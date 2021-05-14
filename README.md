@@ -19,6 +19,43 @@ const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32)
 const gzipMinLength* {.intdefine.} = 20
 ```
 
+## Usage  
+### hello world  
+
+### `serve` with callback  
+
+``` nim
+import scorper
+const port{.intdefine.} = 8888
+when isMainModule:
+  proc cb(req: Request) {.async.} =
+    let headers = {"Content-type": "text/plain"}
+    await req.resp("Hello, World!", headers.newHttpHeaders())
+  let address = "127.0.0.1:" & $port
+  waitFor serve(address, cb)
+```
+
+### `newScorper` with router or callback  
+
+``` nim
+when isMainModule:
+  let r = newRouter[AsyncCallback]()
+  r.addRoute(serveStatic, "get", "/static/*$")
+  let flags = {ReuseAddr}
+  var server = newScorper(address, r, flags)
+  server.start()
+  waitFor server.join()
+``` 
+
+### use `route` pragma
+``` nim
+proc handler(req: Request) {.route("get","/one"),async.} = discard
+proc handler2(req: Request) {.route(["get","post"],"/multi"),async.} = discard
+let r = newRouter[AsyncCallback]()
+r.addRoute(handler)
+r.addRoute(handler2)
+```
+
 ## Todos  
 
 - [x] Parse http request streamingly.  
