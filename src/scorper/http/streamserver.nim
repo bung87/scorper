@@ -28,7 +28,7 @@ type
     headers*: HttpHeaders
     protocol*: tuple[major, minor: int]
     url*: Url
-    path*: string              # http request path
+    path*: string              # http req path
     hostname*: string
     ip*: string
     params*: Table[string, string]
@@ -44,13 +44,14 @@ type
     parsedForm: Option[Form]
     parsed: bool
     rawBody: Option[string]
+    responded: bool
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
     when defined(ssl):
       tlsStream: TLSAsyncStream
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 
-  AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
+  AsyncCallback = proc (req: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
     callback: AsyncCallback
     maxBody: int
@@ -95,7 +96,7 @@ proc getMimetype*(req: Request, ext: string): string =
   result = req.server.mimeDb.getMimetype(ext, default = "")
 
 macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untyped) =
-  ## Responds to the request respect client's accept
+  ## Responds to the req respect client's accept
   ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
   expectLen(body, 1)
   expectKind(body[0], nnkCaseStmt)
@@ -123,9 +124,11 @@ proc gzip*(req: Request): bool = req.headers.hasKey("Accept-Encoding") and
 
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
-  ## Responds to the request with the specified ``HttpCode``, headers and
+  ## Responds to the req with the specified ``HttpCode``, headers and
   ## content.
   # If the headers did not contain a Content-Length use our own
+  if req.responded == true:
+    return
   let gzip = req.gzip()
   let originalLen = content.len
   let needCompress = gzip and originalLen >= gzipMinLength
@@ -140,9 +143,12 @@ proc resp*(req: Request, content: string,
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
   await req.writer.write(msg)
+  req.responded = true
 
 proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.async.} =
-  ## Responds to the request with the specified ``HttpCode``.
+  ## Responds to the req with the specified ``HttpCode``.
+  if req.responded == true:
+    return
   var headers = genericHeaders()
   let gzip = req.gzip()
   let originalLen = content.len
@@ -156,74 +162,87 @@ proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.a
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
   await req.writer.write(msg)
+  req.responded = true
 
 proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =
-  ## Responds to the request with the specified ``HttpCode``.
+  ## Responds to the req with the specified ``HttpCode``.
+  if req.responded == true:
+    return
   var headers = genericHeaders()
   let content = $code
   headers["Content-Length"] = $content.len
   var msg = generateHeaders(headers, code)
   msg.add(content)
   await req.writer.write(msg)
+  req.responded = true
 
 proc pairParam(x: tuple[key: string, value: string]): string =
   result = x[0] & '=' & '"' & x[1] & '"'
 
 proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: seq[tuple[key: string,
     value: string]] = @[], code = Http401): Future[void] {.async.} =
-  ## Responds to the request with the specified ``HttpCode``.
+  ## Responds to the req with the specified ``HttpCode``.
+  if req.responded == true:
+    return
   var headers = genericHeaders()
   let extro = if params.len > 0: "," & params.map(pairParam).join(",") else: ""
   headers["WWW-Authenticate"] = &"{scheme} realm={realm}" & extro
   let msg = generateHeaders(headers, code)
   await req.writer.write(msg)
+  req.responded = true
 
-proc respStatus*(request: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
-  await request.writer.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
+proc respStatus*(req: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
+  if req.responded == true:
+    return
+  await req.writer.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
+  req.responded = true
 
-proc respStatus*(request: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
-  await request.writer.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
+proc respStatus*(req: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
+  if req.responded == true:
+    return
+  await req.writer.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
+  req.responded = true
 
-template writeFileFull(request: Request, file: File, size: int) =
+template writeFileFull(req: Request, file: File, size: int) =
   const bufSize = 8192
   if size < bufSize:
-    await request.writer.write(file.readAll)
+    await req.writer.write(file.readAll)
   else:
     var buf {.noinit.}: array[bufSize, char]
     while true:
       var readBytes = file.readBuffer(buf[0].addr, bufSize)
-      await request.writer.write(buf.addr, readBytes)
+      await req.writer.write(buf.addr, readBytes)
       if readBytes != bufSize: break
 
-proc writeFile(request: Request, fname: string, size: int): Future[void] {.async.} =
+proc writeFile(req: Request, fname: string, size: int): Future[void] {.async.} =
   var handle = 0
   var file: File
   try:
     file = open(fname)
   except IOError as e:
-    request.server.logSub.next(e.msg)
+    req.server.logSub.next(e.msg)
     return
   except CatchableError as e:
-    request.server.logSub.next(e.msg)
+    req.server.logSub.next(e.msg)
     return
   except Exception as e:
-    request.server.logSub.next(e.msg)
+    req.server.logSub.next(e.msg)
     return
   when defined(windows):
     handle = int(getOsFileHandle(file))
   else:
     handle = int(getFileHandle(file))
-  if request.server.isSecurity:
-    writeFileFull(request, file, size)
+  if req.server.isSecurity:
+    writeFileFull(req, file, size)
   else:
     var s = size
-    when compiles(sendfile(request.writer.tsource.fd.FileHandle.int, handle, 0, s)):
-      discard sendfile(request.writer.tsource.fd.FileHandle.int, handle, 0, s)
+    when compiles(sendfile(req.writer.tsource.fd.FileHandle.int, handle, 0, s)):
+      discard sendfile(req.writer.tsource.fd.FileHandle.int, handle, 0, s)
     else:
-      writeFileFull(request, file, size)
+      writeFileFull(req, file, size)
   close(file)
 
-template writeFileStream(request: Request, fname: string, offset: int, size: int) =
+template writeFileStream(req: Request, fname: string, offset: int, size: int) =
   const bufSize = 8192
   var buf {.noinit.}: array[bufSize, char]
   var totalRead = 0
@@ -234,53 +253,53 @@ template writeFileStream(request: Request, fname: string, offset: int, size: int
     var readBytes = fs.readData(buf[0].addr, rlen)
     if readBytes == 0:
       break
-    await request.writer.write(buf[0].addr, readBytes)
+    await req.writer.write(buf[0].addr, readBytes)
     totalRead.inc readBytes
     if totalRead == rlen:
       break
   fs.close
 
-proc writePartialFile(request: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
+proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
     info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
   let fullSize = meta.unsafeGet.info.size.int
   var handle = 0
   var file: File
-  if not request.server.isSecurity:
+  if not req.server.isSecurity:
     try:
       file = open(fname)
     except IOError as e:
-      request.server.logSub.next(e.msg)
+      req.server.logSub.next(e.msg)
       return
     when defined(windows):
       handle = int(getOsFileHandle(file))
     else:
       handle = int(getFileHandle(file))
   for b in ranges:
-    await request.writer.write(boundary & CRLF)
-    await request.writer.write(fmt"Content-Type: {mime}" & CRLF)
+    await req.writer.write(boundary & CRLF)
+    await req.writer.write(fmt"Content-Type: {mime}" & CRLF)
     if b.ends > 0:
-      await request.writer.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF & CRLF)
+      await req.writer.write(fmt"Content-Range: bytes {b.starts}-{b.ends}/{fullSize}" & CRLF & CRLF)
     elif b.ends == 0:
-      await request.writer.write(fmt"Content-Range: bytes {b.starts}-{fullSize - 1}/{fullSize}" & CRLF & CRLF)
+      await req.writer.write(fmt"Content-Range: bytes {b.starts}-{fullSize - 1}/{fullSize}" & CRLF & CRLF)
     else:
-      await request.writer.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
+      await req.writer.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
     let offset = if b.ends >= 0: b.starts else: fullSize + b.ends
     let size = if b.ends > 0: b.ends - b.starts + 1: elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
-    if request.server.isSecurity:
-      writeFileStream(request, fname, offset, size)
+    if req.server.isSecurity:
+      writeFileStream(req, fname, offset, size)
     else:
       var written = size
-      when compiles(sendfile(request.writer.tsource.fd.FileHandle.int, handle, offset, written)):
-        let ret = sendfile(request.writer.tsource.fd.FileHandle.int, handle, offset, written)
+      when compiles(sendfile(req.writer.tsource.fd.FileHandle.int, handle, offset, written)):
+        let ret = sendfile(req.writer.tsource.fd.FileHandle.int, handle, offset, written)
       else:
-        writeFileStream(request, fname, offset, size)
-  await request.writer.write(CRLF & boundary & "--")
+        writeFileStream(req, fname, offset, size)
+  await req.writer.write(CRLF & boundary & "--")
   if handle != 0:
     close(file)
 
-proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
+proc fileGuard(req: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
-  # The result of a request having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
+  # The result of a req having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
   if not fileExists(filepath):
     return none(FileInfo)
   var info: FileInfo
@@ -289,32 +308,32 @@ proc fileGuard(request: Request, filepath: string): Future[Option[FileInfo]] {.a
   except:
     return none(FileInfo)
   if fpOthersRead notin info.permissions:
-    await request.respError(Http403)
+    await req.respError(Http403)
     return none(FileInfo)
-  if request.headers.hasKey("If-Modified-Since"):
+  if req.headers.hasKey("If-Modified-Since"):
     var ifModifiedSince: Time
     try:
-      ifModifiedSince = parseTime(request.headers["If-Modified-Since"], HttpDateFormat, utc())
+      ifModifiedSince = parseTime(req.headers["If-Modified-Since"], HttpDateFormat, utc())
     except:
-      await request.respError(Http400)
+      await req.respError(Http400)
       return none(FileInfo)
     if info.lastWriteTime == ifModifiedSince:
-      await request.respStatus(Http304)
+      await req.respStatus(Http304)
       return none(FileInfo)
-  elif request.headers.hasKey("If-Unmodified-Since"):
+  elif req.headers.hasKey("If-Unmodified-Since"):
     var ifUnModifiedSince: Time
     try:
-      ifUnModifiedSince = parseTime(request.headers["If-Unmodified-Since"], HttpDateFormat, utc())
+      ifUnModifiedSince = parseTime(req.headers["If-Unmodified-Since"], HttpDateFormat, utc())
     except:
-      await request.respError(Http400)
+      await req.respError(Http400)
       return none(FileInfo)
     if info.lastWriteTime > ifUnModifiedSince:
-      await request.respStatus(Http412)
+      await req.respStatus(Http412)
       return none(FileInfo)
   return some(info)
 
-proc fileMeta(request: Request, filepath: string): Future[Option[tuple[info: FileInfo, headers: HttpHeaders]]]{.async, inline.} =
-  let info = await fileGuard(request, filepath)
+proc fileMeta(req: Request, filepath: string): Future[Option[tuple[info: FileInfo, headers: HttpHeaders]]]{.async, inline.} =
+  let info = await fileGuard(req, filepath)
   if not info.isSome():
     return none(tuple[info: FileInfo, headers: HttpHeaders])
   var size = info.get.size
@@ -332,31 +351,31 @@ proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): i
     else:
       result = result + abs(b[1])
 
-proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.async.} =
+proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
-  var meta = await fileMeta(request, filepath)
+  var meta = await fileMeta(req, filepath)
   if meta.isNone:
-    await request.respError(Http404)
+    await req.respError(Http404)
     return
   for key, val in extroHeaders:
     meta.unsafeGet.headers[key] = val
   var (_, _, ext) = splitFile(filepath)
-  let mime = request.server.mimeDb.getMimetype(ext)
-  let rangeRequest = request.headers.hasKey("Range")
+  let mime = req.server.mimeDb.getMimetype(ext)
+  let rangeRequest = req.headers.hasKey("Range")
   var parseRangeOk = false
   var ranges = newSeq[tuple[starts: int, ends: int]]()
   if rangeRequest:
     let parser = rangeParser()
-    let rng: string = request.headers["Range"]
+    let rng: string = req.headers["Range"]
     let r = parser.match(rng, ranges)
     parseRangeOk = r.ok
   if not rangeRequest or not parseRangeOk:
     meta.unsafeGet.headers["Content-Type"] = mime
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-    await request.writer.write(msg)
-    await request.writeFile(filepath, meta.unsafeGet.info.size.int)
-    request.server.logSub.next(request.formatCommon(Http200, meta.unsafeGet.info.size.int))
+    await req.writer.write(msg)
+    await req.writeFile(filepath, meta.unsafeGet.info.size.int)
+    req.server.logSub.next(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
@@ -375,105 +394,108 @@ proc sendFile*(request: Request, filepath: string, extroHeaders: HttpHeaders = n
       contentLength = contentLength + len(CRLF & boundary & "--")
       meta.unsafeGet.headers["Content-Length"] = $contentLength
       var msg = generateHeaders(meta.unsafeGet.headers, Http206)
-      await request.writer.write(msg)
-      await request.writePartialFile(filepath, ranges, meta, boundary, mime)
-      # request.server.logSub.next(request.formatCommon(Http206, contentLength))
+      await req.writer.write(msg)
+      await req.writePartialFile(filepath, ranges, meta, boundary, mime)
+      # req.server.logSub.next(req.formatCommon(Http206, contentLength))
 
-proc sendDownload*(request: Request, filepath: string) {.async.} =
+proc sendDownload*(req: Request, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
-  var meta = await fileMeta(request, filepath)
+  var meta = await fileMeta(req, filepath)
   if meta.isNone:
-    await request.respError(Http404)
+    await req.respError(Http404)
     return
   meta.unsafeGet.headers["Content-Type"] = "application/x-download"
   var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-  await request.writer.write(msg)
-  await request.writeFile(filepath, meta.unsafeGet.info.size.int)
+  await req.writer.write(msg)
+  await req.writeFile(filepath, meta.unsafeGet.info.size.int)
+  req.responded = true
 
-proc sendAttachment*(request: Request, filepath: string, asName: string = "") {.async.} =
+proc sendAttachment*(req: Request, filepath: string, asName: string = "") {.async.} =
   let filename = if asName.len == 0: filepath.extractFilename else: asName
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
   let extroHeaders = newHttpHeaders({
     "Content-Disposition": &"""attachment;filename="{filename}";{encodedFilename}"""
   })
-  await sendFile(request, filepath, extroHeaders)
+  await sendFile(req, filepath, extroHeaders)
+  req.responded = true
 
-proc serveStatic*(request: Request) {.async.} =
-  if request.meth != HttpGet and request.meth != HttpHead:
-    await request.respError(Http405)
+proc serveStatic*(req: Request) {.async.} =
+  if req.meth != HttpGet and req.meth != HttpHead:
+    await req.respError(Http405)
     return
-  let relPath = request.url.path.relativePath(request.prefix)
+  let relPath = req.url.path.relativePath(req.prefix)
   let absPath = absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
-    await request.respError(Http404)
+    await req.respError(Http404)
     return
-  if request.meth == HttpHead:
-    var meta = await fileMeta(request, absPath)
+  if req.meth == HttpHead:
+    var meta = await fileMeta(req, absPath)
     if meta.isNone:
-      await request.respError(Http404)
+      await req.respError(Http404)
       return
     var (_, _, ext) = splitFile(absPath)
-    let mime = request.server.mimeDb.getMimetype(ext)
+    let mime = req.server.mimeDb.getMimetype(ext)
     meta.unsafeGet.headers["Content-Type"] = mime
     meta.unsafeGet.headers["Accept-Ranges"] = "bytes"
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-    discard await request.transp.write(msg)
+    discard await req.transp.write(msg)
     return
-  await request.sendFile(absPath)
+  await req.sendFile(absPath)
+  req.responded = true
 
 
-proc json*(request: Request): Future[JsonNode] {.async.} =
-  if request.parsedJson.isSome:
-    return request.parsedJson.unSafeGet
+proc json*(req: Request): Future[JsonNode] {.async.} =
+  if req.parsedJson.isSome:
+    return req.parsedJson.unSafeGet
   var str: string
   try:
-    str = await request.reader.readLine(limit = request.contentLength.int)
+    str = await req.reader.readLine(limit = req.contentLength.int)
   except AsyncStreamIncompleteError as e:
-    await request.respStatus(Http400, ContentLengthMismatch)
+    await req.respStatus(Http400, ContentLengthMismatch)
     return
   result = parseJson(str)
-  request.parsedJson = some(result)
-  request.parsed = true
+  req.parsedJson = some(result)
+  req.parsed = true
 
-proc body*(request: Request): Future[string] {.async.} =
-  if request.rawBody.isSome:
-    return request.rawBody.unSafeGet
+proc body*(req: Request): Future[string] {.async.} =
+  if req.rawBody.isSome:
+    return req.rawBody.unSafeGet
   try:
-    result = await request.reader.readLine(limit = request.contentLength.int)
+    result = await req.reader.readLine(limit = req.contentLength.int)
   except AsyncStreamIncompleteError as e:
-    await request.respStatus(Http400, ContentLengthMismatch)
+    await req.respStatus(Http400, ContentLengthMismatch)
     return
-  request.parsed = true
+  req.parsed = true
 
-proc stream*(request: Request): AsyncStreamReader =
-  doAssert request.transp.closed == false
-  request.reader
+proc stream*(req: Request): AsyncStreamReader =
+  doAssert req.transp.closed == false
+  req.reader
 
-proc form*(request: Request): Future[Form] {.async.} =
-  if request.parsedForm.isSome:
-    return request.parsedForm.unSafeGet
+proc form*(req: Request): Future[Form] {.async.} =
+  if req.parsedForm.isSome:
+    return req.parsedForm.unSafeGet
   result = newForm()
-  case request.contentType:
+  case req.contentType:
     of "application/x-www-form-urlencoded":
-      var parser = newUrlEncodedParser(request.transp, request.buf.addr, request.contentLength.int)
+      var parser = newUrlEncodedParser(req.transp, req.buf.addr, req.contentLength.int)
       var parsed = await parser.parse()
       for (key, value) in parsed:
         let v = if value.len > 0: decodeUrlComponent(value) else: ""
         let k = decodeUrlComponent key
         result.data.add ContentDisposition(kind: ContentDispositionKind.data, name: k, value: v)
     else:
-      if request.contentType.len > 0:
+      if req.contentType.len > 0:
         var parsed: tuple[i: int, boundary: string]
         try:
-          parsed = parseBoundary(request.contentType)
+          parsed = parseBoundary(req.contentType)
         except BoundaryMissingError as e:
-          await request.respError(Http400, e.msg)
+          await req.respError(Http400, e.msg)
           return
         except BoundaryInvalidError as e:
-          await request.respError(Http400, e.msg)
+          await req.respError(Http400, e.msg)
           return
-        var parser = newMultipartParser(parsed.boundary, request.transp, request.buf.addr, request.contentLength.int)
+        var parser = newMultipartParser(parsed.boundary, req.transp, req.buf.addr, req.contentLength.int)
         await parser.parse()
         if parser.state == boundaryEnd:
           for disp in parser.dispositions:
@@ -482,139 +504,140 @@ proc form*(request: Request): Future[Form] {.async.} =
             elif disp.kind == ContentDispositionKind.file:
               result.files.add disp
         else:
-          request.server.logSub.next("form parse error: " & $parser.state)
+          req.server.logSub.next("form parse error: " & $parser.state)
       else:
         discard
-  request.parsedForm = some(result)
-  request.parsed = true
+  req.parsedForm = some(result)
+  req.parsed = true
 
 proc processRequest(
   scorper: Scorper,
-  request: Request,
+  req: Request,
 ): Future[bool] {.async.} =
-  request.parsed = false
-  request.parsedJson = none(JsonNode)
-  request.parsedForm = none(Form)
-  request.headers.clear()
+  req.responded = false
+  req.parsed = false
+  req.parsedJson = none(JsonNode)
+  req.parsedForm = none(Form)
+  req.headers.clear()
   # receivce untill http header end
   # note: headers field name is case-insensitive, field value is case sensitive
   const HeaderSep = @[byte('\c'), byte('\L'), byte('\c'), byte('\L')]
   var count: int
   try:
-    count = await request.reader.readUntil(request.buf[0].addr, len(request.buf), sep = HeaderSep)
+    count = await req.reader.readUntil(req.buf[0].addr, len(req.buf), sep = HeaderSep)
   except AsyncStreamIncompleteError:
     return true
   except AsyncStreamLimitError:
-    await request.respStatus(Http400, BufferLimitExceeded)
-    request.transp.close()
+    await req.respStatus(Http400, BufferLimitExceeded)
+    req.transp.close()
     return false
   except AsyncStreamError as e:
-    await request.respStatus(Http400, e.msg)
-    request.transp.close()
+    await req.respStatus(Http400, e.msg)
+    req.transp.close()
     return false
   # Headers
-  let headerEnd = request.httpParser.parseHeader(addr request.buf[0], request.buf.len)
+  let headerEnd = req.httpParser.parseHeader(addr req.buf[0], req.buf.len)
   assert headerEnd != -1
   if headerEnd == -1:
-    await request.respError(Http400)
+    await req.respError(Http400)
     return true
-  request.httpParser.toHttpHeaders(request.headers)
-  case request.httpParser.getMethod
-    of "GET": request.meth = HttpGet
-    of "POST": request.meth = HttpPost
-    of "HEAD": request.meth = HttpHead
-    of "PUT": request.meth = HttpPut
-    of "DELETE": request.meth = HttpDelete
-    of "PATCH": request.meth = HttpPatch
-    of "OPTIONS": request.meth = HttpOptions
-    of "CONNECT": request.meth = HttpConnect
-    of "TRACE": request.meth = HttpTrace
+  req.httpParser.toHttpHeaders(req.headers)
+  case req.httpParser.getMethod
+    of "GET": req.meth = HttpGet
+    of "POST": req.meth = HttpPost
+    of "HEAD": req.meth = HttpHead
+    of "PUT": req.meth = HttpPut
+    of "DELETE": req.meth = HttpDelete
+    of "PATCH": req.meth = HttpPatch
+    of "OPTIONS": req.meth = HttpOptions
+    of "CONNECT": req.meth = HttpConnect
+    of "TRACE": req.meth = HttpTrace
     else:
-      await request.respError(Http501)
+      await req.respError(Http501)
       return true
 
-  request.path = request.httpParser.getPath()
+  req.path = req.httpParser.getPath()
   try:
-    request.url = parseUrl("http://" & request.hostname & request.path)[]
+    req.url = parseUrl("http://" & req.hostname & req.path)[]
   except ValueError as e:
-    request.server.logSub.next(e.msg)
-    asyncSpawn request.respError(Http400)
+    req.server.logSub.next(e.msg)
+    asyncSpawn req.respError(Http400)
     return true
-  case request.httpParser.major[]:
+  case req.httpParser.major[]:
     of '1':
-      request.protocol.major = 1
+      req.protocol.major = 1
     of '2':
-      request.protocol.major = 2
+      req.protocol.major = 2
     else:
       discard
-  case request.httpParser.minor[]:
+  case req.httpParser.minor[]:
     of '0':
-      request.protocol.minor = 0
+      req.protocol.minor = 0
     of '1':
-      request.protocol.minor = 1
+      req.protocol.minor = 1
     else:
       discard
-  if request.protocol == HttpVer20:
-    await request.respStatus(Http505)
+  if req.protocol == HttpVer20:
+    await req.respStatus(Http505)
     return false
 
-  if request.meth == HttpPost:
+  if req.meth == HttpPost:
     # Check for Expect header
-    if request.headers.hasKey("Expect"):
-      if "100-continue" in request.headers["Expect"]:
-        await request.respStatus(Http400)
+    if req.headers.hasKey("Expect"):
+      if "100-continue" in req.headers["Expect"]:
+        await req.respStatus(Http400)
       else:
-        await request.respStatus(Http417)
+        await req.respStatus(Http417)
 
   # Read the body
   # - Check for Content-length header
-  if unlikely(request.meth in MethodNeedsBody):
-    if request.headers.hasKey("Content-Length"):
+  if unlikely(req.meth in MethodNeedsBody):
+    if req.headers.hasKey("Content-Length"):
       try:
-        discard parseBiggestUInt(request.headers["Content-Length"], request.contentLength)
+        discard parseBiggestUInt(req.headers["Content-Length"], req.contentLength)
       except ValueError:
-        await request.respStatus(Http400, "Invalid Content-Length.")
+        await req.respStatus(Http400, "Invalid Content-Length.")
         return true
-      if request.contentLength.int > scorper.maxBody:
-        await request.respStatus(Http413)
+      if req.contentLength.int > scorper.maxBody:
+        await req.respStatus(Http413)
         return false
-      if request.headers.hasKey("Content-Type"):
-        request.contentType = request.headers["Content-Type"]
+      if req.headers.hasKey("Content-Type"):
+        req.contentType = req.headers["Content-Type"]
     else:
-      await request.respStatus(Http411)
+      await req.respStatus(Http411)
       return true
   # Call the user's callback.
   if scorper.callback != nil:
-    shallowCopy(request.query, request.url.query)
-    await scorper.callback(request)
+    shallowCopy(req.query, req.url.query)
+    await scorper.callback(req)
   elif scorper.router != nil:
-    let matched = scorper.router.match($request.meth, request.url.path)
+    let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
-      request.params = matched.route.params[]
-      shallowCopy(request.query, request.url.query)
-      request.prefix = matched.route.prefix
-      await matched.handler(request)
+      req.params = matched.route.params[]
+      shallowCopy(req.query, req.url.query)
+      req.prefix = matched.route.prefix
+      await matched.handler(req)
     else:
-      await request.respError(Http404)
+      await req.respError(Http404)
 
-  if "upgrade" in request.headers.getOrDefault("connection"):
+  if "upgrade" in req.headers.getOrDefault("connection"):
     return false
 
-  # The request has been served, from this point on returning `true` means the
+  # The req has been served, from this point on returning `true` means the
   # connection will not be closed and will be kept in the connection pool.
 
   # Persistent connections
-  if (request.protocol == HttpVer11 and
-      cmpIgnoreCase(request.headers.getOrDefault("connection"), "close") != 0) or
-     (request.protocol == HttpVer10 and
-      cmpIgnoreCase(request.headers.getOrDefault("connection"), "keep-alive") == 0):
+  if (req.protocol == HttpVer11 and
+      cmpIgnoreCase(req.headers.getOrDefault("connection"), "close") != 0) or
+     (req.protocol == HttpVer10 and
+      cmpIgnoreCase(req.headers.getOrDefault("connection"), "keep-alive") == 0):
     # In HTTP 1.1 we assume that connection is persistent. Unless connection
     # header states otherwise.
     # In HTTP 1.0 we assume that the connection should not be persistent.
     # Unless the connection header states otherwise.
     return true
   else:
-    await request.transp.closeWait()
+    await req.transp.closeWait()
     return false
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
@@ -767,9 +790,9 @@ proc isComplete*(resumable: Resumable): bool =
     inc i
   return complete
 
-proc handleResumableUpload*(request: Request; resumableKeys = newResumableKeys()): Future[ResumableResult]{.async.} =
+proc handleResumableUpload*(req: Request; resumableKeys = newResumableKeys()): Future[ResumableResult]{.async.} =
   template resumableParam(key: untyped): untyped =
-    request.query[resumableKeys.`key`]
+    req.query[resumableKeys.`key`]
 
   var resumable: Resumable
   discard parseBiggestUInt(resumableParam(totalChunks), resumable.totalChunks)
@@ -783,14 +806,14 @@ proc handleResumableUpload*(request: Request; resumableKeys = newResumableKeys()
   const bufSize = 8192
   var buffer: array[bufSize, char]
   if fileExists(tmpDir / chunkKey):
-    await request.respStatus(Http201)
+    await req.respStatus(Http201)
   else:
     let file = open(tmpDir / chunkKey, fmWrite)
-    let stream = request.stream()
+    let stream = req.stream()
     var nbytes: int
     var reads: BiggestUInt
     while not stream.atEof():
-      if reads == request.len:
+      if reads == req.len:
         break
       if reads == resumable.currentChunkSize:
         break
@@ -798,7 +821,7 @@ proc handleResumableUpload*(request: Request; resumableKeys = newResumableKeys()
       reads.inc nbytes
       discard file.writeBuffer(buffer[0].addr, nbytes)
     file.close
-    await request.respStatus(Http200)
+    await req.respStatus(Http200)
 
   let complete = resumable.isComplete()
   if complete:
