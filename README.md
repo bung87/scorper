@@ -92,6 +92,12 @@ when isMainModule:
 - [x] https support 
 - [x] handle Resumable upload
 
+## Contribution  
+check Todo list upon and [issues](https://github.com/bung87/scorper/issues)  
+
+clone this repository, run `nimble install stage` , if you already have `stage` installed, run `stage init`  
+`stage` is used for integrating with git commit hook, doing checking and code formatting.  
+
 ## Benchmark  
 
 requires `wrk`  
