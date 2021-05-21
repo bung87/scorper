@@ -36,7 +36,7 @@ proc testMultipart() {.async.} =
     echo $form
     doAssert form.data["author"] == "bung"
     let x: FormFile = form.files["uploaded_file"]
-    let c = x.open().readAll
+    let c = open(x.filepath).readAll
     let e = readFile getCurrentDir() / "README.md"
     doAssert c == e
     doAssert x.filename == "README.md"

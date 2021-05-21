@@ -30,11 +30,20 @@ proc newForm*(): Form =
 func `[]`*(x: FormData | FormFiles, key: string): seq[ContentDisposition] =
   filter(x.store, proc(y: ContentDisposition): bool = y.name == key)
 
-func `[]`*(x: FormData, key: string): seq[string] =
-  filter(x.store, proc(y: ContentDisposition): bool = y.name == key).mapIt(it.value)
+func `[]`*(x: FormData, key: string): string =
+  for v in x.store:
+    if v.name == key:
+      return v.value
 
-func `[]`*(x: FormFiles, key: string): seq[string] =
-  filter(x.store, proc(y: ContentDisposition): bool = y.name == key).mapIt(it.filepath)
+converter toSeqString*(x: FormFiles): seq[string] =
+  x.store.mapIt(it.filepath)
+
+converter toSeqFormFile*(x: FormFiles): seq[FormFile] =
+  x.store.mapIt(FormFile(filename: it.filename, filepath: it.filepath,
+          contentType: it.contentType))
+
+converter toSeqString*(x: FormData): seq[string] =
+  x.store.mapIt(it.value)
 
 converter toString*(values: seq[ContentDisposition]): string =
   for v in values:
