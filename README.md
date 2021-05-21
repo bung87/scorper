@@ -9,7 +9,7 @@ Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 
 `scorper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
 
-
+**Notice**: `scorper` heavily relys on `chronos` which use its own `async` macro it will conflicts with std `asyncdispatch`'s `async` macro, check your project dependencies chronos support first.    
 ## Compile flags  
 
 ``` nim 
@@ -123,9 +123,13 @@ Transfer/sec:      3.12MB
 ### Conclusion
 *qps* almost ten thousands faster than `jester` with stdlib.  it even thousand faster than `asynchttpserver`
 
-## Limitations  
+## Extro feature or limitations  
 
 the `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructions  
+
+## Related projects  
+
+[amysql](https://github.com/bung87/amysql)  Async MySQL Connector write in pure Nim. (support chronos with compile flag `-d:ChronosAsync`)
 
 ## License  
 
