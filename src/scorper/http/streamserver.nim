@@ -58,7 +58,7 @@ type
     prefix: string
     parsedJson: Option[JsonNode]
     parsedForm: Option[Form]
-    parsed: bool
+    parsed: bool               # indicate http body parsed
     rawBody: Option[string]
     responded: bool
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
@@ -526,6 +526,10 @@ proc form*(req: Request): Future[Form] {.async.} =
   req.parsedForm = some(result)
   req.parsed = true
 
+proc postCheck(req: Request): Future[int]{.async.} =
+  if req.meth in MethodNeedsBody and req.parsed == false:
+    result = await req.reader.consume()
+
 proc processRequest(
   scorper: Scorper,
   req: Request,
@@ -626,6 +630,7 @@ proc processRequest(
   if scorper.callback != nil:
     shallowCopy(req.query, req.url.query)
     await scorper.callback(req)
+    discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
@@ -633,6 +638,7 @@ proc processRequest(
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
       await matched.handler(req)
+      discard await postCheck(req)
     else:
       await req.respError(Http404)
 
