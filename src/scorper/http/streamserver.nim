@@ -13,7 +13,23 @@ import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpf
 import std / [os, streams, options, strformat, times, mimetypes, json, sequtils, macros]
 import rx_nim
 import zippy
-import chronos / streams/tlsstream
+when defined(ssl):
+  import chronos / streams/tlsstream
+else:
+  type
+    TLSVersion* {.pure.} = enum
+      TLS10 = 0x0301, TLS11 = 0x0302, TLS12 = 0x0303
+
+    TLSFlags* {.pure.} = enum
+      NoVerifyHost,         # Client: Skip remote certificate check
+      NoVerifyServerName,   # Client: Skip Server Name Indication (SNI) check
+      EnforceServerPref,    # Server: Enforce server preferences
+      NoRenegotiation,      # Server: Reject renegotiations requests
+      TolerateNoClientAuth, # Server: Disable strict client authentication
+      FailOnAlpnMismatch    # Server: Fail on application protocol mismatch
+    TLSSessionCache* = ref object
+      # storage: seq[byte]
+      # context: SslSessionCacheLru
 import chronos / sendfile
 import exts/resumable
 import results
