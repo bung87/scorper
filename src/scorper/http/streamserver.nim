@@ -528,7 +528,7 @@ proc form*(req: Request): Future[Form] {.async.} =
 
 proc postCheck(req: Request): Future[int]{.async.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
-    result = await req.reader.consume()
+    result = await req.reader.consume(req.contentLength.int)
 
 proc processRequest(
   scorper: Scorper,
@@ -629,16 +629,16 @@ proc processRequest(
   # Call the user's callback.
   if scorper.callback != nil:
     shallowCopy(req.query, req.url.query)
+    defer: discard await postCheck(req)
     await scorper.callback(req)
-    discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
       req.params = matched.route.params[]
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
+      defer: discard await postCheck(req)
       await matched.handler(req)
-      discard await postCheck(req)
     else:
       await req.respError(Http404)
 
