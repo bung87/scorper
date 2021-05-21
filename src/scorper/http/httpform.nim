@@ -14,11 +14,6 @@ type
     data*: FormData
     files*: FormFiles
 
-proc open*(x: FormFile): File = open(x.filepath)
-
-proc readFile*(x: FormFile): string =
-  readFile(x.filepath)
-
 proc add*(x: FormData | FormFiles, y: sink ContentDisposition) =
   x.store.add y
 
@@ -34,6 +29,12 @@ proc newForm*(): Form =
 
 func `[]`*(x: FormData | FormFiles, key: string): seq[ContentDisposition] =
   filter(x.store, proc(y: ContentDisposition): bool = y.name == key)
+
+func `[]`*(x: FormData, key: string): seq[string] =
+  filter(x.store, proc(y: ContentDisposition): bool = y.name == key).mapIt(it.value)
+
+func `[]`*(x: FormFiles, key: string): seq[string] =
+  filter(x.store, proc(y: ContentDisposition): bool = y.name == key).mapIt(it.filepath)
 
 converter toString*(values: seq[ContentDisposition]): string =
   for v in values:
