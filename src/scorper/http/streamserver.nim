@@ -487,10 +487,7 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
     req.parsedJson = some(result)
     req.parsed = true
     return result
-  try:
-    result = parseJson(str)
-  except JsonParsingError as e:
-    await req.respError(Http400, e.msg)
+  result = parseJson(str)
   req.parsedJson = some(result)
   req.parsed = true
 
@@ -660,22 +657,24 @@ proc processRequest(
   # Call the user's callback.
   if scorper.callback != nil:
     shallowCopy(req.query, req.url.query)
-    defer: discard await postCheck(req)
     try:
       await scorper.callback(req)
     except:
-      discard
+      if not req.responded:
+        await req.respError(Http400, getCurrentExceptionMsg())
+    discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
       req.params = matched.route.params[]
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
-      defer: discard await postCheck(req)
       try:
         await matched.handler(req)
       except:
-        discard
+        if not req.responded:
+          await req.respError(Http400, getCurrentExceptionMsg())
+      discard await postCheck(req)
     else:
       await req.respError(Http404)
 
