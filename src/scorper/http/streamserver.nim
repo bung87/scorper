@@ -99,9 +99,9 @@ proc formatCommon*(r: Request, status: HttpCode, size: int): string =
   let remoteUser = os.getEnv("REMOTE_USER", "-")
   result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
-proc genericHeaders(): HttpHeaders {.tags: [TimeEffect].} =
+proc genericHeaders(headers = newHttpHeaders()): HttpHeaders {.tags: [TimeEffect].} =
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
-  result = newHttpHeaders()
+  result = headers
   result["Date"] = httpDate()
   result["X-Frame-Options"] = "SAMEORIGIN"
 
@@ -161,11 +161,11 @@ proc resp*(req: Request, content: string,
   await req.writer.write(msg)
   req.responded = true
 
-proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.async.} =
+proc respError*(req: Request, code: HttpCode, content: string, headers = newHttpHeaders()): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
     return
-  var headers = genericHeaders()
+  var headers = genericHeaders(headers)
   let gzip = req.gzip()
   let originalLen = content.len
   let needCompress = gzip and originalLen >= gzipMinLength
@@ -180,11 +180,11 @@ proc respError*(req: Request, code: HttpCode, content: string): Future[void] {.a
   await req.writer.write(msg)
   req.responded = true
 
-proc respError*(req: Request, code: HttpCode): Future[void] {.async.} =
+proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
     return
-  var headers = genericHeaders()
+  var headers = genericHeaders(headers)
   let content = $code
   headers["Content-Length"] = $content.len
   var msg = generateHeaders(headers, code)
@@ -661,7 +661,24 @@ proc processRequest(
       await scorper.callback(req)
     except:
       if not req.responded:
-        await req.respError(Http400, getCurrentExceptionMsg())
+        var headers = newHttpHeaders()
+        let err = getCurrentException()
+        acceptMime(req, ext, headers):
+          case ext
+          of "json":
+            var s: string
+            toUgly(s, %* {"error": err.msg})
+            await req.respError(Http400, s, headers)
+          of "js": # https://datatracker.ietf.org/doc/html/rfc4329
+            let cbName: string = req.query["callback"]
+            var s: string
+            toUgly(s, %* {"error": err.msg})
+            await req.respError(Http400, fmt"""{cbName}({s});""", headers)
+          of "html": await req.respError(Http400, err.msg, headers)
+          of "txt": await req.respError(Http400, err.msg, headers)
+          else:
+            headers["Content-Type"] = "text/plain"
+            await req.respError(Http400, err.msg, headers)
     discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
@@ -673,7 +690,24 @@ proc processRequest(
         await matched.handler(req)
       except:
         if not req.responded:
-          await req.respError(Http400, getCurrentExceptionMsg())
+          var headers = newHttpHeaders()
+          let err = getCurrentException()
+          acceptMime(req, ext, headers):
+            case ext
+            of "json":
+              var s: string
+              toUgly(s, %* {"error": err.msg})
+              await req.respError(Http400, s, headers)
+            of "js":
+              let cbName: string = req.query["callback"]
+              var s: string
+              toUgly(s, %* {"error": err.msg})
+              await req.respError(Http400, fmt"""{cbName}({s});""", headers)
+            of "html": await req.respError(Http400, err.msg, headers)
+            of "txt": await req.respError(Http400, err.msg, headers)
+            else:
+              headers["Content-Type"] = "text/plain"
+              await req.respError(Http400, err.msg, headers)
       discard await postCheck(req)
     else:
       await req.respError(Http404)
