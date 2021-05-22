@@ -2,7 +2,7 @@
 import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
-import json
+import json, strutils
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 
@@ -50,6 +50,30 @@ proc testJson() {.async.} =
     runTest(handler, request, test)
   except:
     discard
+
+proc testJsonError() {.async.} =
+  proc handler(request: Request) {.async.} =
+    let j = await request.json()
+    await request.resp($j)
+
+  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+    let
+      client = newAsyncHttpClient()
+
+    let clientResponse = await client.sendJson(TestUrl, body = """{ "name": "Nim" "age": 12 }""")
+    await client.close()
+
+    return clientResponse
+
+  proc test(response: AsyncResponse, body: string) {.async.} =
+    doAssert(response.code == Http400)
+    doAssert("Error" in body)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
+
 waitfor(testJson())
+waitfor(testJsonError())
 
 echo "OK"

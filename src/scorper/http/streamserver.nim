@@ -479,26 +479,30 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
   if req.parsedJson.isSome:
     return req.parsedJson.unSafeGet
   var str: string
+  result = newJNull()
   try:
     str = await req.reader.readLine(limit = req.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await req.respStatus(Http400, ContentLengthMismatch)
-    return
+    req.parsedJson = some(result)
+    req.parsed = true
+    return result
   try:
     result = parseJson(str)
-  except:
-    discard
+  except JsonParsingError as e:
+    await req.respError(Http400, e.msg)
   req.parsedJson = some(result)
   req.parsed = true
 
 proc body*(req: Request): Future[string] {.async.} =
   if req.rawBody.isSome:
     return req.rawBody.unSafeGet
+  result = ""
   try:
     result = await req.reader.readLine(limit = req.contentLength.int)
   except AsyncStreamIncompleteError as e:
     await req.respStatus(Http400, ContentLengthMismatch)
-    return
+  req.rawBody = some(result)
   req.parsed = true
 
 proc stream*(req: Request): AsyncStreamReader =
