@@ -38,5 +38,5 @@ task benchmarkserver,"benchmarkserver":
   exec "nim c -r -d:release --threads:on -d:port=7777 -d:serverTest -d:demoPath=examples/hello_world.nim benchmark/benchmark.nim"
   exec "nim c -r -d:release --threads:on -d:port=6666 -d:serverTest -d:demoPath=benchmark/tstdserver.nim benchmark/benchmark.nim"
 
-tast strict, "stric async exception check":
+task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"

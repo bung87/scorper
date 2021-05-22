@@ -529,7 +529,11 @@ proc form*(req: Request): Future[Form] {.async.} =
           await req.respError(Http400, e.msg)
           return
         var parser = newMultipartParser(parsed.boundary, req.transp, req.buf.addr, req.contentLength.int)
-        await parser.parse()
+        try:
+          await parser.parse()
+        except BodyIncompleteError as e:
+          await req.respError(Http400, e.msg)
+          return
         if parser.state == boundaryEnd:
           for disp in parser.dispositions:
             if disp.kind == ContentDispositionKind.data:

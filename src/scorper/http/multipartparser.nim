@@ -17,6 +17,7 @@ type
   BoundaryMissingError* = object of CatchableError
   BoundaryInvalidError* = object of CatchableError
   LineIncompleteError = object of CatchableError
+  BodyIncompleteError* = object of CatchableError
   MultipartState* = enum
     boundaryBegin, boundaryEnd, contentEnd, disposition, contentBegin
   MultipartParser* = ref object
@@ -274,7 +275,7 @@ proc readUntilBoundary(parser: MultipartParser): Future[int] {.async.} =
   let beginSep = "\c\l" & parser.boundaryBegin
   let beginSepLen = len(beginSep)
   while result < needed:
-    discard await parser.transp.readOnce(parser.src[result].addr, 1)
+    await parser.transp.readExactly(parser.src[result].addr, 1)
     if beginSep[j] == parser.src[result]:
       inc(j)
       if j == beginSepLen:
@@ -360,6 +361,8 @@ proc parse*(parser: MultipartParser) {.async.} =
                 debug "start readLine"
                 parser.tmpRead = await parser.readUntilBoundary()
                 needReload = false
+              except TransportIncompleteError as e:
+                raise newException(BodyIncompleteError, e.msg)
               except LineIncompleteError:
                 debug "LineIncompleteError parser.needReadLen:" & $parser.needReadLen
                 parser.tmpRead = parser.needReadLen
