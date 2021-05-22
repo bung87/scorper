@@ -10,7 +10,14 @@ Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral 
 `scorper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
 
 **Notice**: `scorper` heavily relys on `chronos` which use its own `async` macro it will conflicts with std `asyncdispatch`'s `async` macro, check your project dependencies chronos support first.    
+
+## Production 
+
+compile your program with `-d:chronosStrictException` if you dont want any exception crash your program.  for details check chronos's readme [#Error handling](https://github.com/status-im/nim-chronos#error-handling)
+
 ## Compile flags  
+`-d:ssl`  
+then use `newScorper` proc and pass `isSecurity = true`,`privateKey`, `certificate`  
 
 ``` nim 
 const HttpRequestBufferSize* {.intdefine.} = 2.Kb
