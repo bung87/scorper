@@ -114,14 +114,6 @@ proc getMimetype*(req: Request, ext: string): string =
 macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untyped) =
   ## Responds to the req respect client's accept
   ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
-  expectLen(body, 1)
-  expectKind(body[0], nnkCaseStmt)
-  for item in body[0]:
-    if item.kind in {nnkOfBranch, nnkElifBranch}:
-      expectKind(item.last, nnkStmtList)
-      item.last.add nnkBreakStmt.newTree(newEmptyNode())
-    elif item.kind == nnkElse:
-      item[0].add nnkBreakStmt.newTree(newEmptyNode())
   result = quote do:
     var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
     let accept: string = req.headers["accept"]
@@ -577,6 +569,25 @@ proc postCheck(req: Request): Future[int]{.async.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
+proc defaultErrorHandle(req: Request, err: ref Exception){.async.} =
+  var headers = newHttpHeaders()
+  acceptMime(req, ext, headers):
+    case ext
+    of "json":
+      var s: string
+      toUgly(s, %* {"error": err.msg})
+      await req.respError(Http400, s, headers)
+    of "js":
+      let cbName: string = req.query["callback"]
+      var s: string
+      toUgly(s, %* {"error": err.msg})
+      await req.respError(Http400, fmt"""{cbName}({s});""", headers)
+    of "html": await req.respError(Http400, err.msg, headers)
+    of "txt": await req.respError(Http400, err.msg, headers)
+    else:
+      headers["Content-Type"] = "text/plain"
+      await req.respError(Http400, err.msg, headers)
+
 proc processRequest(
   scorper: Scorper,
   req: Request,
@@ -685,22 +696,7 @@ proc processRequest(
       if not req.responded:
         var headers = newHttpHeaders()
         let err = getCurrentException()
-        acceptMime(req, ext, headers):
-          case ext
-          of "json":
-            var s: string
-            toUgly(s, %* {"error": err.msg})
-            await req.respError(Http400, s, headers)
-          of "js": # https://datatracker.ietf.org/doc/html/rfc4329
-            let cbName: string = req.query["callback"]
-            var s: string
-            toUgly(s, %* {"error": err.msg})
-            await req.respError(Http400, fmt"""{cbName}({s});""", headers)
-          of "html": await req.respError(Http400, err.msg, headers)
-          of "txt": await req.respError(Http400, err.msg, headers)
-          else:
-            headers["Content-Type"] = "text/plain"
-            await req.respError(Http400, err.msg, headers)
+        await req.defaultErrorHandle(err)
     discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
@@ -714,22 +710,7 @@ proc processRequest(
         if not req.responded:
           var headers = newHttpHeaders()
           let err = getCurrentException()
-          acceptMime(req, ext, headers):
-            case ext
-            of "json":
-              var s: string
-              toUgly(s, %* {"error": err.msg})
-              await req.respError(Http400, s, headers)
-            of "js":
-              let cbName: string = req.query["callback"]
-              var s: string
-              toUgly(s, %* {"error": err.msg})
-              await req.respError(Http400, fmt"""{cbName}({s});""", headers)
-            of "html": await req.respError(Http400, err.msg, headers)
-            of "txt": await req.respError(Http400, err.msg, headers)
-            else:
-              headers["Content-Type"] = "text/plain"
-              await req.respError(Http400, err.msg, headers)
+          await req.defaultErrorHandle(err)
       discard await postCheck(req)
     else:
       await req.respError(Http404)
