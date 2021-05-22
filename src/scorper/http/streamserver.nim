@@ -138,6 +138,13 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
 proc gzip*(req: Request): bool = req.headers.hasKey("Accept-Encoding") and
     string(req.headers["Accept-Encoding"]).contains("gzip")
 
+template devLog(req: Request, content: string) =
+  when not defined(release):
+    try:
+      req.server.logSub.next(content)
+    except:
+      discard
+
 proc resp*(req: Request, content: string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``, headers and
@@ -151,7 +158,8 @@ proc resp*(req: Request, content: string,
   if needCompress:
     headers["Content-Encoding"] = "gzip"
   let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let flen = if needCompress: $(ctn.len) else: $originalLen
+  let length = if needCompress: ctn.len else: originalLen
+  let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
   headers.hasKeyOrPut("Date"):
@@ -159,6 +167,7 @@ proc resp*(req: Request, content: string,
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
   await req.writer.write(msg)
+  req.devLog(req.formatCommon(code, length))
   req.responded = true
 
 proc respError*(req: Request, code: HttpCode, content: string, headers = newHttpHeaders()): Future[void] {.async.} =
@@ -172,12 +181,14 @@ proc respError*(req: Request, code: HttpCode, content: string, headers = newHttp
   if needCompress:
     headers["Content-Encoding"] = "gzip"
   let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let flen = if needCompress: $(ctn.len) else: $originalLen
+  let length = if needCompress: ctn.len else: originalLen
+  let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
   await req.writer.write(msg)
+  req.devLog(req.formatCommon(code, length))
   req.responded = true
 
 proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Future[void] {.async.} =
@@ -186,10 +197,20 @@ proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Futur
     return
   var headers = genericHeaders(headers)
   let content = $code
-  headers["Content-Length"] = $content.len
+  let gzip = req.gzip()
+  let originalLen = content.len
+  let needCompress = gzip and originalLen >= gzipMinLength
+  if needCompress:
+    headers["Content-Encoding"] = "gzip"
+  let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
+  let length = if needCompress: ctn.len else: originalLen
+  let flen = $length
+  headers.hasKeyOrPut("Content-Length"):
+    flen
   var msg = generateHeaders(headers, code)
   msg.add(content)
   await req.writer.write(msg)
+  req.devLog(req.formatCommon(code, length))
   req.responded = true
 
 proc pairParam(x: tuple[key: string, value: string]): string =
@@ -205,18 +226,21 @@ proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: s
   headers["WWW-Authenticate"] = &"{scheme} realm={realm}" & extro
   let msg = generateHeaders(headers, code)
   await req.writer.write(msg)
+  req.devLog(req.formatCommon(code, 0))
   req.responded = true
 
 proc respStatus*(req: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
   if req.responded == true:
     return
   await req.writer.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
+  req.devLog(req.formatCommon(code, 0))
   req.responded = true
 
 proc respStatus*(req: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
   if req.responded == true:
     return
   await req.writer.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
+  req.devLog(req.formatCommon(code, 0))
   req.responded = true
 
 template writeFileFull(req: Request, file: File, size: int) =
@@ -398,10 +422,7 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     await req.writer.write(msg)
     await req.writeFile(filepath, meta.unsafeGet.info.size.int)
-    try:
-      req.server.logSub.next(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
-    except:
-      discard
+    req.devLog(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
@@ -422,7 +443,7 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
       var msg = generateHeaders(meta.unsafeGet.headers, Http206)
       await req.writer.write(msg)
       await req.writePartialFile(filepath, ranges, meta, boundary, mime)
-      # req.server.logSub.next(req.formatCommon(Http206, contentLength))
+      req.devLog(req.formatCommon(Http206, contentLength))
 
 proc sendDownload*(req: Request, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
@@ -435,6 +456,7 @@ proc sendDownload*(req: Request, filepath: string) {.async.} =
   var msg = generateHeaders(meta.unsafeGet.headers, Http200)
   await req.writer.write(msg)
   await req.writeFile(filepath, meta.unsafeGet.info.size.int)
+  req.devLog(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
   req.responded = true
 
 proc sendAttachment*(req: Request, filepath: string, asName: string = "") {.async.} =
@@ -815,7 +837,7 @@ proc serve*(address: string,
     except:
       discard
   try:
-    server.logSub.next("Scorper serve at http://" & $address)
+    server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $address)
   except:
     discard
   await server.join()

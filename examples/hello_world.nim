@@ -1,4 +1,5 @@
 import scorper
+
 const port{.intdefine.} = 8888
 when isMainModule:
   proc cb(req: Request) {.async.} =
