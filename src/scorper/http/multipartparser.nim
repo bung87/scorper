@@ -404,7 +404,10 @@ proc parse*(parser: MultipartParser) {.async.} =
                     debug "reduceBack:", $reduceBack
                     parser.currentDisposition.file.writeData(parser.src[0].addr, parser.tmpRead - reduceBack)
                     parser.currentDisposition.file.flush
-                    parser.currentDisposition.file.close
+                    try:
+                      parser.currentDisposition.file.close
+                    except Exception:
+                      discard
                     parser.state = boundaryEnd
                     break outterloop
                     # break contentReadLoop
@@ -422,7 +425,10 @@ proc parse*(parser: MultipartParser) {.async.} =
             except LineIncompleteError:
               if parser.currentDisposition.kind == file:
                 parser.currentDisposition.file.flush
-                parser.currentDisposition.file.close
+                try:
+                  parser.currentDisposition.file.close
+                except Exception:
+                  discard
               parser.state = boundaryEnd
               continue
             debug "contentEnd tmp:" & $parser.tmpRead

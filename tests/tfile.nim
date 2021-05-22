@@ -1,7 +1,7 @@
 
 import ./scorper/http/streamserver
 import ./scorper/http/streamclient
-import ./scorper/http/httpcore,chronos
+import ./scorper/http/httpcore, chronos
 import os
 
 const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
@@ -9,7 +9,7 @@ const source = staticRead(currentSourcePath.parentDir / "range.txt")
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void])  =
+    test: proc (response: AsyncResponse, body: string): Future[void]) =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
@@ -31,7 +31,7 @@ proc testSendFIle() {.async.} =
   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
-    
+
     let clientResponse = await client.request(TestUrl)
     await client.close()
 
@@ -41,8 +41,10 @@ proc testSendFIle() {.async.} =
     doAssert(response.code == Http200)
     let body = await response.readBody
     doAssert body == source
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 waitfor(testSendFIle())
 
 echo "OK"

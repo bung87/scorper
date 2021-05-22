@@ -47,8 +47,10 @@ proc testParams() {.async.} =
     let q = {"q": "qux"}.toTable
     echo body
     doAssert(body == $p & $q)
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 proc testParamEncode() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -66,8 +68,10 @@ proc testParamEncode() {.async.} =
 
   proc test(response: AsyncResponse, body: string) {.async.} =
     doAssert(response.code == Http200)
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 proc testParamRaw() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -85,8 +89,10 @@ proc testParamRaw() {.async.} =
 
   proc test(response: AsyncResponse, body: string) {.async.} =
     doAssert(response.code == Http404)
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 waitfor(testParams())
 waitfor(testParamEncode())

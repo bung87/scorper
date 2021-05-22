@@ -47,8 +47,10 @@ proc test200() {.async.} =
     doAssert(body == "Hello World, 200")
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 proc test404() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -67,8 +69,10 @@ proc test404() {.async.} =
     doAssert(body == "Hello World, 404")
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 proc testCustomEmptyHeaders() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -87,8 +91,10 @@ proc testCustomEmptyHeaders() {.async.} =
     doAssert(body == "Hello World, 200")
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "16")
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 proc testCustomContentLength() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -109,8 +115,10 @@ proc testCustomContentLength() {.async.} =
     doAssert(body == "")
     doAssert(response.headers.hasKey("Content-Length"))
     doAssert(response.headers["Content-Length"] == "0")
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 proc testPost() {.async.} =
   proc handler(request: Request) {.async.} =
@@ -128,8 +136,10 @@ proc testPost() {.async.} =
   proc test(response: AsyncResponse, body: string) {.async.} =
     doAssert(response.code == Http200)
     doAssert(body == "Hello World, 200")
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 waitfor(test200())
 waitfor(test404())

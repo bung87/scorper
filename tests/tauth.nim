@@ -2,23 +2,23 @@
 import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/router
-import ./scorper/http/httpcore,chronos
+import ./scorper/http/httpcore, chronos
 import tables
 import strformat
 import base64
 
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe,raises: [].}
+type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe, raises: [].}
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void])  =
+    test: proc (response: AsyncResponse, body: string): Future[void]) =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
   let r = newRouter[AsyncCallback]()
-  r.addRoute(handler, "get","/auth/ok")
-  r.addRoute(handler, "get","/auth/error")
+  r.addRoute(handler, "get", "/auth/ok")
+  r.addRoute(handler, "get", "/auth/error")
   var server = newScorper(address, r, flags)
   server.start()
   let
@@ -54,14 +54,17 @@ proc testAuthOk() {.async.} =
     headers["Authorization"] = &"Basic {encoded}"
     let
       client = newAsyncHttpClient()
-      clientResponse = await client.request("http://127.0.0.1:64124/auth/ok",headers=headers)
+      clientResponse = await client.request("http://127.0.0.1:64124/auth/ok", headers = headers)
     echo clientResponse.code
     doassert clientResponse.code == Http200
     await client.close()
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 
 waitfor(testAuthOk())
+
 
 
 echo "OK"

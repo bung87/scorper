@@ -9,14 +9,18 @@ const TestUrl = "https://127.0.0.1:64124/foo?bar=qux"
 const source = staticRead(currentSourcePath.parentDir / "range.txt")
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (client: AsyncHttpClient): Future[AsyncResponse],
+    request: proc (client: AsyncHttpClient): Future[AsyncResponse] {.raises: [].},
     test: proc (response: AsyncResponse, body: string): Future[void]){.async.} =
 
   let address = "127.0.0.1:64124"
   let flags: set[ServerFlags] = {ReuseAddr}
-  var server = newScorper(address, handler, flags, isSecurity = true,
-    privateKey = HttpsSelfSignedRsaKey,
-    certificate = HttpsSelfSignedRsaCert)
+  var server: Scorper
+  try:
+    server = newScorper(address, handler, flags, isSecurity = true,
+      privateKey = HttpsSelfSignedRsaKey,
+      certificate = HttpsSelfSignedRsaCert)
+  except:
+    discard
   server.start()
   let
     client = newAsyncHttpClient()
@@ -24,7 +28,10 @@ proc runTest(
     response = await request(client)
     body = await response.readBody()
   await client.close
-  await test(response, body)
+  try:
+    await test(response, body)
+  except:
+    discard
 
   server.stop()
   server.close()

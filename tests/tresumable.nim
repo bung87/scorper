@@ -41,8 +41,10 @@ proc testSendFIle() {.async.} =
 
     await client.uploadResumable(filename, TestUrl)
     await client.close()
-
-  runTest(handler, request)
+  try:
+    runTest(handler, request)
+  except:
+    discard
 
 waitfor(testSendFIle())
 

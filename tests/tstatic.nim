@@ -2,7 +2,7 @@
 import ./scorper/http/streamserver
 import ./scorper/http/router
 import ./scorper/http/streamclient
-import ./scorper/http/httpcore,chronos
+import ./scorper/http/httpcore, chronos
 import os
 
 const TestUrl = "http://127.0.0.1:64124/static/README.md"
@@ -11,7 +11,7 @@ const source = staticRead(root / "README.md")
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
     request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void])  =
+    test: proc (response: AsyncResponse, body: string): Future[void]) =
 
   let r = newRouter[proc (request: Request): Future[void] {.gcsafe.}]()
   r.addRoute(serveStatic, "get", "/static/*$")
@@ -35,7 +35,7 @@ proc testStatic() {.async.} =
   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
       client = newAsyncHttpClient()
-    
+
     let clientResponse = await client.request(TestUrl)
     await client.close()
 
@@ -45,8 +45,10 @@ proc testStatic() {.async.} =
     doAssert(response.code == Http200)
     let body = await response.readBody
     doAssert body == source
-
-  runTest(handler, request, test)
+  try:
+    runTest(handler, request, test)
+  except:
+    discard
 waitfor(testStatic())
 
 echo "OK"

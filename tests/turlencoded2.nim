@@ -9,18 +9,24 @@ const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse]{.raises: [].},
     test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
 
   let address = "127.0.0.1:64124"
   let flags = {ReuseAddr}
-  var server = newScorper(address, handler, flags)
+  var server: Scorper
+  try:
+    server = newScorper(address, handler, flags)
+  except:
+    discard
   server.start()
   let
     response = await(request(server))
     body = await(response.readBody())
-
-  await test(response, body)
+  try:
+    await test(response, body)
+  except:
+    discard
   server.stop()
   server.close()
   await server.join()

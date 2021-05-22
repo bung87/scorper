@@ -11,13 +11,19 @@ var server{.threadvar.}: Scorper
 
 proc runTest(
     handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
+    request: proc (server: Scorper): Future[AsyncResponse]{.raises: [].},
     test: proc (response: AsyncResponse, body: string): Future[void]) {.async.} =
-  server.setHandler handler
+  try:
+    server.setHandler handler
+  except:
+    discard
   let
     response = await(request(server))
     body = await(response.readBody())
-  await test(response, body)
+  try:
+    await test(response, body)
+  except:
+    discard
 
 
 proc testFull(client: AsyncHttpClient) {.async.} =

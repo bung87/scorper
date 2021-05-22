@@ -235,14 +235,11 @@ proc writeFile(req: Request, fname: string, size: int): Future[void] {.async.} =
   var file: File
   try:
     file = open(fname)
-  except IOError as e:
-    req.server.logSub.next(e.msg)
-    return
-  except CatchableError as e:
-    req.server.logSub.next(e.msg)
-    return
   except Exception as e:
-    req.server.logSub.next(e.msg)
+    try:
+      req.server.logSub.next(e.msg)
+    except Exception:
+      discard
     return
   when defined(windows):
     handle = int(getOsFileHandle(file))
@@ -283,8 +280,11 @@ proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int
   if not req.server.isSecurity:
     try:
       file = open(fname)
-    except IOError as e:
-      req.server.logSub.next(e.msg)
+    except Exception as e:
+      try:
+        req.server.logSub.next(e.msg)
+      except Exception:
+        discard
       return
     when defined(windows):
       handle = int(getOsFileHandle(file))
@@ -302,7 +302,10 @@ proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int
     let offset = if b.ends >= 0: b.starts else: fullSize + b.ends
     let size = if b.ends > 0: b.ends - b.starts + 1: elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
     if req.server.isSecurity:
-      writeFileStream(req, fname, offset, size)
+      try:
+        writeFileStream(req, fname, offset, size)
+      except Exception:
+        discard
     else:
       var written = size
       when compiles(sendfile(req.writer.tsource.fd.FileHandle.int, handle, offset, written)):
@@ -384,14 +387,21 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
   if rangeRequest:
     let parser = rangeParser()
     let rng: string = req.headers["Range"]
-    let r = parser.match(rng, ranges)
+    var r: MatchResult[char]
+    try:
+      r = parser.match(rng, ranges)
+    except:
+      discard
     parseRangeOk = r.ok
   if not rangeRequest or not parseRangeOk:
     meta.unsafeGet.headers["Content-Type"] = mime
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     await req.writer.write(msg)
     await req.writeFile(filepath, meta.unsafeGet.info.size.int)
-    req.server.logSub.next(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
+    try:
+      req.server.logSub.next(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
+    except:
+      discard
   else:
     let boundary = "--" & $genOid()
     meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
@@ -440,7 +450,11 @@ proc serveStatic*(req: Request) {.async.} =
   if req.meth != HttpGet and req.meth != HttpHead:
     await req.respError(Http405)
     return
-  let relPath = req.url.path.relativePath(req.prefix)
+  var relPath: string
+  try:
+    relPath = req.url.path.relativePath(req.prefix)
+  except:
+    discard
   let absPath = absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
     await req.respError(Http404)
@@ -470,7 +484,10 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
   except AsyncStreamIncompleteError as e:
     await req.respStatus(Http400, ContentLengthMismatch)
     return
-  result = parseJson(str)
+  try:
+    result = parseJson(str)
+  except:
+    discard
   req.parsedJson = some(result)
   req.parsed = true
 
@@ -520,7 +537,10 @@ proc form*(req: Request): Future[Form] {.async.} =
             elif disp.kind == ContentDispositionKind.file:
               result.files.add disp
         else:
-          req.server.logSub.next("form parse error: " & $parser.state)
+          try:
+            req.server.logSub.next("form parse error: " & $parser.state)
+          except:
+            discard
       else:
         discard
   req.parsedForm = some(result)
@@ -580,7 +600,10 @@ proc processRequest(
   try:
     req.url = parseUrl("http://" & req.hostname & req.path)[]
   except ValueError as e:
-    req.server.logSub.next(e.msg)
+    try:
+      req.server.logSub.next(e.msg)
+    except:
+      discard
     asyncSpawn req.respError(Http400)
     return true
   case req.httpParser.major[]:
@@ -630,7 +653,10 @@ proc processRequest(
   if scorper.callback != nil:
     shallowCopy(req.query, req.url.query)
     defer: discard await postCheck(req)
-    await scorper.callback(req)
+    try:
+      await scorper.callback(req)
+    except:
+      discard
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
@@ -638,7 +664,10 @@ proc processRequest(
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
       defer: discard await postCheck(req)
-      await matched.handler(req)
+      try:
+        await matched.handler(req)
+      except:
+        discard
     else:
       await req.respError(Http404)
 
@@ -740,11 +769,17 @@ proc serve*(address: string,
   server.logSub = subject[string]()
   server.start()
   when not defined(release):
-    discard server.logSub.subscribe logSubOnNext
-  server.logSub.next("Scorper serve at http://" & $address)
+    try:
+      discard server.logSub.subscribe logSubOnNext
+    except:
+      discard
+  try:
+    server.logSub.next("Scorper serve at http://" & $address)
+  except:
+    discard
   await server.join()
 
-proc setHandler*(self: Scorper, handler: AsyncCallback) =
+proc setHandler*(self: Scorper, handler: AsyncCallback) {.raises: [].} =
   self.callback = handler
 
 proc newScorper*(address: string,
@@ -857,10 +892,16 @@ proc handleResumableUpload*(req: Request; resumableKeys = newResumableKeys()): F
         let readLen = s.readData(buffer.addr, buffer.len)
         file.writeData(buffer.addr, readLen)
       s.flush
-      s.close
+      try:
+        s.close
+      except:
+        discard
       inc j
     file.flush
-    file.close
+    try:
+      file.close
+    except:
+      discard
     let filepath = tmpDir / resumable.identifier
     resumable.savePath = filepath
     when not defined(release):
