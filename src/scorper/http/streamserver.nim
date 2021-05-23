@@ -9,7 +9,7 @@ import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
-    netunit, constant, mimetypes
+    netunit, constant, mimetypes, httperror
 import std / [os, streams, options, strformat, times, json, sequtils, macros]
 import rx_nim
 import zippy
@@ -501,7 +501,10 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
     req.parsedJson = some(result)
     req.parsed = true
     return result
-  result = parseJson(str)
+  try:
+    result = parseJson(str)
+  except JsonParsingError as e:
+    raise newHttpError(Http400, e.msg)
   req.parsedJson = some(result)
   req.parsed = true
 
@@ -569,24 +572,38 @@ proc postCheck(req: Request): Future[int]{.async.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
-proc defaultErrorHandle(req: Request, err: ref Exception){.async, raises: [].} =
+proc defaultErrorHandle(req: Request, err: ref Exception | HttpError){.async, raises: [].} =
   var headers = newHttpHeaders()
+  let code = when err is HttpError: err.code.HttpCode else: Http500 #
   acceptMime(req, ext, headers):
     case ext
     of "json":
       var s: string
       toUgly(s, %* {"error": err.msg})
-      await req.respError(Http400, s, headers)
+      await req.respError(code, s, headers)
     of "js":
       let cbName: string = req.query["callback"]
       var s: string
       toUgly(s, %* {"error": err.msg})
-      await req.respError(Http400, fmt"""{cbName}({s});""", headers)
-    of "html": await req.respError(Http400, err.msg, headers)
-    of "txt": await req.respError(Http400, err.msg, headers)
+      await req.respError(code, fmt"""{cbName}({s});""", headers)
+    of "html": await req.respError(code, err.msg, headers)
+    of "txt": await req.respError(code, err.msg, headers)
     else:
       headers["Content-Type"] = "text/plain"
       await req.respError(Http400, err.msg, headers)
+
+template tryHandle(body: untyped) =
+  try:
+    `body`
+  except HttpError as err:
+    if not req.responded:
+      var headers = newHttpHeaders()
+      await req.defaultErrorHandle(err)
+  except:
+    if not req.responded:
+      var headers = newHttpHeaders()
+      let err = getCurrentException()
+      await req.defaultErrorHandle(err)
 
 proc processRequest(
   scorper: Scorper,
@@ -690,13 +707,7 @@ proc processRequest(
   # Call the user's callback.
   if scorper.callback != nil:
     shallowCopy(req.query, req.url.query)
-    try:
-      await scorper.callback(req)
-    except:
-      if not req.responded:
-        var headers = newHttpHeaders()
-        let err = getCurrentException()
-        await req.defaultErrorHandle(err)
+    tryHandle(await scorper.callback(req))
     discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
@@ -704,13 +715,7 @@ proc processRequest(
       req.params = matched.route.params[]
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
-      try:
-        await matched.handler(req)
-      except:
-        if not req.responded:
-          var headers = newHttpHeaders()
-          let err = getCurrentException()
-          await req.defaultErrorHandle(err)
+      tryHandle(await matched.handler(req))
       discard await postCheck(req)
     else:
       await req.respError(Http404)

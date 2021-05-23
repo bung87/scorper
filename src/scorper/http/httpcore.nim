@@ -7,10 +7,7 @@ type
 
   HttpHeaderValues* = distinct seq[string]
 
-  # The range starts at '0' so that we don't have to explicitly initialise
-  # it. See: http://irclogs.nim-lang.org/19-09-2016.html#19:48:27 for context.
   HttpCode* = distinct range[0 .. 599]
-
   HttpVersion* = enum
     HttpVer11 = "HTTP/1.1",
     HttpVer10 = "HTTP/1.0"
