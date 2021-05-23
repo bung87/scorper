@@ -844,7 +844,7 @@ proc newScorper*(address: string,
   result.logSub = subject[string]()
   when not defined(release):
     discard result.logSub.subscribe logSubOnNext
-  result.logSub.next("Scorper serve at http://" & $address)
+  result.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
   when defined(ssl):
     if isSecurity:
@@ -872,7 +872,7 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
   result.logSub = subject[string]()
   when not defined(release):
     discard result.logSub.subscribe logSubOnNext
-  result.logSub.next("Scorper serve at http://" & $address)
+  result.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
   when defined(ssl):
     if isSecurity:
