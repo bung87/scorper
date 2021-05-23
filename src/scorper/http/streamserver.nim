@@ -9,8 +9,8 @@ import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
-    netunit, constant
-import std / [os, streams, options, strformat, times, mimetypes, json, sequtils, macros]
+    netunit, constant, mimetypes
+import std / [os, streams, options, strformat, times, json, sequtils, macros]
 import rx_nim
 import zippy
 when defined(ssl):
@@ -116,7 +116,7 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
   ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
   result = quote do:
     var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
-    let accept: string = req.headers["accept"]
+    let accept: string = req.headers.getOrDefault("accept", @["text/plain"].HttpHeaderValues)
     let r = req.privAccpetParser.match(accept, mimes)
     var ext {.inject.}: string
     if r.ok:
@@ -569,7 +569,7 @@ proc postCheck(req: Request): Future[int]{.async.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
-proc defaultErrorHandle(req: Request, err: ref Exception){.async.} =
+proc defaultErrorHandle(req: Request, err: ref Exception){.async, raises: [].} =
   var headers = newHttpHeaders()
   acceptMime(req, ext, headers):
     case ext
@@ -789,6 +789,11 @@ template initSecurityScorper(scorper: var Scorper; secureFlags: set[TLSFlags]; p
   scorper.tlsMinVersion = tlsMinVersion
   scorper.tlsMaxVersion = tlsMaxVersion
 
+proc newScorperMimetypes(): MimeDB {.inline.} =
+  result = newMimetypes()
+  result.register(ext = "jsonp", mimetype = "application/javascript")
+  return result
+
 proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
@@ -802,7 +807,7 @@ proc serve*(address: string,
             cache: TLSSessionCache = nil,
             ) {.async.} =
   var server = Scorper()
-  server.mimeDb = newMimetypes()
+  server.mimeDb = newScorperMimetypes()
   server.callback = callback
   server.maxBody = maxBody
   let address = initTAddress(address)
@@ -838,7 +843,7 @@ proc newScorper*(address: string,
                 cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
-  result.mimeDb = newMimetypes()
+  result.mimeDb = newScorperMimetypes()
   result.maxBody = maxBody
   let address = initTAddress(address)
   result.logSub = subject[string]()
@@ -862,7 +867,7 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
                 cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
-  result.mimeDb = newMimetypes()
+  result.mimeDb = newScorperMimetypes()
   when handler is AsyncCallback:
     result.callback = handler
   elif handler is Router[AsyncCallback]:
