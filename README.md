@@ -21,6 +21,8 @@ then use `newScorper` proc and pass `isSecurity = true`,`privateKey`, `certifica
 
 ``` nim 
 const HttpRequestBufferSize* {.intdefine.} = 2.Kb
+
+const TimeOut {.intdefine.} = 300 # in seconds  
 const HttpHeadersLength* {.intdefine.} = int(HttpRequestBufferSize / 32) 
 # 32 is sizeof MofuHeader
 const gzipMinLength* {.intdefine.} = 20

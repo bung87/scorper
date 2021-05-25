@@ -10,8 +10,9 @@ import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
     netunit, constant, mimetypes, httperror
-import std / [os, streams, options, strformat, times, json, sequtils, macros]
+import std / [os, streams, options, strformat, json, sequtils, macros]
 import rx_nim
+from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -572,8 +573,7 @@ proc postCheck(req: Request): Future[int]{.async.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
-proc defaultErrorHandle(req: Request, err: ref Exception | HttpError){.async, raises: [].} =
-  var headers = newHttpHeaders()
+proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, raises: [].} =
   let code = when err is HttpError: err.code.HttpCode else: Http500 #
   acceptMime(req, ext, headers):
     case ext
@@ -592,18 +592,24 @@ proc defaultErrorHandle(req: Request, err: ref Exception | HttpError){.async, ra
       headers["Content-Type"] = "text/plain"
       await req.respError(Http400, err.msg, headers)
 
-template tryHandle(body: untyped) =
+template tryHandle(body: untyped, keep: var bool) =
+  const TimeOut {.intdefine.} = 300
+  var notTimeout: bool
   try:
-    `body`
+    notTimeout = await withTimeout(`body`, TimeOut.seconds)
   except HttpError as err:
     if not req.responded:
-      var headers = newHttpHeaders()
       await req.defaultErrorHandle(err)
   except:
     if not req.responded:
-      var headers = newHttpHeaders()
       let err = getCurrentException()
       await req.defaultErrorHandle(err)
+  if not notTimeout:
+    if not req.responded:
+      let err = newHttpError(408.HttpCode)
+      var headers = {"Connection": "close"}.newHttpHeaders()
+      await req.defaultErrorHandle(err, headers)
+      keep = false
 
 proc processRequest(
   scorper: Scorper,
@@ -705,9 +711,12 @@ proc processRequest(
       await req.respStatus(Http411)
       return true
   # Call the user's callback.
+  var keep = true
   if scorper.callback != nil:
     shallowCopy(req.query, req.url.query)
-    tryHandle(await scorper.callback(req))
+    tryHandle(scorper.callback(req), keep)
+    if not keep:
+      return
     discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
@@ -715,7 +724,9 @@ proc processRequest(
       req.params = matched.route.params[]
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
-      tryHandle(await matched.handler(req))
+      tryHandle(matched.handler(req), keep)
+      if not keep:
+        return
       discard await postCheck(req)
     else:
       await req.respError(Http404)
