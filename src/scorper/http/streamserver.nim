@@ -574,6 +574,8 @@ proc postCheck(req: Request): Future[int]{.async.} =
     result = await req.reader.consume(req.contentLength.int)
 
 proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, raises: [].} =
+  if req.responded:
+    return
   let code = when err is HttpError: err.code.HttpCode else: Http500 #
   acceptMime(req, ext, headers):
     case ext
@@ -594,9 +596,14 @@ proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = 
 
 template tryHandle(body: untyped, keep: var bool) =
   const TimeOut {.intdefine.} = 300
-  var notTimeout: bool
   try:
-    notTimeout = await withTimeout(`body`, TimeOut.seconds)
+    await wait(body, TimeOut.seconds)
+  except AsyncTimeoutError:
+    if not req.responded:
+      let err = newHttpError(408.HttpCode)
+      var headers = {"Connection": "close"}.newHttpHeaders()
+      await req.defaultErrorHandle(err, headers)
+      keep = false
   except HttpError as err:
     if not req.responded:
       await req.defaultErrorHandle(err)
@@ -604,12 +611,6 @@ template tryHandle(body: untyped, keep: var bool) =
     if not req.responded:
       let err = getCurrentException()
       await req.defaultErrorHandle(err)
-  if not notTimeout:
-    if not req.responded:
-      let err = newHttpError(408.HttpCode)
-      var headers = {"Connection": "close"}.newHttpHeaders()
-      await req.defaultErrorHandle(err, headers)
-      keep = false
 
 proc processRequest(
   scorper: Scorper,
@@ -716,7 +717,8 @@ proc processRequest(
     shallowCopy(req.query, req.url.query)
     tryHandle(scorper.callback(req), keep)
     if not keep:
-      return
+      await req.transp.closeWait()
+      return false
     discard await postCheck(req)
   elif scorper.router != nil:
     let matched = scorper.router.match($req.meth, req.url.path)
@@ -726,7 +728,8 @@ proc processRequest(
       req.prefix = matched.route.prefix
       tryHandle(matched.handler(req), keep)
       if not keep:
-        return
+        await req.transp.closeWait()
+        return false
       discard await postCheck(req)
     else:
       await req.respError(Http404)

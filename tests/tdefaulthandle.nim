@@ -27,6 +27,7 @@ proc runTest(
 proc testJson() {.async.} =
   proc handler(request: Request) {.async.} =
     let j = await request.json()
+    echo $j
     await request.resp($j)
 
   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
