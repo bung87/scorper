@@ -14,6 +14,9 @@ import std / [os, streams, options, strformat, json, sequtils, macros]
 import rx_nim
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
+
+const HttpServer {.strdefine.} = "scorper"
+
 when defined(ssl):
   import chronos / streams/tlsstream
 else:
@@ -101,10 +104,13 @@ proc formatCommon*(r: Request, status: HttpCode, size: int): string =
   result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
 proc genericHeaders(headers = newHttpHeaders()): HttpHeaders {.tags: [TimeEffect].} =
+  ## genericHeaders contains Date,X-Frame-Options
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
   result = headers
   result["Date"] = httpDate()
   result["X-Frame-Options"] = "SAMEORIGIN"
+  when HttpServer.len > 0:
+    result["Server"] = HttpServer
 
 proc getExt*(req: Request, mime: string): string =
   result = req.server.mimeDb.getExt(mime, default = "")
@@ -157,6 +163,9 @@ proc resp*(req: Request, content: string,
     flen
   headers.hasKeyOrPut("Date"):
     httpDate()
+  when HttpServer.len > 0:
+    headers.hasKeyOrPut("Server"):
+      HttpServer
   var msg = generateHeaders(headers, code)
   msg.add(ctn)
   await req.writer.write(msg)
