@@ -51,7 +51,6 @@ type
     query*: seq[(string, string)]
     transp: StreamTransport
     buf: array[HttpRequestBufferSize, char]
-    httpParser: MofuParser
     contentLength: BiggestUInt # as RFC no limit
     contentType: string
     server: Scorper
@@ -61,7 +60,6 @@ type
     parsed: bool               # indicate http body parsed
     rawBody: Option[string]
     responded: bool
-    privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
     when defined(ssl):
       tlsStream: TLSAsyncStream
     reader: AsyncStreamReader
@@ -73,6 +71,8 @@ type
     maxBody: int
     router: Router[AsyncCallback]
     mimeDb: MimeDB
+    httpParser: MofuParser
+    privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
     when defined(ssl):
       secureFlags: set[TLSFlags]
       tlsPrivateKey: TLSPrivateKey
@@ -117,7 +117,7 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
   result = quote do:
     var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
     let accept: string = req.headers.getOrDefault("accept", @["text/plain"].HttpHeaderValues)
-    let r = req.privAccpetParser.match(accept, mimes)
+    let r = req.server.privAccpetParser.match(accept, mimes)
     var ext {.inject.}: string
     if r.ok:
       for item in mimes:
@@ -631,13 +631,13 @@ proc processRequest(
     req.transp.close()
     return false
   # Headers
-  let headerEnd = req.httpParser.parseHeader(addr req.buf[0], req.buf.len)
+  let headerEnd = req.server.httpParser.parseHeader(addr req.buf[0], req.buf.len)
   assert headerEnd != -1
   if headerEnd == -1:
     await req.respError(Http400)
     return true
-  req.httpParser.toHttpHeaders(req.headers)
-  case req.httpParser.getMethod
+  req.server.httpParser.toHttpHeaders(req.headers)
+  case req.server.httpParser.getMethod
     of "GET": req.meth = HttpGet
     of "POST": req.meth = HttpPost
     of "HEAD": req.meth = HttpHead
@@ -651,7 +651,7 @@ proc processRequest(
       await req.respError(Http501)
       return true
 
-  req.path = req.httpParser.getPath()
+  req.path = req.server.httpParser.getPath()
   try:
     req.url = parseUrl("http://" & req.hostname & req.path)[]
   except ValueError as e:
@@ -661,14 +661,14 @@ proc processRequest(
       discard
     asyncSpawn req.respError(Http400)
     return true
-  case req.httpParser.major[]:
+  case req.server.httpParser.major[]:
     of '1':
       req.protocol.major = 1
     of '2':
       req.protocol.major = 2
     else:
       discard
-  case req.httpParser.minor[]:
+  case req.server.httpParser.minor[]:
     of '0':
       req.protocol.minor = 0
     of '1':
@@ -754,8 +754,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     req.ip = $req.transp.remoteAddress
   except TransportError:
     discard
-  req.privAccpetParser = accpetParser()
-  req.httpParser = MofuParser()
+
   when defined(ssl):
     if scorper.isSecurity:
       req.tlsStream =
@@ -799,6 +798,20 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
   result.register(ext = "jsonp", mimetype = "application/javascript")
   return result
 
+template initScorper(server: Scorper) =
+  server.privAccpetParser = accpetParser()
+  server.httpParser = MofuParser()
+  server.logSub = subject[string]()
+  when not defined(release):
+    try:
+      discard server.logSub.subscribe logSubOnNext
+    except:
+      discard
+  try:
+    server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $server.local)
+  except:
+    discard
+
 proc serve*(address: string,
             callback: AsyncCallback,
             flags: set[ServerFlags] = {ReuseAddr},
@@ -817,20 +830,12 @@ proc serve*(address: string,
   server.maxBody = maxBody
   let address = initTAddress(address)
   server = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](server)))
+  server.initScorper()
   when defined(ssl):
     if isSecurity:
       server.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
-  server.logSub = subject[string]()
   server.start()
-  when not defined(release):
-    try:
-      discard server.logSub.subscribe logSubOnNext
-    except:
-      discard
-  try:
-    server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $address)
-  except:
-    discard
+
   await server.join()
 
 proc setHandler*(self: Scorper, handler: AsyncCallback) {.raises: [].} =
@@ -851,11 +856,8 @@ proc newScorper*(address: string,
   result.mimeDb = newScorperMimetypes()
   result.maxBody = maxBody
   let address = initTAddress(address)
-  result.logSub = subject[string]()
-  when not defined(release):
-    discard result.logSub.subscribe logSubOnNext
-  result.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
+  result.initScorper()
   when defined(ssl):
     if isSecurity:
       result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
@@ -879,11 +881,8 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
     result.router = handler
   result.maxBody = maxBody
   let address = initTAddress(address)
-  result.logSub = subject[string]()
-  when not defined(release):
-    discard result.logSub.subscribe logSubOnNext
-  result.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
+  result.initScorper()
   when defined(ssl):
     if isSecurity:
       result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
