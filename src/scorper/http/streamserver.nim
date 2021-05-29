@@ -16,6 +16,7 @@ from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
 
 const HttpServer {.strdefine.} = "scorper"
+const GzipEnable {.booldefine.} = true
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -134,7 +135,7 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     else:
       `body`
 
-proc gzip*(req: Request): bool = req.headers.hasKey("Accept-Encoding") and
+proc gzip*(req: Request): bool = GzipEnable and req.headers.hasKey("Accept-Encoding") and
     string(req.headers["Accept-Encoding"]).contains("gzip")
 
 template devLog(req: Request, content: string) =
@@ -640,11 +641,9 @@ proc processRequest(
     return true
   except AsyncStreamLimitError:
     await req.respStatus(Http400, BufferLimitExceeded)
-    req.transp.close()
     return false
   except AsyncStreamError as e:
     await req.respStatus(Http400, e.msg)
-    req.transp.close()
     return false
   # Headers
   let headerEnd = req.server.httpParser.parseHeader(addr req.buf[0], req.buf.len)
@@ -726,7 +725,6 @@ proc processRequest(
     shallowCopy(req.query, req.url.query)
     tryHandle(scorper.callback(req), keep)
     if not keep:
-      await req.transp.closeWait()
       return false
     discard await postCheck(req)
   elif scorper.router != nil:
@@ -737,7 +735,6 @@ proc processRequest(
       req.prefix = matched.route.prefix
       tryHandle(matched.handler(req), keep)
       if not keep:
-        await req.transp.closeWait()
         return false
       discard await postCheck(req)
     else:
@@ -760,7 +757,6 @@ proc processRequest(
     # Unless the connection header states otherwise.
     return true
   else:
-    await req.transp.closeWait()
     return false
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
@@ -799,9 +795,9 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   while not transp.atEof():
     let retry = await processRequest(scorper, req)
     if not retry:
-      await transp.closeWait
       await req.reader.closeWait
       await req.writer.closeWait
+      await transp.closeWait
       break
 
 proc logSubOnNext(v: string) =

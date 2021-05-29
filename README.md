@@ -19,7 +19,8 @@ compile your program with `-d:chronosStrictException` if you dont want any excep
 `-d:ssl`  
 then use `newScorper` proc and pass `isSecurity = true`,`privateKey`, `certificate`  
 
-``` nim 
+``` nim
+const GzipEnable {.booldefine.} = true 
 const HttpRequestBufferSize* {.intdefine.} = 2.Kb
 const HttpServer {.strdefine.} = "scorper"
 const TimeOut {.intdefine.} = 300 # in seconds  
