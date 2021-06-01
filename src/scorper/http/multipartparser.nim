@@ -8,7 +8,7 @@
 import streams, os, oids, strformat
 import chronos
 import parseutils, strutils # parseBoundary
-import constant
+include ./ constant
 
 const ContentDispoitionFlagLen = "Content-Disposition:".len
 const FormDataFlagLen = "form-data;".len

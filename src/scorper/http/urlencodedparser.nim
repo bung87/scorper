@@ -1,4 +1,4 @@
-import constant
+include ./constant
 import chronos
 
 type

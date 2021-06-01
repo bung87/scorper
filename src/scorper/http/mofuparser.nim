@@ -1,6 +1,6 @@
 import macros, bitops, ./httpcore
 import .. / private / SIMD / cpu_type
-import constant
+include constant
 
 macro getCPU: untyped =
   let CPU = $getCPUType()

@@ -9,14 +9,12 @@ import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
-    netunit, constant, mimetypes, httperror
+    netunit, mimetypes, httperror
+include constant
 import std / [os, streams, options, strformat, json, sequtils, macros]
 import rx_nim
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
-
-const HttpServer {.strdefine.} = "scorper"
-const GzipEnable {.booldefine.} = true
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -605,7 +603,6 @@ proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = 
       await req.respError(Http400, err.msg, headers)
 
 template tryHandle(body: untyped, keep: var bool) =
-  const TimeOut {.intdefine.} = 300
   try:
     await wait(body, TimeOut.seconds)
   except AsyncTimeoutError:
