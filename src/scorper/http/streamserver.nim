@@ -94,7 +94,7 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
-proc len*(r: Request): BiggestUInt = r.contentLength
+func len*(r: Request): BiggestUInt = r.contentLength
 
 proc formatCommon*(r: Request, status: HttpCode, size: int): string =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
@@ -102,19 +102,19 @@ proc formatCommon*(r: Request, status: HttpCode, size: int): string =
   let remoteUser = os.getEnv("REMOTE_USER", "-")
   result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
-proc genericHeaders(headers = newHttpHeaders()): HttpHeaders {.tags: [TimeEffect].} =
+proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeEffect].} =
   ## genericHeaders contains Date,X-Frame-Options
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
-  result = headers
-  result["Date"] = httpDate()
-  result["X-Frame-Options"] = "SAMEORIGIN"
+  headers["Date"] = httpDate()
+  headers["X-Frame-Options"] = "SAMEORIGIN"
   when HttpServer.len > 0:
-    result["Server"] = HttpServer
+    headers["Server"] = HttpServer
+  return headers
 
-proc getExt*(req: Request, mime: string): string =
+func getExt*(req: Request, mime: string): string =
   result = req.server.mimeDb.getExt(mime, default = "")
 
-proc getMimetype*(req: Request, ext: string): string =
+func getMimetype*(req: Request, ext: string): string =
   result = req.server.mimeDb.getMimetype(ext, default = "")
 
 macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untyped) =
@@ -126,20 +126,20 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     let r = req.server.privAccpetParser.match(accept, mimes)
     var ext {.inject.}: string
     if r.ok:
-      for item in mimes:
+      for item in mimes.mitems:
         ext = req.getExt(item.mime)
         headers["Content-Type"] = item.mime
         `body`
     else:
       `body`
 
-proc gzip*(req: Request): bool = GzipEnable and req.headers.hasKey("Accept-Encoding") and
+func gzip*(req: Request): bool = GzipEnable and req.headers.hasKey("Accept-Encoding") and
     string(req.headers["Accept-Encoding"]).contains("gzip")
 
-template devLog(req: Request, content: string) =
+template devLog(req: Request, content: untyped) =
   when not defined(release):
     try:
-      req.server.logSub.next(content)
+      req.server.logSub.next(`content`)
     except:
       discard
 
@@ -214,7 +214,7 @@ proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Futur
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
-proc pairParam(x: tuple[key: string, value: string]): string =
+func pairParam(x: tuple[key: string, value: string]): string =
   result = x[0] & '=' & '"' & x[1] & '"'
 
 proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: seq[tuple[key: string,
@@ -386,7 +386,7 @@ proc fileMeta(req: Request, filepath: string): Future[Option[tuple[info: FileInf
   headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
   return some((info: info.get, headers: headers))
 
-proc calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): int =
+func calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): int =
   for b in ranges:
     if b[1] > 0:
       result = result + b[1] - b[0] + 1
@@ -577,7 +577,7 @@ proc form*(req: Request): Future[Form] {.async.} =
   req.parsedForm = some(result)
   req.parsed = true
 
-proc postCheck(req: Request): Future[int]{.async.} =
+proc postCheck(req: Request): Future[int]{.async, inline.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
@@ -665,7 +665,7 @@ proc processRequest(
 
   req.path = req.server.httpParser.getPath()
   try:
-    req.url = parseUrl("http://" & req.hostname & req.path)[]
+    req.url = parseUrl("http://" & (if req.server.isSecurity: "s" else: "") & req.hostname & req.path)[]
   except ValueError as e:
     try:
       req.server.logSub.next(e.msg)
@@ -757,11 +757,10 @@ proc processRequest(
     return false
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
-  var scorper = cast[Scorper](server)
   var req = Request()
-  req.server = scorper
+  shallowCopy(req.server, cast[Scorper](server))
   req.headers = newHttpHeaders()
-  req.transp = transp
+  shallowCopy(req.transp, transp)
   try:
     req.hostname = $req.transp.localAddress
   except TransportError:
@@ -772,14 +771,14 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     discard
 
   when defined(ssl):
-    if scorper.isSecurity:
+    if req.server.isSecurity:
       req.tlsStream =
         newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
-                                scorper.tlsPrivateKey,
-                                scorper.tlsCertificate,
-                                minVersion = scorper.tlsMinVersion,
-                                maxVersion = scorper.tlsMaxVersion,
-                                flags = scorper.secureFlags)
+                                req.server.tlsPrivateKey,
+                                req.server.tlsCertificate,
+                                minVersion = req.server.tlsMinVersion,
+                                maxVersion = req.server.tlsMaxVersion,
+                                flags = req.server.secureFlags)
       req.reader = req.tlsStream.reader
       req.writer = req.tlsStream.writer
       await handshake(req.tlsStream)
@@ -790,7 +789,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
   while not transp.atEof():
-    let retry = await processRequest(scorper, req)
+    let retry = await processRequest(req.server, req)
     if not retry:
       await req.reader.closeWait
       await req.writer.closeWait
@@ -903,10 +902,10 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
     if isSecurity:
       result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
 
-proc isClosed*(server: Scorper): bool =
+func isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed
 
-proc isComplete*(resumable: Resumable): bool =
+func isComplete*(resumable: Resumable): bool =
   var i: BiggestUInt = 0
   var complete = true
   while i < resumable.totalChunks:

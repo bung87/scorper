@@ -26,8 +26,10 @@ var workerChan: Channel[bool]
 workerChan.open()
 proc proj(){.thread.} =
   let (dir, path, ext) = demoPath.splitFile
-  let bin = startProcess(fmt"nim c -d:release -d:port={port} {demoPath}", options = {poEvalCommand})
-  discard waitForExit(bin)
+  let bin = startProcess(fmt"nim c -d:release --excessiveStackTrace:off --passC:-flto -d:HttpServer='' -d:port={port} {demoPath}",
+      options = {poEvalCommand})
+  let code = waitForExit(bin)
+  doAssert code == 0
   let project = startProcess(fmt"{dir / path}", options = {poEvalCommand})
   pid = project.processID
   workerChan.send(true)
