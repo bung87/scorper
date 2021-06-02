@@ -16,9 +16,10 @@ proc testHandler() = echo "test"
 let r = newRouter[proc()]()
 r.addRoute(testHandler, "get", "/")
 r.addRoute(testHandler, "get", "/{p1}/{p2}")
+r.compress()
 let t2 = cpuTime()
 for i in 1..1000:
-  doAssert r.match("GET", "/").handler == testHandler
-  doAssert r.match("GET", "/p1/p2").handler == testHandler
+  doAssert r.match("GET", "/").success == true
+  doAssert r.match("GET", "/p1/p2").success == true
 
 echo cpuTime() - t2

@@ -817,6 +817,7 @@ template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
   server.httpParser = MofuParser()
   server.logSub = subject[string]()
+  server.router.compress()
   when not defined(release):
     try:
       discard server.logSub.subscribe logSubOnNext

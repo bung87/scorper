@@ -6,6 +6,7 @@ import urlly
 import tables
 export urlly, tables
 import urlrfc
+
 #
 # Type Declarations
 #
@@ -75,7 +76,6 @@ type
 
   Route* = object ## Arguments extracted from a request while routing it
     params*: TableRef[string, string]
-    # query* : TableRef[string,string]
     prefix*: string
 
   RouteResult*[H] = object ## Encapsulates the results of a routing operation
@@ -150,7 +150,7 @@ proc newRouter*[H](): Router[H] =
 #
 
 func ensureCorrectRoute(
-  path: string
+  path: sink string
 ): string {.raises: [MappingError].} =
   ## Verifies that this given path is a valid path, strips trailing slashes, and guarantees leading slashes
   if(not path.allCharsInSet(allowedCharsInPattern)):
@@ -172,7 +172,7 @@ func emptyKnotSequence(
   result = (knotSeq.len == 0 or (knotSeq.len == 1 and knotSeq[0].kind == ptrnText and knotSeq[0].value == ""))
 
 func generateRope(
-  pattern: string,
+  pattern: sink string,
   startIndex: int = 0
 ): seq[MapperKnot] {.raises: [MappingError].} =
   ## Translates the string form of a pattern into a sequence of MapperKnot objects to be parsed against
@@ -373,7 +373,7 @@ func contains[H](
   if not node.isLeaf and result: # if the node has kids, is at least one qual?
     if node.children.len > 0:
       result = false # false until proven otherwise
-      for child in node.children:
+      for child in node.children.mitems:
         if child.contains(rope[1 .. ^1]): # does the child match the rest of the rope?
           result = true
           break
@@ -387,9 +387,9 @@ func contains[H](
 func addRoute*[H](
   router: Router[H],
   handler: H,
-  verb: string,
-  pattern: string,
-  headers: HttpHeaders = nil
+  verb: sink string,
+  pattern: sink string,
+  headers: sink HttpHeaders = nil
 ) =
   ## Add a new mapping to the given ``Router`` instance
   var rope = generateRope(ensureCorrectRoute(pattern)) # initial rope
@@ -447,15 +447,16 @@ proc compress*[H](router: Router[H]) =
 
 func matchTree[H](
   head: PatternNode[H],
-  path: string,
-  headers: HttpHeaders,
+  path: sink string,
+  headers: sink HttpHeaders,
   pathIndex: int = 0,
-  params = newTable[string, string]()
+  params: sink TableRef[string, string] = newTable[string, string]()
 ): RouteResult[H] =
   ## Check whether the given path matches the given tree node starting from pathIndex
   var node = head
   var pathIndex = pathIndex
   var newPathIndex: int
+
   var prefix = path[0 ..< pathIndex]
   block matching:
     while pathIndex >= 0:
@@ -487,7 +488,7 @@ func matchTree[H](
               pathIndex = newPathIndex
         of ptrnStartHeaderConstraint:
           var p = ""
-          for child in node.children:
+          for child in node.children.mitems:
             if not headers.isNil:
               p = toString(headers.getOrDefault(node.headerName))
             let childResult = child.matchTree(
@@ -497,7 +498,7 @@ func matchTree[H](
             )
 
             if childResult.success == true:
-              for key, value in childResult.route.params.pairs:
+              for key, value in childResult.route.params.mpairs:
                 params[key] = value
               return RouteResult[H](
                 success: true,
@@ -524,7 +525,7 @@ func matchTree[H](
           node = node.children[0]
         else: #more than one child
           assert node.children.len != 0
-          for child in node.children:
+          for child in node.children.mitems:
             result = child.matchTree(path, headers, pathIndex, params)
             if result.success == true:
               return
