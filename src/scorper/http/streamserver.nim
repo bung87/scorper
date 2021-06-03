@@ -15,6 +15,7 @@ import std / [os, streams, options, strformat, json, sequtils, macros]
 import rx_nim
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
+import jsony
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -493,6 +494,7 @@ proc serveStatic*(req: Request) {.async.} =
     meta.unsafeGet.headers["Accept-Ranges"] = "bytes"
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     discard await req.transp.write(msg)
+    req.responded = true
     return
   await req.sendFile(absPath)
   req.responded = true
@@ -511,8 +513,8 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
     req.parsed = true
     return result
   try:
-    result = parseJson(str)
-  except JsonParsingError as e:
+    result = fromJson(str)
+  except CatchableError as e:
     raise newHttpError(Http400, e.msg)
   req.parsedJson = some(result)
   req.parsed = true

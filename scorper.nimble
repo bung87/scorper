@@ -1,6 +1,6 @@
 # Package
 
-version       = "1.0.9"
+version       = "1.0.10"
 author        = "bung87"
 description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
@@ -14,6 +14,7 @@ requires "chronos >= 3.0.2" # initial 2.6.1
 requires "npeg"
 requires "https://github.com/nortero-code/rx-nim.git"
 requires "zippy"
+requires "jsony"
 requires "result"
 # task test, "Runs the test suite":
   # exec "testament --megatest:off pattern 'tests/*.nim'"
