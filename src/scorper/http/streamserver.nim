@@ -909,7 +909,7 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
 func isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed
 
-func isComplete*(resumable: Resumable): bool =
+proc isComplete*(resumable: Resumable): bool =
   var i: BiggestUInt = 0
   var complete = true
   while i < resumable.totalChunks:
