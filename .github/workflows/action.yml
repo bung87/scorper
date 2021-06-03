@@ -22,7 +22,7 @@ jobs:
         experimental: [false]
         nim-version:
           - stable
-          - devel
+          # - devel
         include:
           - os: windows-latest
             experimental: true
