@@ -1,6 +1,6 @@
 # Package
 
-version       = "1.0.10"
+version       = "1.0.11"
 author        = "bung87"
 description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
@@ -38,6 +38,11 @@ task benchmark,"benchmark":
 task benchmarkserver,"benchmarkserver":
   exec "nim c -r -d:release --threads:on -d:port=7777 -d:serverTest -d:demoPath=examples/hello_world.nim benchmark/benchmark.nim"
   exec "nim c -r -d:release --threads:on -d:port=6666 -d:serverTest -d:demoPath=benchmark/tstdserver.nim benchmark/benchmark.nim"
+
+task benchmarkresp,"benchmarkresp":
+  exec "nim c -r -d:release --threads:on -d:port=7777 -d:demoPath=benchmark/simple_resp.nim benchmark/benchmark_resp.nim"
+  exec "nim c -r -d:release --threads:on -d:port=6666 -d:demoPath=benchmark/simple_resp_prologue.nim benchmark/benchmark_resp.nim"
+
 
 task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"
