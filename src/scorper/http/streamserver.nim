@@ -144,7 +144,7 @@ template devLog(req: Request, content: untyped) =
     except:
       discard
 
-proc resp*(req: Request, content: string,
+proc resp*(req: Request, content: sink string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``, headers and
   ## content.
@@ -154,10 +154,15 @@ proc resp*(req: Request, content: string,
   let gzip = req.gzip()
   let originalLen = content.len
   let needCompress = gzip and originalLen >= gzipMinLength
+  var ctn: string
+  var length: int
   if needCompress:
     headers["Content-Encoding"] = "gzip"
-  let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let length = if needCompress: ctn.len else: originalLen
+    ctn = compress(content, BestSpeed, dfGzip)
+    length = ctn.len
+  else:
+    shallowCopy(ctn, content)
+    length = originalLen
   let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
@@ -172,7 +177,7 @@ proc resp*(req: Request, content: string,
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
-proc respError*(req: Request, code: HttpCode, content: string, headers = newHttpHeaders()): Future[void] {.async.} =
+proc respError*(req: Request, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
     return
@@ -180,10 +185,15 @@ proc respError*(req: Request, code: HttpCode, content: string, headers = newHttp
   let gzip = req.gzip()
   let originalLen = content.len
   let needCompress = gzip and originalLen >= gzipMinLength
+  var ctn: string
+  var length: int
   if needCompress:
     headers["Content-Encoding"] = "gzip"
-  let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let length = if needCompress: ctn.len else: originalLen
+    ctn = compress(content, BestSpeed, dfGzip)
+    length = ctn.len
+  else:
+    shallowCopy(ctn, content)
+    length = originalLen
   let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
@@ -202,10 +212,15 @@ proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Futur
   let gzip = req.gzip()
   let originalLen = content.len
   let needCompress = gzip and originalLen >= gzipMinLength
+  var ctn: string
+  var length: int
   if needCompress:
     headers["Content-Encoding"] = "gzip"
-  let ctn = if needCompress: compress(content, BestSpeed, dfGzip) else: content
-  let length = if needCompress: ctn.len else: originalLen
+    ctn = compress(content, BestSpeed, dfGzip)
+    length = ctn.len
+  else:
+    shallowCopy(ctn, content)
+    length = originalLen
   let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
