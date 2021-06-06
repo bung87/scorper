@@ -68,7 +68,7 @@ type
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 
-  AsyncCallback = proc (req: Request): Future[void] {.closure, gcsafe.}
+  AsyncCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
     callback: AsyncCallback
     maxBody: int
