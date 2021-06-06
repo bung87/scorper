@@ -86,6 +86,28 @@ when isMainModule:
   waitFor serve(address, cb)
 ```
 
+## Types  
+``` nim 
+type
+  Request* = ref object
+    meth*: HttpMethod
+    headers*: HttpHeaders
+    protocol*: tuple[major, minor: int]
+    url*: Url
+    path*: string              # http req path
+    hostname*: string
+    ip*: string
+    params*: Table[string, string]
+    query*: seq[(string, string)]
+  AsyncCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
+  Scorper* = ref object of StreamServer
+    # inherited (partial)
+    sock*: AsyncFD                # Socket
+    local*: TransportAddress      # Address
+    status*: ServerStatus         # Current server status
+    flags*: set[ServerFlags]      # Flags
+    errorCode*: OSErrorCode
+```
 ## Todos  
 
 - [x] Parse http request streamingly.  
