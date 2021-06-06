@@ -4,99 +4,85 @@ import ./scorper/http/streamclient
 import ./scorper/http/router
 import ./scorper/http/httpcore, chronos
 import tables
+import asynctest, strformat
 
 const TestUrl = "http://127.0.0.1:64124/basic/foo/ba?q=qux"
 type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
 
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
+var server: Scorper
 
-  let address = "127.0.0.1:64124"
-  let flags = {ReuseAddr}
-  let r = newRouter[AsyncCallback]()
-  r.addRoute(handler, "get", "/basic/{p1}/{p2}")
-  r.addRoute(handler, "get", "/code/{codex}")
-  var server = newScorper(address, r, flags)
-  server.start()
-  let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+var handlerParamRaw = proc (request: Request) {.async.} =
+  doAssert request.params["code"] == "ß"
+  await request.resp("")
 
-  waitFor test(response, body)
-  server.stop()
-  server.close()
-  waitFor server.join()
+var handlerParams = proc (request: Request) {.async.} =
+  await request.resp($request.params & $request.query.toTable)
 
-proc testParams() {.async.} =
-  proc handler(request: Request) {.async.} =
-    await request.resp($request.params & $request.query.toTable)
+var handlerParamsEncode = proc (request: Request) {.async.} =
+  doAssert request.params["codex"] == "ß"
+  await request.resp("")
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+suite "test serve static file":
+  setup:
+    let address = "127.0.0.1:0"
+    let flags = {ReuseAddr}
+    let r = newRouter[AsyncCallback]()
+    r.addRoute(handlerParams, "get", "/basic/{p1}/{p2}")
+    r.addRoute(handlerParamsEncode, "get", "/code/{codex}")
+    r.addRoute(handlerParamRaw, "get", "/code_raw/{codex}")
+    server = newScorper(address, r, flags)
+    server.start()
+
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
+
+  test "testParams":
+
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+        clientResponse = await client.request(fmt"http://127.0.0.1:{server.local.port}/basic/foo/ba?q=qux")
+      await client.close()
+
+      return clientResponse
     let
-      client = newAsyncHttpClient()
-      clientResponse = await client.request(TestUrl)
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http200)
     let p = {"p1": "foo", "p2": "ba"}.toTable
     let q = {"q": "qux"}.toTable
-    echo body
     doAssert(body == $p & $q)
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
 
-proc testParamEncode() {.async.} =
-  proc handler(request: Request) {.async.} =
-    doAssert request.params["codex"] == "ß"
-    await request.resp("")
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+  test "testParamEncode":
+
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+        codeUrl = fmt"http://127.0.0.1:{server.local.port}/code/%C3%9F"
+        clientResponse = await client.request(codeUrl)
+      await client.close()
+
+      return clientResponse
     let
-      client = newAsyncHttpClient()
-      codeUrl = "http://127.0.0.1:64124/code/%C3%9F"
-      clientResponse = await client.request(codeUrl)
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http200)
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
 
-proc testParamRaw() {.async.} =
-  proc handler(request: Request) {.async.} =
-    doAssert request.params["code"] == "ß"
-    await request.resp("")
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+  test "testParamRaw":
+
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+        codeUrl = fmt"http://127.0.0.1:{server.local.port}/code_raw/ß"
+        clientResponse = await client.request(codeUrl)
+      await client.close()
+
+      return clientResponse
     let
-      client = newAsyncHttpClient()
-      codeUrl = "http://127.0.0.1:64124/code/ß"
-      clientResponse = await client.request(codeUrl)
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
     doAssert(response.code == Http404)
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
 
-waitfor(testParams())
-waitfor(testParamEncode())
-waitfor(testParamRaw())
-
-
-echo "OK"

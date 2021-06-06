@@ -6,46 +6,43 @@ import ./scorper/http/exts/resumable
 import os, parseutils, streams
 import ./scorper/http/urlly
 import results
+import asynctest, strformat
 
-const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 const filename = currentSourcePath.parentDir / "range.txt"
 const source = staticRead(filename)
 
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[void]) =
+var server: Scorper
 
-  let address = "127.0.0.1:64124"
-  let flags = {ReuseAddr}
-  var server = newScorper(address, handler, flags)
-  server.start()
-  waitFor(request(server))
-  server.stop()
-  server.close()
-  waitFor server.join()
+var handler = proc (request: Request) {.closure, async.} =
+  let r = await request.handleResumableUpload()
+  if r.isOk:
+    debugEcho "handleResumableUpload success"
+    let resumable = r.get
+    if resumable.savePath.len > 0:
+      debugEcho "resumable.savePath: " & resumable.savePath
+      doAssert getFileSize(resumable.savePath) == source.len
+  else:
+    debugEcho "handleResumableUpload fails"
 
-proc testSendFIle() {.async.} =
-  proc handler(request: Request) {.async.} =
-    let r = await request.handleResumableUpload()
-    if r.isOk:
-      echo "handleResumableUpload success"
-      let resumable = r.get
-      if resumable.savePath.len > 0:
-        echo "resumable.savePath: " & resumable.savePath
-        doAssert getFileSize(resumable.savePath) == source.len
-    else:
-      echo "handleResumableUpload fails"
-  proc request(server: Scorper): Future[void] {.async.} =
-    let
-      client = newAsyncHttpClient()
+proc request(server: Scorper): Future[void] {.async.} =
+  let
+    client = newAsyncHttpClient()
 
-    await client.uploadResumable(filename, TestUrl)
-    await client.close()
-  try:
-    runTest(handler, request)
-  except:
-    discard
+  await client.uploadResumable(filename, fmt"http://127.0.0.1:{server.local.port}")
+  await client.close()
 
-waitfor(testSendFIle())
+suite "test handleResumableUpload":
+  setup:
+    let address = "127.0.0.1:0"
+    let flags = {ReuseAddr}
+    server = newScorper(address, handler, flags)
+    server.start()
 
-echo "OK"
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
+
+  test "handleResumableUpload":
+    await request(server)
+

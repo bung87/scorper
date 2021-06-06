@@ -4,51 +4,40 @@ import ./scorper/http/router
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import os
+import asynctest, strformat
 
-const TestUrl = "http://127.0.0.1:64124/static/README.md"
 const root = currentSourcePath.parentDir().parentDir()
 const source = staticRead(root / "README.md")
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
 
-  let r = newRouter[proc (request: Request): Future[void] {.gcsafe.}]()
-  r.addRoute(serveStatic, "get", "/static/*$")
-  let address = "127.0.0.1:64124"
-  let flags = {ReuseAddr}
-  var server = newScorper(address, r, flags)
-  server.start()
+var server: Scorper
+
+proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+    client = newAsyncHttpClient()
 
-  waitFor test(response, body)
-  server.stop()
-  server.close()
-  waitFor server.join()
+  let clientResponse = await client.request(fmt"http://127.0.0.1:{server.local.port}/static/README.md")
+  await client.close()
 
-proc testStatic() {.async.} =
-  proc handler(request: Request) {.async.} =
-    await request.sendFile(currentSourcePath)
+  return clientResponse
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+suite "test serve static file":
+  setup:
+    let address = "127.0.0.1:0"
+    let flags = {ReuseAddr}
+    let r = newRouter[proc (request: Request): Future[void] {.gcsafe.}]()
+    r.addRoute(serveStatic, "get", "/static/*$")
+    server = newScorper(address, r, flags)
+    server.start()
+
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
+
+  test "static file":
     let
-      client = newAsyncHttpClient()
-
-    let clientResponse = await client.request(TestUrl)
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http200)
-    let body = await response.readBody
     doAssert body == source
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
-waitfor(testStatic())
 
-echo "OK"
