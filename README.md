@@ -50,6 +50,7 @@ when isMainModule:
 ``` nim
 when isMainModule:
   let r = newRouter[AsyncCallback]()
+  # Relys on `StaticDir` environment variable
   r.addRoute(serveStatic, "get", "/static/*$")
   let address = "127.0.0.1:8888"
   let flags = {ReuseAddr}
