@@ -485,6 +485,7 @@ proc sendAttachment*(req: Request, filepath: string, asName: string = "") {.asyn
   req.responded = true
 
 proc serveStatic*(req: Request) {.async.} =
+  ## Relys on `StaticDir` environment variable
   if req.meth != HttpGet and req.meth != HttpHead:
     await req.respError(Http405)
     return
