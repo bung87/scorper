@@ -3,48 +3,38 @@ import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import os
+import asynctest, strformat
 
-const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
 const source = staticRead(currentSourcePath.parentDir / "range.txt")
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
 
-  let address = "127.0.0.1:64124"
-  let flags = {ReuseAddr}
-  var server = newScorper(address, handler, flags)
-  server.start()
-  let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+var server: Scorper
 
-  waitFor test(response, body)
-  server.stop()
-  server.close()
-  waitFor server.join()
+suite "test send file":
+  setup:
+    let address = "127.0.0.1:0"
+    let flags = {ReuseAddr}
+    server = newScorper(address, flags)
+    server.start()
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
+  test "testSendFIle":
+    proc handler(request: Request) {.async.} =
+      await request.sendFile(currentSourcePath.parentDir / "range.txt")
+    server.setHandler handler
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+      let testUrl = fmt"http://127.0.0.1:{server.local.port}"
+      let clientResponse = await client.request(testUrl)
+      await client.close()
 
-proc testSendFIle() {.async.} =
-  proc handler(request: Request) {.async.} =
-    await request.sendFile(currentSourcePath.parentDir / "range.txt")
+      return clientResponse
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
     let
-      client = newAsyncHttpClient()
-
-    let clientResponse = await client.request(TestUrl)
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http200)
-    let body = await response.readBody
     doAssert body == source
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
-waitfor(testSendFIle())
 
-echo "OK"

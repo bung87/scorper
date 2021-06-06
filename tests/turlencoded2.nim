@@ -40,7 +40,7 @@ suite "test url encode":
     server.close()
     await server.join()
 
-  test "test url encode":
+  test "url encode":
     let
       response = await request(server)
       body = await response.readBody()

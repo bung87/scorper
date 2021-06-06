@@ -6,46 +6,43 @@ import ./scorper/http/httpcore, chronos
 import tables
 import strformat
 import base64
+import asynctest, strformat
 
 type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe, raises: [].}
 
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse],
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
+var server: Scorper
 
-  let address = "127.0.0.1:64124"
-  let flags = {ReuseAddr}
-  let r = newRouter[AsyncCallback]()
-  r.addRoute(handler, "get", "/auth/ok")
-  r.addRoute(handler, "get", "/auth/error")
-  var server = newScorper(address, r, flags)
-  server.start()
-  let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+suite "test auth":
+  setup:
+    proc handler(req: Request) {.closure, async.} =
+      if req.headers.hasKey("Authorization"):
+        await req.resp("")
+      else:
+        await req.respBasicAuth()
+    let address = "127.0.0.1:0"
+    let r = newRouter[AsyncCallback]()
+    r.addRoute(handler, "get", "/auth/ok")
+    r.addRoute(handler, "get", "/auth/error")
+    server = newScorper(address, r)
+    server.start()
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
 
-  waitFor test(response, body)
-  server.stop()
-  server.close()
-  waitFor server.join()
+  test "AuthOk":
 
-proc testAuthOk() {.async.} =
-  proc handler(req: Request) {.async.} =
-    if req.headers.hasKey("Authorization"):
-      await req.resp("")
-    else:
-      await req.respBasicAuth()
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+        clientResponse = await client.request(fmt"http://127.0.0.1:{server.local.port}/auth/ok")
+      await client.close()
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      return clientResponse
+
     let
-      client = newAsyncHttpClient()
-      clientResponse = await client.request("http://127.0.0.1:64124/auth/ok")
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http401)
     var headers = newHttpHeaders()
     let uname = "123"
@@ -54,17 +51,7 @@ proc testAuthOk() {.async.} =
     headers["Authorization"] = &"Basic {encoded}"
     let
       client = newAsyncHttpClient()
-      clientResponse = await client.request("http://127.0.0.1:64124/auth/ok", headers = headers)
-    echo clientResponse.code
+      clientResponse = await client.request(fmt"http://127.0.0.1:{server.local.port}/auth/ok", headers = headers)
     doassert clientResponse.code == Http200
     await client.close()
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
 
-waitfor(testAuthOk())
-
-
-
-echo "OK"

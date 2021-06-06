@@ -3,55 +3,40 @@ import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import os
+import asynctest, strformat
 include ./cert
 
-const TestUrl = "https://127.0.0.1:64124/foo?bar=qux"
 const source = staticRead(currentSourcePath.parentDir / "range.txt")
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (client: AsyncHttpClient): Future[AsyncResponse] {.raises: [].},
-    test: proc (response: AsyncResponse, body: string): Future[void]){.async.} =
 
-  let address = "127.0.0.1:64124"
-  let flags: set[ServerFlags] = {ReuseAddr}
-  var server: Scorper
-  try:
-    server = newScorper(address, handler, flags, isSecurity = true,
-      privateKey = HttpsSelfSignedRsaKey,
-      certificate = HttpsSelfSignedRsaCert)
-  except:
-    discard
-  server.start()
-  let
-    client = newAsyncHttpClient()
-  let
-    response = await request(client)
-    body = await response.readBody()
-  await client.close
-  try:
-    await test(response, body)
-  except:
-    discard
+var server: Scorper
 
-  server.stop()
-  server.close()
-  waitFor server.join()
+suite "test send file with https":
+  setup:
+    let address = "127.0.0.1:0"
+    server = newScorper(address, isSecurity = true,
+    privateKey = HttpsSelfSignedRsaKey,
+    certificate = HttpsSelfSignedRsaCert)
+    server.start()
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
+  test "testSendFIle":
+    proc handler(request: Request) {.async.} =
+      await request.sendFile(currentSourcePath.parentDir / "range.txt")
+    server.setHandler handler
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+      let testUrl = fmt"https://127.0.0.1:{server.local.port}"
+      let clientResponse = await client.request(testUrl)
+      await client.close()
 
-proc testSendFIle() {.async.} =
-  proc handler(request: Request) {.async.} =
-    await request.sendFile(currentSourcePath.parentDir / "range.txt")
+      return clientResponse
 
-  proc request(client: AsyncHttpClient): Future[AsyncResponse] {.async.} =
-    let clientResponse = await client.request(TestUrl)
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+    let
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http200)
-    let body = await response.readBody
     doAssert body == source
 
-  await runTest(handler, request, test)
-
-waitfor(testSendFIle())
-
-echo "OK"

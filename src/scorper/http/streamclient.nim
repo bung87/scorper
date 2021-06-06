@@ -436,7 +436,7 @@ proc newConnection(client: AsyncHttpClient,
     client.transp = await connect(initTAddress(connectionUrl.hostname, port))
     when defined(ssl):
       if isSsl:
-        let flags = {NoVerifyHost, NoVerifyServerName}
+        let flags: set[TLSFlags] = {TLSFlags.NoVerifyHost, TLSFlags.NoVerifyServerName}
         client.tlsstream = newTLSClientAsyncStream(newAsyncStreamReader(client.transp), newAsyncStreamWriter(
             client.transp), connectionUrl.hostname, flags = flags) # flags = flags
         client.reader = client.tlsstream.reader
