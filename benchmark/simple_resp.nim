@@ -6,8 +6,10 @@ const port {.intdefine.} = 8080
 
 type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe,
     raises: [].}
+
 type Resp = object
   message: string
+
 proc jsonHandler(req: Request) {.route("get", "/json"), async.} =
   let headers = {"Content-type": "application/json"}
   await req.resp(Resp(message: "Hello, World!").toJson(), headers.newHttpHeaders())

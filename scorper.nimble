@@ -16,6 +16,7 @@ requires "https://github.com/nortero-code/rx-nim.git"
 requires "zippy"
 requires "jsony"
 requires "result"
+requires "asynctest >= 0.2.0 & < 0.3.0"
 # task test, "Runs the test suite":
   # exec "testament --megatest:off pattern 'tests/*.nim'"
 
@@ -46,3 +47,6 @@ task benchmarkresp,"benchmarkresp":
 
 task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"
+
+# before test:
+  # requires "asynctest >= 0.2.0 & < 0.3.0"
