@@ -3,42 +3,38 @@ import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import json, strutils
+import asynctest, strformat
 
-const TestUrl = "http://127.0.0.1:64124/foo?bar=qux"
+var server: Scorper
 
-proc runTest(
-    handler: proc (request: Request): Future[void] {.gcsafe.},
-    request: proc (server: Scorper): Future[AsyncResponse]{.raises: [].},
-    test: proc (response: AsyncResponse, body: string): Future[void]) =
+var handler = proc (request: Request) {.closure, async.} =
+  let j = await request.json()
+  await request.resp($j)
 
-  let address = "127.0.0.1:64124"
-  let flags = {ReuseAddr}
-  var server = newScorper(address, handler, flags)
-  server.start()
-  let
-    response = waitFor(request(server))
-    body = waitFor(response.readBody())
+suite "test json":
+  setup:
+    let address = "127.0.0.1:0"
+    server = newScorper(address, handler)
+    server.start()
+  teardown:
+    server.stop()
+    server.close()
+    await server.join()
 
-  waitFor test(response, body)
-  server.stop()
-  server.close()
-  waitFor server.join()
+  test "testJson":
 
-proc testJson() {.async.} =
-  proc handler(request: Request) {.async.} =
-    let j = await request.json()
-    await request.resp($j)
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let clientResponse = await client.sendJson(fmt"http://127.0.0.1:{server.local.port}/",
+          body = """{ "name": "Nim", "age": 12 }""")
+      await client.close()
+
+      return clientResponse
     let
-      client = newAsyncHttpClient()
-
-    let clientResponse = await client.sendJson(TestUrl, body = """{ "name": "Nim", "age": 12 }""")
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http200)
     var s: string
     try:
@@ -46,34 +42,19 @@ proc testJson() {.async.} =
     except:
       discard
     doAssert(body == s)
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
 
-proc testJsonError() {.async.} =
-  proc handler(request: Request) {.async.} =
-    let j = await request.json()
-    await request.resp($j)
+  test "testJsonError":
 
-  proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let
+        client = newAsyncHttpClient()
+      let body = """ "name": "Nim" "age": 12 """
+      let clientResponse = await client.sendJson(fmt"http://127.0.0.1:{server.local.port}/", body = body)
+      await client.close()
+
+      return clientResponse
     let
-      client = newAsyncHttpClient()
-
-    let clientResponse = await client.sendJson(TestUrl, body = """{ "name": "Nim" "age": 12 }""")
-    await client.close()
-
-    return clientResponse
-
-  proc test(response: AsyncResponse, body: string) {.async.} =
+      response = await request(server)
+      body = await response.readBody()
     doAssert(response.code == Http400)
     doAssert("Error" in body)
-  try:
-    runTest(handler, request, test)
-  except:
-    discard
-
-waitfor(testJson())
-waitfor(testJsonError())
-
-echo "OK"
