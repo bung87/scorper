@@ -118,9 +118,9 @@ type
 - [x] Parse JSON lazyly.  
 - [x] cookies module.  
 - [ ] Parse JSON streamingly.  
-- [ ] Better error control flow.  
+- [x] Better error control flow.  
 - [ ] CLI tool generate object oriented controller and routes.  
-- [ ] Auto render response respect client accepted content type.  
+- [x] Auto render response respect client accepted content (acceptMime macro)type.  
 - [x] Chuncked file upload handle for large file. 
 - [x] https support 
 - [x] handle Resumable upload
