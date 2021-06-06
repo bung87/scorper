@@ -21,7 +21,7 @@ var handlerParamsEncode = proc (request: Request) {.async.} =
   doAssert request.params["codex"] == "ß"
   await request.resp("")
 
-suite "test serve static file":
+suite "test router":
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

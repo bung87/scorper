@@ -15,7 +15,7 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
 
   return clientResponse
 
-suite "test url encode":
+suite "test server":
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

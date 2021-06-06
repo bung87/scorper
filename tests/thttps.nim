@@ -16,7 +16,7 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
 
   return clientResponse
 
-suite "test url encode":
+suite "test https":
   setup:
     let address = "127.0.0.1:0"
     server = newScorper(address, isSecurity = true,
