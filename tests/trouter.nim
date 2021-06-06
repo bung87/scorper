@@ -6,7 +6,6 @@ import ./scorper/http/httpcore, chronos
 import tables
 import asynctest, strformat
 
-const TestUrl = "http://127.0.0.1:64124/basic/foo/ba?q=qux"
 type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
 
 var server: Scorper

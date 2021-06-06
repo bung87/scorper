@@ -48,7 +48,7 @@ suite "test json":
     proc request(server: Scorper): Future[AsyncResponse] {.async.} =
       let
         client = newAsyncHttpClient()
-      let body = """ "name": "Nim" "age": 12 """
+      let body = """{ "name": "Nim" "age": 12 }"""
       let clientResponse = await client.sendJson(fmt"http://127.0.0.1:{server.local.port}/", body = body)
       await client.close()
 

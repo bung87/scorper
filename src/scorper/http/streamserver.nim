@@ -15,7 +15,6 @@ import std / [os, streams, options, strformat, json, sequtils, macros]
 import rx_nim
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
-import jsony
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -528,7 +527,7 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
     req.parsed = true
     return result
   try:
-    result = fromJson(str)
+    result = parseJson(str)
   except CatchableError as e:
     raise newHttpError(Http400, e.msg)
   req.parsedJson = some(result)
