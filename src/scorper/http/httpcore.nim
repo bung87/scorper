@@ -1,37 +1,8 @@
 
 import tables, strutils, parseutils
-
-type
-  HttpHeaders* = ref object
-    table*: TableRef[string, seq[string]]
-
-  HttpHeaderValues* = distinct seq[string]
-
-  HttpCode* = distinct range[0 .. 599]
-  HttpVersion* = enum
-    HttpVer11 = "HTTP/1.1",
-    HttpVer10 = "HTTP/1.0"
-    HttpVer20 = "HTTP/2.0"
-
-  HttpMethod* = enum ## the requested HttpMethod
-    HttpHead,        ## Asks for the response identical to the one that would
-                     ## correspond to a GET request, but without the response
-                     ## body.
-    HttpGet,         ## Retrieves the specified resource.
-    HttpPost,        ## Submits data to be processed to the identified
-                     ## resource. The data is included in the body of the
-                     ## request.
-    HttpPut,         ## Uploads a representation of the specified resource.
-    HttpDelete,      ## Deletes the specified resource.
-    HttpTrace,       ## Echoes back the received request, so that a client
-                     ## can see what intermediate servers are adding or
-                     ## changing in the request.
-    HttpOptions,     ## Returns the HTTP methods that the server supports
-                     ## for specified address.
-    HttpConnect,     ## Converts the request connection to a transparent
-                     ## TCP/IP tunnel, usually used for proxies.
-    HttpPatch        ## Applies partial modifications to a resource.
-
+import ./httptypes
+import ./httpcommonheaders
+export httptypes, httpcommonheaders
 const HttpDateFormat* = "ddd',' dd MMM yyyy HH:mm:ss 'GMT'"
 
 const
@@ -339,6 +310,42 @@ proc generateHeaders*(headers: HttpHeaders,
   add(result, CRLF)
 
 when isMainModule:
+  from sequtils import map, concat
+  from re import re, split, findAll
+  import macros, os
+  const TPL = """
+proc $1*(headers: HttpHeaders, value: string) =
+  headers.table["$2"] = @[value]
+
+proc $1*(headers: HttpHeaders,value: seq[string]) =
+  if value.len > 0:
+    headers.table["$2"] = value
+  else:
+    headers.table.del("$2")
+"""
+  proc splitByDelimiter(key: string): seq[string] =
+    return split(key, re"(-|_|/|\s)")
+  proc camelize(key: string): string =
+    let parts = key.splitByDelimiter
+    let capitalizedParts = map(parts[1..parts.len - 1], capitalizeAscii)
+    return join(concat([parts[0..0], capitalizedParts]))
+
+  template genCommonHttpHeaderProcs =
+    var f = open(currentSourcePath.parentDir / "httpcommonheaders.nim", fmWrite)
+    f.writeLine "## generated through ./httpcore"
+    f.writeLine "import ./httptypes"
+    f.writeLine "import tables"
+    for x in ["Accept", "Accept-Charset", "Accept-Encoding", "Accept-Language", "Accept-Datetime", "Authorization",
+        "Cache-Control", "Connection", "Cookie", "Content-Length", "Content-MD5", "Content-Type", "Date", "Expect",
+        "From", "Host", "If-Match", "If-Modified-Since", "If-None-Match", "If-Range", "If-Unmodified-Since",
+        "Max-Forwards", "Pragma", "Proxy-Authorization", "Range", "Referer", "TE", "Upgrade", "User-Agent", "Via", "Warning"]:
+      let key = toTitleCase(x)
+      let temp = TPL % [camelize x, key]
+      f.write temp
+    f.close
+
+  genCommonHttpHeaderProcs()
+
   var test = newHttpHeaders()
   test["Connection"] = @["Upgrade", "Close"]
   doAssert test["Connection", 0] == "Upgrade"
