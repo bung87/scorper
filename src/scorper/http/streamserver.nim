@@ -105,10 +105,10 @@ proc formatCommon*(r: Request, status: HttpCode, size: int): string =
 proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeEffect].} =
   ## genericHeaders contains Date,X-Frame-Options
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
-  headers["Date"] = httpDate()
-  headers["X-Frame-Options"] = "SAMEORIGIN"
+  headers.Date httpDate()
+  headers.XFrameOptions "SAMEORIGIN"
   when HttpServer.len > 0:
-    headers["Server"] = HttpServer
+    headers.Server HttpServer
   return headers
 
 func getExt*(req: Request, mime: string): string =
@@ -156,7 +156,7 @@ proc resp*(req: Request, content: sink string,
   var ctn: string
   var length: int
   if needCompress:
-    headers["Content-Encoding"] = "gzip"
+    headers.ContentEncoding "gzip"
     ctn = compress(content, BestSpeed, dfGzip)
     length = ctn.len
   else:
@@ -176,7 +176,8 @@ proc resp*(req: Request, content: sink string,
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
-proc respError*(req: Request, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[void] {.async.} =
+proc respError*(req: Request, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[
+    void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
     return
@@ -187,7 +188,7 @@ proc respError*(req: Request, code: HttpCode, content: sink string, headers = ne
   var ctn: string
   var length: int
   if needCompress:
-    headers["Content-Encoding"] = "gzip"
+    headers.ContentEncoding("gzip")
     ctn = compress(content, BestSpeed, dfGzip)
     length = ctn.len
   else:
@@ -214,7 +215,7 @@ proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Futur
   var ctn: string
   var length: int
   if needCompress:
-    headers["Content-Encoding"] = "gzip"
+    headers.ContentEncoding "gzip"
     ctn = compress(content, BestSpeed, dfGzip)
     length = ctn.len
   else:
@@ -239,7 +240,7 @@ proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: s
     return
   var headers = genericHeaders()
   let extro = if params.len > 0: "," & params.map(pairParam).join(",") else: ""
-  headers["WWW-Authenticate"] = &"{scheme} realm={realm}" & extro
+  headers.WWWAuthenticate &"{scheme} realm={realm}" & extro
   let msg = generateHeaders(headers, code)
   await req.writer.write(msg)
   req.devLog(req.formatCommon(code, 0))
@@ -397,8 +398,8 @@ proc fileMeta(req: Request, filepath: string): Future[Option[tuple[info: FileInf
     return none(tuple[info: FileInfo, headers: HttpHeaders])
   var size = info.get.size
   var headers = genericHeaders()
-  headers["Content-Length"] = $size
-  headers["Last-Modified"] = httpDate(info.get.lastWriteTime)
+  headers.ContentLength $size
+  headers.LastModified httpDate(info.get.lastWriteTime)
   return some((info: info.get, headers: headers))
 
 func calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): int =
@@ -434,14 +435,14 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
       discard
     parseRangeOk = r.ok
   if not rangeRequest or not parseRangeOk:
-    meta.unsafeGet.headers["Content-Type"] = mime
+    meta.unsafeGet.headers.ContentType mime
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     await req.writer.write(msg)
     await req.writeFile(filepath, meta.unsafeGet.info.size.int)
     req.devLog(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
   else:
     let boundary = "--" & $genOid()
-    meta.unsafeGet.headers["Content-Type"] = "multipart/byteranges; " & boundary
+    meta.unsafeGet.headers.ContentType "multipart/byteranges; " & boundary
     var contentLength = calcContentLength(ranges, meta.unsafeGet.info.size.int)
     for b in ranges:
       contentLength = contentLength + len(boundary & CRLF)
@@ -455,7 +456,7 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
       else:
         contentLength = contentLength + len(fmt"Content-Range: bytes {b.ends}/{meta.unsafeGet.info.size}" & CRLF & CRLF)
       contentLength = contentLength + len(CRLF & boundary & "--")
-      meta.unsafeGet.headers["Content-Length"] = $contentLength
+      meta.unsafeGet.headers.ContentLength $contentLength
       var msg = generateHeaders(meta.unsafeGet.headers, Http206)
       await req.writer.write(msg)
       await req.writePartialFile(filepath, ranges, meta, boundary, mime)
@@ -468,7 +469,7 @@ proc sendDownload*(req: Request, filepath: string) {.async.} =
   if meta.isNone:
     await req.respError(Http404)
     return
-  meta.unsafeGet.headers["Content-Type"] = "application/x-download"
+  meta.unsafeGet.headers.ContentType "application/x-download"
   var msg = generateHeaders(meta.unsafeGet.headers, Http200)
   await req.writer.write(msg)
   await req.writeFile(filepath, meta.unsafeGet.info.size.int)
@@ -505,8 +506,8 @@ proc serveStatic*(req: Request) {.async.} =
       return
     var (_, _, ext) = splitFile(absPath)
     let mime = req.server.mimeDb.getMimetype(ext)
-    meta.unsafeGet.headers["Content-Type"] = mime
-    meta.unsafeGet.headers["Accept-Ranges"] = "bytes"
+    meta.unsafeGet.headers.ContentType mime
+    meta.unsafeGet.headers.AcceptRanges "bytes"
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     discard await req.transp.write(msg)
     req.responded = true
@@ -616,7 +617,7 @@ proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = 
     of "html": await req.respError(code, err.msg, headers)
     of "txt": await req.respError(code, err.msg, headers)
     else:
-      headers["Content-Type"] = "text/plain"
+      headers.ContentType "text/plain"
       await req.respError(Http400, err.msg, headers)
 
 template tryHandle(body: untyped, keep: var bool) =

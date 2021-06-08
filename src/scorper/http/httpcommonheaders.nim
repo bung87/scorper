@@ -9,6 +9,46 @@ proc Accept*(headers: HttpHeaders, value: seq[string]) =
     headers.table["Accept"] = value
   else:
     headers.table.del("Accept")
+proc WWWAuthenticate*(headers: HttpHeaders, value: string) =
+  headers.table["Www-Authenticate"] = @[value]
+
+proc WWWAuthenticate*(headers: HttpHeaders, value: seq[string]) =
+  if value.len > 0:
+    headers.table["Www-Authenticate"] = value
+  else:
+    headers.table.del("Www-Authenticate")
+proc XFrameOptions*(headers: HttpHeaders, value: string) =
+  headers.table["X-Frame-Options"] = @[value]
+
+proc XFrameOptions*(headers: HttpHeaders, value: seq[string]) =
+  if value.len > 0:
+    headers.table["X-Frame-Options"] = value
+  else:
+    headers.table.del("X-Frame-Options")
+proc ContentEncoding*(headers: HttpHeaders, value: string) =
+  headers.table["Content-Encoding"] = @[value]
+
+proc ContentEncoding*(headers: HttpHeaders, value: seq[string]) =
+  if value.len > 0:
+    headers.table["Content-Encoding"] = value
+  else:
+    headers.table.del("Content-Encoding")
+proc LastModified*(headers: HttpHeaders, value: string) =
+  headers.table["Last-Modified"] = @[value]
+
+proc LastModified*(headers: HttpHeaders, value: seq[string]) =
+  if value.len > 0:
+    headers.table["Last-Modified"] = value
+  else:
+    headers.table.del("Last-Modified")
+proc AcceptRanges*(headers: HttpHeaders, value: string) =
+  headers.table["Accept-Ranges"] = @[value]
+
+proc AcceptRanges*(headers: HttpHeaders, value: seq[string]) =
+  if value.len > 0:
+    headers.table["Accept-Ranges"] = value
+  else:
+    headers.table.del("Accept-Ranges")
 proc AcceptCharset*(headers: HttpHeaders, value: string) =
   headers.table["Accept-Charset"] = @[value]
 
@@ -57,6 +97,14 @@ proc CacheControl*(headers: HttpHeaders, value: seq[string]) =
     headers.table["Cache-Control"] = value
   else:
     headers.table.del("Cache-Control")
+proc Server*(headers: HttpHeaders, value: string) =
+  headers.table["Server"] = @[value]
+
+proc Server*(headers: HttpHeaders, value: seq[string]) =
+  if value.len > 0:
+    headers.table["Server"] = value
+  else:
+    headers.table.del("Server")
 proc Connection*(headers: HttpHeaders, value: string) =
   headers.table["Connection"] = @[value]
 

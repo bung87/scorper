@@ -335,8 +335,9 @@ proc $1*(headers: HttpHeaders,value: seq[string]) =
     f.writeLine "## generated through ./httpcore"
     f.writeLine "import ./httptypes"
     f.writeLine "import tables"
-    for x in ["Accept", "Accept-Charset", "Accept-Encoding", "Accept-Language", "Accept-Datetime", "Authorization",
-        "Cache-Control", "Connection", "Cookie", "Content-Length", "Content-MD5", "Content-Type", "Date", "Expect",
+    for x in ["Accept", "WWW-Authenticate", "X-Frame-Options", "Content-Encoding", "Last-Modified", "Accept-Ranges",
+        "Accept-Charset", "Accept-Encoding", "Accept-Language", "Accept-Datetime", "Authorization", "Cache-Control", "Server", "Connection", "Cookie", "Content-Length",
+        "Content-MD5", "Content-Type", "Date", "Expect",
         "From", "Host", "If-Match", "If-Modified-Since", "If-None-Match", "If-Range", "If-Unmodified-Since",
         "Max-Forwards", "Pragma", "Proxy-Authorization", "Range", "Referer", "TE", "Upgrade", "User-Agent", "Via", "Warning"]:
       let key = toTitleCase(x)
