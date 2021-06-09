@@ -128,7 +128,7 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     if r.ok:
       for item in mimes.mitems:
         ext = req.getExt(item.mime)
-        headers["Content-Type"] = item.mime
+        headers.ContentType item.mime
         `body`
     else:
       `body`
@@ -188,7 +188,7 @@ proc respError*(req: Request, code: HttpCode, content: sink string, headers = ne
   var ctn: string
   var length: int
   if needCompress:
-    headers.ContentEncoding("gzip")
+    headers.ContentEncoding "gzip"
     ctn = compress(content, BestSpeed, dfGzip)
     length = ctn.len
   else:
