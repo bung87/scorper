@@ -1,4 +1,6 @@
 import strutils, times
+# This improvement is merged since nim 1.5.1
+
 # https://tools.ietf.org/html/rfc7230#section-3.2.6
 # field-name = token
 
