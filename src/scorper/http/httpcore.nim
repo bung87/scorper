@@ -1,8 +1,10 @@
 
 import tables, strutils, parseutils
 import ./httptypes
-import ./httpcommonheaders
-export httptypes, httpcommonheaders
+export httptypes
+when not isMainModule:
+  import ./httpcommonheaders
+  export httpcommonheaders
 const HttpDateFormat* = "ddd',' dd MMM yyyy HH:mm:ss 'GMT'"
 
 const
@@ -107,7 +109,8 @@ func `[]`*(headers: HttpHeaders, key: string): HttpHeaderValues =
     return headers.table[headers.toCaseInsensitive(key)].HttpHeaderValues
 
 converter toString*(values: HttpHeaderValues): string =
-  return seq[string](values)[0]
+  if seq[string](values).len > 0:
+    return seq[string](values)[0]
 
 func `[]`*(headers: HttpHeaders, key: string, i: int): string =
   ## Returns the ``i``'th value associated with the given key. If there are
@@ -314,14 +317,20 @@ when isMainModule:
   from re import re, split, findAll
   import macros, os
   const TPL = """
-proc $1*(headers: HttpHeaders, value: string) =
+
+proc $1*(headers: HttpHeaders, value: string) {.inline.} =
   headers.table["$2"] = @[value]
 
-proc $1*(headers: HttpHeaders,value: seq[string]) =
+proc $1*(headers: HttpHeaders,value: seq[string]) {.inline.} =
   if value.len > 0:
     headers.table["$2"] = value
   else:
     headers.table.del("$2")
+
+proc $1*(headers: HttpHeaders): HttpHeaderValues {.inline.} = 
+  if headers.table.hasKey("$2"):
+    return headers.table["$2"].HttpHeaderValues
+
 """
   proc splitByDelimiter(key: string): seq[string] =
     return split(key, re"(-|_|/|\s)")
@@ -336,7 +345,8 @@ proc $1*(headers: HttpHeaders,value: seq[string]) =
     f.writeLine "import ./httptypes"
     f.writeLine "import tables"
     for x in ["Accept", "WWW-Authenticate", "X-Frame-Options", "Content-Encoding", "Last-Modified", "Accept-Ranges",
-        "Accept-Charset", "Accept-Encoding", "Accept-Language", "Accept-Datetime", "Authorization", "Cache-Control", "Server", "Connection", "Cookie", "Content-Length",
+        "Accept-Charset", "Accept-Encoding", "Accept-Language", "Accept-Datetime", "Authorization", "Cache-Control",
+        "Server", "Connection", "Cookie", "Content-Length",
         "Content-MD5", "Content-Type", "Date", "Expect",
         "From", "Host", "If-Match", "If-Modified-Since", "If-None-Match", "If-Range", "If-Unmodified-Since",
         "Max-Forwards", "Pragma", "Proxy-Authorization", "Range", "Referer", "TE", "Upgrade", "User-Agent", "Via", "Warning"]:
