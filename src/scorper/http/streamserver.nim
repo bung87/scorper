@@ -485,6 +485,14 @@ proc sendAttachment*(req: Request, filepath: string, asName: string = "") {.asyn
   await sendFile(req, filepath, extroHeaders)
   req.responded = true
 
+proc hasSuffix(s: string): bool =
+  let sLen = s.len - 1
+  var i = sLen
+  while i != 0:
+    if s[i] == '.':
+      return true
+    dec i
+
 proc serveStatic*(req: Request) {.async.} =
   ## Relys on `StaticDir` environment variable
   if req.meth != HttpGet and req.meth != HttpHead:
@@ -495,7 +503,7 @@ proc serveStatic*(req: Request) {.async.} =
     relPath = req.url.path.relativePath(req.prefix)
   except:
     discard
-  if not lastPathPart(relPath).contains('.'):
+  if not hasSuffix(relPath):
     relPath = relPath / "index.html"
   let absPath = absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
