@@ -495,6 +495,8 @@ proc serveStatic*(req: Request) {.async.} =
     relPath = req.url.path.relativePath(req.prefix)
   except:
     discard
+  if not lastPathPart(relPath).contains('.'):
+    relPath = relPath / "index.html"
   let absPath = absolutePath(os.getEnv("StaticDir") / relPath)
   if not absPath.fileExists:
     await req.respError(Http404)
