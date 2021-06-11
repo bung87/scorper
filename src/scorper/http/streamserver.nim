@@ -5,7 +5,7 @@
 ##
 ## Copyright (c) 2020 Bung
 
-import chronos except asyncloop
+import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
