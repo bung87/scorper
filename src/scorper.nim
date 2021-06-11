@@ -6,7 +6,7 @@ import scorper / http / httpform
 import scorper / http / cookies
 import scorper / http / routermacros
 export router, streamserver, urlly, httpform, cookies
-import chronos
+import chronos except asyncloop
 export chronos
 export httpcore
 export routermacros

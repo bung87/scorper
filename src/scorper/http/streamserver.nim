@@ -5,7 +5,7 @@
 ##
 ## Copyright (c) 2020 Bung
 
-import chronos
+import chronos except asyncloop
 import mofuparser, parseutils, strutils
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
@@ -68,11 +68,11 @@ type
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 
-  AsyncCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
+  ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
-    callback: AsyncCallback
+    callback: ScorperCallback
     maxBody: int
-    router: Router[AsyncCallback]
+    router: Router[ScorperCallback]
     mimeDb: MimeDB
     httpParser: MofuParser
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
@@ -848,7 +848,7 @@ template initScorper(server: Scorper) =
     discard
 
 proc serve*(address: string,
-            callback: AsyncCallback,
+            callback: ScorperCallback,
             flags: set[ServerFlags] = {ReuseAddr},
             maxBody = 8.Mb,
             isSecurity = false,
@@ -873,7 +873,7 @@ proc serve*(address: string,
 
   await server.join()
 
-proc setHandler*(self: Scorper, handler: AsyncCallback) {.raises: [].} =
+proc setHandler*(self: Scorper, handler: ScorperCallback) {.raises: [].} =
   self.callback = handler
 
 proc newScorper*(address: string,
@@ -897,7 +897,7 @@ proc newScorper*(address: string,
     if isSecurity:
       result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
 
-proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback],
+proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallback],
                 flags: set[ServerFlags] = {ReuseAddr},
                 maxBody = 8.Mb,
                 isSecurity = false,
@@ -910,9 +910,9 @@ proc newScorper*(address: string, handler: AsyncCallback | Router[AsyncCallback]
                 ): Scorper =
   new result
   result.mimeDb = newScorperMimetypes()
-  when handler is AsyncCallback:
+  when handler is ScorperCallback:
     result.callback = handler
-  elif handler is Router[AsyncCallback]:
+  elif handler is Router[ScorperCallback]:
     result.router = handler
   result.maxBody = maxBody
   let address = initTAddress(address)

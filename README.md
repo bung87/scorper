@@ -49,7 +49,7 @@ when isMainModule:
 
 ``` nim
 when isMainModule:
-  let r = newRouter[AsyncCallback]()
+  let r = newRouter[ScorperCallback]()
   # Relys on `StaticDir` environment variable
   r.addRoute(serveStatic, "get", "/static/*$")
   let address = "127.0.0.1:8888"
@@ -63,7 +63,7 @@ when isMainModule:
 ``` nim
 proc handler(req: Request) {.route("get","/one"),async.} = discard
 proc handler2(req: Request) {.route(["get","post"],"/multi"),async.} = discard
-let r = newRouter[AsyncCallback]()
+let r = newRouter[ScorperCallback]()
 r.addRoute(handler)
 r.addRoute(handler2)
 ```
@@ -99,7 +99,7 @@ type
     ip*: string
     params*: Table[string, string]
     query*: seq[(string, string)]
-  AsyncCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
+  ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
     # inherited (partial)
     sock*: AsyncFD                # Socket

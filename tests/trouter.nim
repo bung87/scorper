@@ -6,8 +6,6 @@ import ./scorper/http/httpcore, chronos
 import tables
 import asynctest, strformat
 
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
-
 var server: Scorper
 
 var handlerParamRaw = proc (request: Request) {.async.} =
@@ -25,7 +23,7 @@ suite "test router":
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}
-    let r = newRouter[AsyncCallback]()
+    let r = newRouter[ScorperCallback]()
     r.addRoute(handlerParams, "get", "/basic/{p1}/{p2}")
     r.addRoute(handlerParamsEncode, "get", "/code/{codex}")
     r.addRoute(handlerParamRaw, "get", "/code_raw/{codex}")

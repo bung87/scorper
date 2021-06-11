@@ -8,8 +8,6 @@ import strformat
 import base64
 import asynctest, strformat
 
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe, raises: [].}
-
 var server: Scorper
 
 suite "test auth":
@@ -20,7 +18,7 @@ suite "test auth":
       else:
         await req.respBasicAuth()
     let address = "127.0.0.1:0"
-    let r = newRouter[AsyncCallback]()
+    let r = newRouter[ScorperCallback]()
     r.addRoute(handler, "get", "/auth/ok")
     r.addRoute(handler, "get", "/auth/error")
     server = newScorper(address, r)

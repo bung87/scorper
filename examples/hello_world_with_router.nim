@@ -1,12 +1,11 @@
 import scorper
 const port{.intdefine.} = 8888
 when isMainModule:
-  type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
   proc cb(req: Request) {.async.} =
     let headers = {"Content-type": "text/plain"}
     await req.resp("Hello, World!", headers.newHttpHeaders())
 
-  let r = newRouter[AsyncCallback]()
+  let r = newRouter[ScorperCallback]()
   r.addRoute(cb, "get", "/")
   r.addRoute(cb, "get", "/{p1}/{p2}")
   const address = "127.0.0.1:" & $port

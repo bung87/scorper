@@ -5,8 +5,6 @@ import ./scorper/http/httpcore, chronos
 import os, strutils
 import asynctest, strformat
 
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
-
 var server{.threadvar.}: Scorper
 
 var handler = proc (request: Request) {.closure, async.} =

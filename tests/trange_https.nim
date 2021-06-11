@@ -6,8 +6,6 @@ import os, strutils
 import asynctest, strformat
 include ./cert
 
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe.}
-
 var server{.threadvar.}: Scorper
 
 var handler = proc (request: Request) {.closure, async.} =

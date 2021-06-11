@@ -1,11 +1,8 @@
-import std / [macros, exitprocs]
+import std / [exitprocs]
 import scorper
 import jsony
 
 const port {.intdefine.} = 8080
-
-type AsyncCallback = proc (request: Request): Future[void] {.closure, gcsafe,
-    raises: [].}
 
 type Resp = object
   message: string
@@ -22,7 +19,7 @@ when isMainModule:
 
   let address = "0.0.0.0:" & $port
   let flags = {ReuseAddr}
-  let r = newRouter[AsyncCallback]()
+  let r = newRouter[ScorperCallback]()
   r.addRoute(jsonHandler)
   r.addRoute(plaintextHandler)
   var server = newScorper(address, r, flags)
