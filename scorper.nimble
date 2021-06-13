@@ -12,7 +12,7 @@ skipDirs      = @["tests","examples","experiments","benchmark"]
 requires "nim >= 1.3.1"
 requires "chronos >= 3.0.2" # initial 2.6.1
 requires "npeg"
-requires "https://github.com/nortero-code/rx-nim.git"
+# requires "https://github.com/nortero-code/rx-nim.git"
 requires "zippy"
 requires "jsony"
 requires "result"

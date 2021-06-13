@@ -12,7 +12,8 @@ import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpf
     netunit, mimetypes, httperror
 include constant
 import std / [os, streams, options, strformat, json, sequtils, macros]
-import rx_nim
+import ./ rxnim / rxnim
+
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
 
@@ -83,7 +84,7 @@ type
       tlsMinVersion: TLSVersion
       tlsMaxVersion: TLSVersion
     isSecurity: bool
-    logSub: Subject[string]
+    logSub: Observer[string]
   ResumableResult* = Result[Resumable, string]
 
 proc `$`*(r: Request): string =
@@ -125,7 +126,8 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     let accept: string = req.headers.getOrDefault("accept", @["text/plain"].HttpHeaderValues)
     var r: MatchResult[char]
     try:
-      r = req.server.privAccpetParser.match(accept, mimes)
+      {.cast(gcsafe).}:
+        r = req.server.privAccpetParser.match(accept, mimes)
     except Exception as err:
       await req.respError(Http500, err.msg, headers)
       return
@@ -421,7 +423,7 @@ func calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): i
     else:
       result = result + abs(b[1])
 
-proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.async.} =
+proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.gcsafe, async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(req, filepath)
@@ -440,7 +442,8 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
     let rng: string = req.headers["Range"]
     var r: MatchResult[char]
     try:
-      r = parser.match(rng, ranges)
+      {.cast(gcsafe).}:
+        r = parser.match(rng, ranges)
     except:
       discard
     parseRangeOk = r.ok
@@ -621,7 +624,8 @@ proc postCheck(req: Request): Future[int]{.async, inline.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
-proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, raises: [].} =
+proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, gcsafe,
+    raises: [].} =
   if req.responded:
     return
   let code = when err is HttpError: err.code.HttpCode else: Http500 #
@@ -856,12 +860,18 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
 template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
   server.httpParser = MofuParser()
-  server.logSub = subject[string]()
+
+  var onError = proc(error: Exception): void =
+    debugEcho $error
+  var onCompleted = proc(): void =
+    debugEcho "done"
+  server.logSub = newObserver[string](logSubOnNext, onError, onCompleted)
   if server.router != nil:
     server.router.compress()
   when not defined(release):
+    var obs = newObservable[string]()
     try:
-      discard server.logSub.subscribe logSubOnNext
+      discard subscribe[string](obs, server.logSub)
     except:
       discard
   try:
