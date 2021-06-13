@@ -330,7 +330,7 @@ proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int
       try:
         req.server.logSub.next(e.msg)
       except Exception:
-        discard
+        await req.respError(Http500)
       return
     when defined(windows):
       handle = int(getOsFileHandle(file))
@@ -351,13 +351,18 @@ proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int
       try:
         writeFileStream(req, fname, offset, size)
       except Exception:
-        discard
+        await req.respError(Http500)
+        return
     else:
       var written = size
       when compiles(sendfile(req.writer.tsource.fd.FileHandle.int, handle, offset, written)):
         let ret = sendfile(req.writer.tsource.fd.FileHandle.int, handle, offset, written)
       else:
-        writeFileStream(req, fname, offset, size)
+        try:
+          writeFileStream(req, fname, offset, size)
+        except Exception:
+          await req.respError(Http500)
+          return
   await req.writer.write(CRLF & boundary & "--")
   if handle != 0:
     close(file)
