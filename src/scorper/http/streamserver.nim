@@ -123,7 +123,12 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
   result = quote do:
     var mimes = newSeq[tuple[mime: string, q: float, extro: int, typScore: int]]()
     let accept: string = req.headers.getOrDefault("accept", @["text/plain"].HttpHeaderValues)
-    let r = req.server.privAccpetParser.match(accept, mimes)
+    var r: MatchResult[char]
+    try:
+      r = req.server.privAccpetParser.match(accept, mimes)
+    except Exception as err:
+      await req.respError(Http500, err.msg, headers)
+      return
     var ext {.inject.}: string
     if r.ok:
       for item in mimes.mitems:
@@ -541,6 +546,8 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
   try:
     result = parseJson(str)
   except CatchableError as e:
+    raise newHttpError(Http400, e.msg)
+  except Exception as e:
     raise newHttpError(Http400, e.msg)
   req.parsedJson = some(result)
   req.parsed = true
