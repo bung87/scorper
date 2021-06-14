@@ -13,7 +13,7 @@ import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpf
 include constant
 import std / [os, streams, options, strformat, json, sequtils, macros]
 import ./ rxnim / rxnim
-
+import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
 
