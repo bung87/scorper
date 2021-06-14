@@ -9,11 +9,11 @@ type Resp = object
 
 proc jsonHandler(req: Request) {.route("get", "/json"), async.} =
   let headers = {"Content-type": "application/json"}
-  await req.resp(Resp(message: "Hello, World!").toJson(), headers.newHttpHeaders())
+  await req.resp(Resp(message: "Hello, World!").toJson(), @headers)
 
 proc plaintextHandler(req: Request) {.route("get", "/plaintext"), async.} =
   let headers = {"Content-type": "text/plain"}
-  await req.resp("Hello, World!", headers.newHttpHeaders())
+  await req.resp("Hello, World!", @headers)
 
 when isMainModule:
 

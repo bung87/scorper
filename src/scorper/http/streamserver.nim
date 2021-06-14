@@ -183,6 +183,10 @@ proc resp*(req: Request, content: sink string,
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
+proc resp*(req: Request, content: sink string,
+              headers: seq[(string, string)], code: HttpCode = Http200): Future[void] {.inline, async.} =
+  await resp(req, content, headers.newHttpHeaders())
+
 proc respError*(req: Request, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[
     void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
@@ -210,6 +214,10 @@ proc respError*(req: Request, code: HttpCode, content: sink string, headers = ne
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
+proc respError*(req: Request, code: HttpCode, content: sink string,
+              headers: seq[(string, string)]): Future[void] {.inline, async.} =
+  await respError(req, code, content, headers.newHttpHeaders())
+
 proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
@@ -236,6 +244,10 @@ proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Futur
   await req.writer.write(msg)
   req.devLog(req.formatCommon(code, length))
   req.responded = true
+
+proc respError*(req: Request, code: HttpCode,
+              headers: seq[(string, string)]): Future[void] {.inline, async.} =
+  await respError(req, code, headers.newHttpHeaders())
 
 func pairParam(x: tuple[key: string, value: string]): string =
   result = x[0] & '=' & '"' & x[1] & '"'
