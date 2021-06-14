@@ -112,10 +112,10 @@ proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeE
     headers.Server HttpServer
   return headers
 
-func getExt*(req: Request, mime: string): string =
+func getExt*(req: Request, mime: string): string {.inline.} =
   result = req.server.mimeDb.getExt(mime, default = "")
 
-func getMimetype*(req: Request, ext: string): string =
+func getMimetype*(req: Request, ext: string): string{.inline.} =
   result = req.server.mimeDb.getMimetype(ext, default = "")
 
 macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untyped) =
@@ -905,7 +905,7 @@ proc serve*(address: string,
 
   await server.join()
 
-proc setHandler*(self: Scorper, handler: ScorperCallback) {.raises: [].} =
+proc setHandler*(self: Scorper, handler: ScorperCallback) {.inline, raises: [].} =
   self.callback = handler
 
 proc newScorper*(address: string,
