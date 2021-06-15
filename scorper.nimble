@@ -15,7 +15,7 @@ requires "npeg"
 requires "zippy"
 requires "jsony"
 requires "result"
-
+requires "asynctest"
 # use `slim` run tasks   
 
 # task test, "Runs the test suite":
@@ -56,5 +56,3 @@ task bench_h,"benchmark simple responses with httpbeast":
 task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"
 
-before test:
-  requires "asynctest"
