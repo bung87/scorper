@@ -12,11 +12,12 @@ skipDirs      = @["tests","examples","experiments","benchmark"]
 requires "nim >= 1.3.1"
 requires "chronos >= 3.0.2" # initial 2.6.1
 requires "npeg"
-# requires "https://github.com/nortero-code/rx-nim.git"
 requires "zippy"
 requires "jsony"
 requires "result"
-requires "asynctest >= 0.2.0 & < 0.3.0"
+
+# use `slim` run tasks   
+
 # task test, "Runs the test suite":
   # exec "testament --megatest:off pattern 'tests/*.nim'"
 
@@ -33,20 +34,27 @@ task ghpage,"gh page":
   let url = "\"https://bung87@github.com/bung87/scorper.git\""
   exec "git push --force --quiet " & url & " master:gh-pages"
 
-task benchmark,"benchmark":
+task bench_j,"benchmark with jest":
+  requires "jester"
   exec "nim c -r -d:release --threads:on -d:port=8888 benchmark/benchmark.nim"
   exec "nim c -r -d:release --threads:on -d:port=9999 -d:demoPath=benchmark/tjester.nim benchmark/benchmark.nim"
-task benchmarkserver,"benchmarkserver":
+
+task bench_s,"benchmark with std server":
   exec "nim c -r -d:release --threads:on -d:port=7777 -d:serverTest -d:demoPath=examples/hello_world.nim benchmark/benchmark.nim"
   exec "nim c -r -d:release --threads:on -d:port=6666 -d:serverTest -d:demoPath=benchmark/tstdserver.nim benchmark/benchmark.nim"
 
-task benchmarkresp,"benchmarkresp":
+task bench_p,"benchmark simple responses with prologue":
+  requires "prologue"
   exec "nim c -r -d:release --threads:on -d:port=7777 -d:demoPath=benchmark/simple_resp.nim benchmark/benchmark_resp.nim"
   exec "nim c -r -d:release --threads:on -d:port=6666 -d:demoPath=benchmark/simple_resp_prologue.nim benchmark/benchmark_resp.nim"
 
+task bench_h,"benchmark simple responses with httpbeast":
+  requires "httpbeast"
+  exec "nim c -r -d:release --threads:on -d:port=7777 -d:demoPath=benchmark/simple_resp.nim benchmark/benchmark_resp.nim"
+  exec "nim c -r -d:release --threads:on -d:port=6666 -d:demoPath=benchmark/simple_resp_httpbeast.nim benchmark/benchmark_resp.nim"
 
 task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"
 
-# before test:
-  # requires "asynctest >= 0.2.0 & < 0.3.0"
+before test:
+  requires "asynctest >= 0.2.0 & < 0.3.0"
