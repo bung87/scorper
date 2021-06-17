@@ -745,7 +745,7 @@ proc processRequest(
     await req.respStatus(Http400, BufferLimitExceeded)
     return false
   except AsyncStreamError as e:
-    await req.respStatus(Http400, e.msg)
+    await req.respStatus(Http500, e.msg)
     return false
   # Headers
   let headerEnd = req.server.httpParser.parseHeader(addr req.buf[0], req.buf.len)
@@ -894,25 +894,34 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
   var retry: bool
-  echo server.sock.int
-  echo transp.fd.int
-  while not transp.atEof():
-    when compileOption("threads"):
-      unregister(transp.fd)
-      let conn = waitFor fetchConn(cast[Scorper](server))
-      if conn.reader[].trySend(req):
-        echo "sent"
+  when compileOption("threads"):
+    unregister(transp.fd)
+    let conn = await fetchConn(cast[Scorper](server))
+    # conn.reader[].send(req)
+    # while not transp.atEof():
+    # echo req.server.freeConn.len
+    if conn.reader[].trySend(req):
+      while true:
         let r = conn.writer[].tryRecv()
         if r.dataAvailable:
+          req.server.freeConn.incl conn
           retry = r.msg
-      register(transp.fd)
-    else:
+          if not retry:
+            await req.reader.closeWait
+            await req.writer.closeWait
+            await transp.closeWait
+            break
+        else:
+          await sleepAsync(0)
+    register(transp.fd)
+  else:
+    while not transp.atEof():
       retry = await processRequest(req.server, req)
-    if not retry:
-      await req.reader.closeWait
-      await req.writer.closeWait
-      await transp.closeWait
-      break
+      if not retry:
+        await req.reader.closeWait
+        await req.writer.closeWait
+        await transp.closeWait
+        break
 
 proc logSubOnNext(v: string) =
   echo v
@@ -936,13 +945,16 @@ when compileOption("threads"):
     echo "worker"
     while true:
       let tried = conn.reader[].tryRecv()
-      # echo tried.dataAvailable
       if tried.dataAvailable:
-        echo "fd:", tried.msg.transp.fd.int
+        # echo "fd:", tried.msg.transp.fd.int
         register(tried.msg.transp.fd)
-        let ret = waitFor processRequest(tried.msg.server, tried.msg)
+        var ret: bool
+        while not tried.msg.transp.atEof():
+          ret = waitFor processRequest(tried.msg.server, tried.msg)
+          conn.writer[].send ret
+          if not ret:
+            break
         unregister(tried.msg.transp.fd)
-        conn.writer[].send ret
 
 template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
