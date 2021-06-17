@@ -16,6 +16,8 @@ import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
+import sets,hashes
+import cpuinfo
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -42,7 +44,14 @@ when defined(windows):
   import winlean
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
+
 type
+  ConnObj = object
+    reader: ptr Channel[Request]
+    writer: ptr Channel[bool]
+    createdAt: Moment
+    inUse: bool
+  Conn = ref ConnObj
   Request* = ref object
     meth*: HttpMethod
     headers*: HttpHeaders
@@ -57,7 +66,7 @@ type
     buf: array[HttpRequestBufferSize, char]
     contentLength: BiggestUInt # as RFC no limit
     contentType: string
-    server: Scorper
+    server*: Scorper
     prefix: string
     parsedJson: Option[JsonNode]
     parsedForm: Option[Form]
@@ -70,6 +79,7 @@ type
     writer: AsyncStreamWriter
 
   ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
+
   Scorper* = ref object of StreamServer
     callback: ScorperCallback
     maxBody: int
@@ -85,7 +95,46 @@ type
       tlsMaxVersion: TLSVersion
     isSecurity: bool
     logSub: Observer[string]
+    when compileOption("threads"):
+      freeConn: HashSet[Conn]
+      closed: bool
+      maxPoolSize: int
+      numOpen: int
+      reader:ptr Channel[bool]
   ResumableResult* = Result[Resumable, string]
+
+when compileOption("threads"):
+  proc hash(x: Conn): Hash = 
+    var h: Hash = 0
+    h = h !& hash($x.createdAt)
+    result = !$h
+  proc newConn(writer:ptr Channel[bool]): Conn =
+    new result
+    result.createdAt = Moment.now()
+    # result.returnedAt = Moment.now()
+    result.reader = cast[ptr Channel[Request]](
+      allocShared0(sizeof(Channel[Request]))
+    )
+    result.writer = writer
+    result.reader[].open()
+  proc close(self: Conn) {.async.} =
+    self.reader[].close
+    deallocShared(self.reader)
+
+  proc fetchConn(self: Scorper): Future[Conn] {.async.} = 
+    ## conn returns a newly-opened or new DBconn.
+    # if self.closed:
+    #   raise newException(IOError,"Connection closed.")
+
+    while len(self.freeConn) == 0 and self.numOpen >= self.maxPoolSize:
+      await sleepAsync(1)
+
+    ## Prefer a free connection, if possible.
+    let numFree = len(self.freeConn)
+    if numFree > 0:
+      result = self.freeConn.pop
+      result.inUse = true
+      return result
 
 proc `$`*(r: Request): string =
   var j = newJObject()
@@ -844,8 +893,14 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   else:
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
+  var retry:bool
   while not transp.atEof():
-    let retry = await processRequest(req.server, req)
+    when compileOption("threads"):
+      let conn = await cast[Scorper](server).fetchConn()
+      conn.reader[].send(req)
+      retry = conn.writer[].recv()
+    else:
+      retry = await processRequest(req.server, req)
     if not retry:
       await req.reader.closeWait
       await req.writer.closeWait
@@ -869,6 +924,13 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
   result.register(ext = "jsonp", mimetype = "application/javascript")
   return result
 
+when compileOption("threads"):
+  proc worker(conn:Conn) {.thread.} =
+    while true:
+      let tried = conn.reader[].tryRecv()
+      if tried.dataAvailable:
+        let ret = waitFor processRequest(tried.msg.server,tried.msg)
+
 template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
   server.httpParser = MofuParser()
@@ -890,6 +952,15 @@ template initScorper(server: Scorper) =
     server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $server.local)
   except:
     discard
+  when compileOption("threads"):
+    let threadsNum = countProcessors()
+    for i in 0 ..< threadsNum:
+      var conn = newConn( server.reader)
+      server.freeConn.incl conn
+      var thread: Thread[Conn]
+      createThread(thread, worker, conn)
+      inc server.numOpen
+    # deallocShared(self.reader)
 
 proc serve*(address: string,
             callback: ScorperCallback,
