@@ -16,7 +16,7 @@ import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
-import sets,hashes
+import sets, hashes
 import cpuinfo
 
 when defined(ssl):
@@ -47,8 +47,9 @@ const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
 type
   ConnObj = object
-    reader: ptr Channel[Request]
-    writer: ptr Channel[bool]
+    when compileOption("threads"):
+      reader: ptr Channel[Request]
+      writer: ptr Channel[bool]
     createdAt: Moment
     inUse: bool
   Conn = ref ConnObj
@@ -98,17 +99,16 @@ type
     when compileOption("threads"):
       freeConn: HashSet[Conn]
       closed: bool
-      maxPoolSize: int
-      numOpen: int
-      reader:ptr Channel[bool]
+      reader: ptr Channel[bool]
   ResumableResult* = Result[Resumable, string]
 
 when compileOption("threads"):
-  proc hash(x: Conn): Hash = 
+  proc hash(x: Conn): Hash =
     var h: Hash = 0
     h = h !& hash($x.createdAt)
     result = !$h
-  proc newConn(writer:ptr Channel[bool]): Conn =
+
+  proc newConn(writer: ptr Channel[bool]): Conn =
     new result
     result.createdAt = Moment.now()
     # result.returnedAt = Moment.now()
@@ -117,16 +117,17 @@ when compileOption("threads"):
     )
     result.writer = writer
     result.reader[].open()
+
   proc close(self: Conn) {.async.} =
     self.reader[].close
     deallocShared(self.reader)
 
-  proc fetchConn(self: Scorper): Future[Conn] {.async.} = 
+  proc fetchConn(self: Scorper): Future[Conn] {.async.} =
     ## conn returns a newly-opened or new DBconn.
     # if self.closed:
     #   raise newException(IOError,"Connection closed.")
 
-    while len(self.freeConn) == 0 and self.numOpen >= self.maxPoolSize:
+    while len(self.freeConn) == 0:
       await sleepAsync(1)
 
     ## Prefer a free connection, if possible.
@@ -893,10 +894,12 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   else:
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
-  var retry:bool
+  var retry: bool
   while not transp.atEof():
     when compileOption("threads"):
+      echo 233
       let conn = await cast[Scorper](server).fetchConn()
+      echo repr conn
       conn.reader[].send(req)
       retry = conn.writer[].recv()
     else:
@@ -925,11 +928,12 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
   return result
 
 when compileOption("threads"):
-  proc worker(conn:Conn) {.thread.} =
+  proc worker(conn: Conn) {.thread.} =
     while true:
       let tried = conn.reader[].tryRecv()
       if tried.dataAvailable:
-        let ret = waitFor processRequest(tried.msg.server,tried.msg)
+        let ret = waitFor processRequest(tried.msg.server, tried.msg)
+        conn.writer[].send ret
 
 template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
@@ -952,14 +956,20 @@ template initScorper(server: Scorper) =
     server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $server.local)
   except:
     discard
+
+template initThreads(server: Scorper) =
   when compileOption("threads"):
+    server.reader = cast[ptr Channel[bool]](
+      allocShared0(sizeof(Channel[bool]))
+    )
+    server.reader[].open()
     let threadsNum = countProcessors()
+    server.freeConn.init(threadsNum)
     for i in 0 ..< threadsNum:
-      var conn = newConn( server.reader)
+      var conn = newConn(server.reader)
       server.freeConn.incl conn
       var thread: Thread[Conn]
       createThread(thread, worker, conn)
-      inc server.numOpen
     # deallocShared(self.reader)
 
 proc serve*(address: string,
@@ -975,6 +985,7 @@ proc serve*(address: string,
             cache: TLSSessionCache = nil,
             ) {.async.} =
   var server = Scorper()
+  server.initThreads()
   server.mimeDb = newScorperMimetypes()
   server.callback = callback
   server.maxBody = maxBody
@@ -1003,6 +1014,7 @@ proc newScorper*(address: string,
                 cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
+  result.initThreads()
   result.mimeDb = newScorperMimetypes()
   result.maxBody = maxBody
   let address = initTAddress(address)
@@ -1024,6 +1036,7 @@ proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallb
                 cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
+  result.initThreads()
   result.mimeDb = newScorperMimetypes()
   when handler is ScorperCallback:
     result.callback = handler
