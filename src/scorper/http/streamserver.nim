@@ -897,9 +897,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var retry: bool
   while not transp.atEof():
     when compileOption("threads"):
-      echo 233
       let conn = await cast[Scorper](server).fetchConn()
-      echo repr conn
       conn.reader[].send(req)
       retry = conn.writer[].recv()
     else:
