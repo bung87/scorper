@@ -126,7 +126,6 @@ when compileOption("threads"):
     ## conn returns a newly-opened or new DBconn.
     # if self.closed:
     #   raise newException(IOError,"Connection closed.")
-
     while len(self.freeConn) == 0:
       await sleepAsync(1)
 
@@ -897,9 +896,14 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var retry: bool
   while not transp.atEof():
     when compileOption("threads"):
-      let conn = await cast[Scorper](server).fetchConn()
+      unregister(transp.fd)
+      let conn = waitFor fetchConn(cast[Scorper](server))
       conn.reader[].send(req)
-      retry = conn.writer[].recv()
+      echo "sent"
+      let r = conn.writer[].tryRecv()
+      if r.dataAvailable:
+        register(transp.fd)
+        retry = r.msg
     else:
       retry = await processRequest(req.server, req)
     if not retry:
@@ -927,10 +931,15 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
 
 when compileOption("threads"):
   proc worker(conn: Conn) {.thread.} =
+    echo "worker"
     while true:
       let tried = conn.reader[].tryRecv()
+      # echo tried.dataAvailable
       if tried.dataAvailable:
+        echo tried.msg.transp.fd.int
+        register(tried.msg.transp.fd)
         let ret = waitFor processRequest(tried.msg.server, tried.msg)
+        unregister(tried.msg.transp.fd)
         conn.writer[].send ret
 
 template initScorper(server: Scorper) =
@@ -956,19 +965,18 @@ template initScorper(server: Scorper) =
     discard
 
 template initThreads(server: Scorper) =
-  when compileOption("threads"):
-    server.reader = cast[ptr Channel[bool]](
-      allocShared0(sizeof(Channel[bool]))
-    )
-    server.reader[].open()
-    let threadsNum = countProcessors()
-    server.freeConn.init(threadsNum)
-    for i in 0 ..< threadsNum:
-      var conn = newConn(server.reader)
-      server.freeConn.incl conn
-      var thread: Thread[Conn]
-      createThread(thread, worker, conn)
-    # deallocShared(self.reader)
+  server.reader = cast[ptr Channel[bool]](
+    allocShared0(sizeof(Channel[bool]))
+  )
+  server.reader[].open()
+  let threadsNum = countProcessors()
+  server.freeConn.init(threadsNum)
+  for i in 0 ..< threadsNum:
+    var conn = newConn(server.reader)
+    server.freeConn.incl conn
+    var thread: Thread[Conn]
+    createThread(thread, worker, conn)
+  # deallocShared(self.reader)
 
 proc serve*(address: string,
             callback: ScorperCallback,
@@ -983,7 +991,8 @@ proc serve*(address: string,
             cache: TLSSessionCache = nil,
             ) {.async.} =
   var server = Scorper()
-  server.initThreads()
+  when compileOption("threads"):
+    server.initThreads()
   server.mimeDb = newScorperMimetypes()
   server.callback = callback
   server.maxBody = maxBody
@@ -1012,7 +1021,8 @@ proc newScorper*(address: string,
                 cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
-  result.initThreads()
+  when compileOption("threads"):
+    result.initThreads()
   result.mimeDb = newScorperMimetypes()
   result.maxBody = maxBody
   let address = initTAddress(address)
@@ -1034,7 +1044,8 @@ proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallb
                 cache: TLSSessionCache = nil,
                 ): Scorper =
   new result
-  result.initThreads()
+  when compileOption("threads"):
+    result.initThreads()
   result.mimeDb = newScorperMimetypes()
   when handler is ScorperCallback:
     result.callback = handler
