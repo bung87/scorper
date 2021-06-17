@@ -48,7 +48,7 @@ const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 type
   ConnObj = object
     when compileOption("threads"):
-      reader: ptr Channel[Request]
+      reader: ptr Channel[tuple[server: StreamServer, transp: StreamTransport]]
       writer: ptr Channel[bool]
     createdAt: Moment
     inUse: bool
@@ -102,6 +102,38 @@ type
       reader: ptr Channel[bool]
   ResumableResult* = Result[Resumable, string]
 
+proc initRequest(req: Request, server: StreamServer, transp: StreamTransport): Future[void] {.async.} =
+  shallowCopy(req.server, cast[Scorper](server))
+  shallowCopy(req.transp, transp)
+  req.headers = newHttpHeaders()
+  try:
+    req.hostname = $req.transp.localAddress
+  except TransportError:
+    discard
+  try:
+    req.ip = $req.transp.remoteAddress
+  except TransportError:
+    discard
+
+  when defined(ssl):
+    if req.server.isSecurity:
+      req.tlsStream =
+        newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
+                                req.server.tlsPrivateKey,
+                                req.server.tlsCertificate,
+                                minVersion = req.server.tlsMinVersion,
+                                maxVersion = req.server.tlsMaxVersion,
+                                flags = req.server.secureFlags)
+      req.reader = req.tlsStream.reader
+      req.writer = req.tlsStream.writer
+      await handshake(req.tlsStream)
+    else:
+      req.reader = req.transp.newAsyncStreamReader
+      req.writer = req.transp.newAsyncStreamWriter
+  else:
+    req.reader = req.transp.newAsyncStreamReader
+    req.writer = req.transp.newAsyncStreamWriter
+
 when compileOption("threads"):
   proc hash(x: Conn): Hash =
     var h: Hash = 0
@@ -112,8 +144,8 @@ when compileOption("threads"):
     new result
     result.createdAt = Moment.now()
     # result.returnedAt = Moment.now()
-    result.reader = cast[ptr Channel[Request]](
-      allocShared0(sizeof(Channel[Request]))
+    result.reader = cast[ptr Channel[tuple[server: StreamServer, transp: StreamTransport]]](
+      allocShared0(sizeof(Channel[tuple[server: StreamServer, transp: StreamTransport]]))
     )
     result.writer = writer
     result.reader[].open()
@@ -127,7 +159,7 @@ when compileOption("threads"):
     # if self.closed:
     #   raise newException(IOError,"Connection closed.")
     while len(self.freeConn) == 0:
-      await sleepAsync(1)
+      await sleepAsync(0)
 
     ## Prefer a free connection, if possible.
     let numFree = len(self.freeConn)
@@ -861,38 +893,9 @@ proc processRequest(
   else:
     return false
 
-proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
-  var req = Request()
-  shallowCopy(req.server, cast[Scorper](server))
-  req.headers = newHttpHeaders()
-  shallowCopy(req.transp, transp)
-  try:
-    req.hostname = $req.transp.localAddress
-  except TransportError:
-    discard
-  try:
-    req.ip = $req.transp.remoteAddress
-  except TransportError:
-    discard
 
-  when defined(ssl):
-    if req.server.isSecurity:
-      req.tlsStream =
-        newTLSServerAsyncStream(req.transp.newAsyncStreamReader, req.transp.newAsyncStreamWriter,
-                                req.server.tlsPrivateKey,
-                                req.server.tlsCertificate,
-                                minVersion = req.server.tlsMinVersion,
-                                maxVersion = req.server.tlsMaxVersion,
-                                flags = req.server.secureFlags)
-      req.reader = req.tlsStream.reader
-      req.writer = req.tlsStream.writer
-      await handshake(req.tlsStream)
-    else:
-      req.reader = req.transp.newAsyncStreamReader
-      req.writer = req.transp.newAsyncStreamWriter
-  else:
-    req.reader = req.transp.newAsyncStreamReader
-    req.writer = req.transp.newAsyncStreamWriter
+proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
+
   var retry: bool
   when compileOption("threads"):
     unregister(transp.fd)
@@ -900,21 +903,23 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     # conn.reader[].send(req)
     # while not transp.atEof():
     # echo req.server.freeConn.len
-    if conn.reader[].trySend(req):
+    if conn.reader[].trySend((server, transp)):
       while true:
         let r = conn.writer[].tryRecv()
         if r.dataAvailable:
-          req.server.freeConn.incl conn
+          cast[Scorper](server).freeConn.incl conn
           retry = r.msg
           if not retry:
-            await req.reader.closeWait
-            await req.writer.closeWait
-            await transp.closeWait
+            # await req.reader.closeWait
+            # await req.writer.closeWait
+            # await transp.closeWait
             break
         else:
           await sleepAsync(0)
     register(transp.fd)
   else:
+    var req = Request()
+    await initRequest(req, server, transp)
     while not transp.atEof():
       retry = await processRequest(req.server, req)
       if not retry:
@@ -943,16 +948,21 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
 when compileOption("threads"):
   proc worker(conn: Conn) {.thread.} =
     echo "worker"
+    var req = Request()
     while true:
       let tried = conn.reader[].tryRecv()
       if tried.dataAvailable:
         # echo "fd:", tried.msg.transp.fd.int
+        waitFor initRequest(req, tried.msg.server, tried.msg.transp)
         register(tried.msg.transp.fd)
         var ret: bool
         while not tried.msg.transp.atEof():
-          ret = waitFor processRequest(tried.msg.server, tried.msg)
+          ret = waitFor processRequest(cast[Scorper](tried.msg.server), req)
           conn.writer[].send ret
           if not ret:
+            waitFor req.reader.closeWait
+            waitFor req.writer.closeWait
+            waitFor tried.msg.transp.closeWait
             break
         unregister(tried.msg.transp.fd)
 
