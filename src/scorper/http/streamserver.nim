@@ -894,16 +894,18 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
   var retry: bool
+  echo server.sock.int
+  echo transp.fd.int
   while not transp.atEof():
     when compileOption("threads"):
       unregister(transp.fd)
       let conn = waitFor fetchConn(cast[Scorper](server))
-      conn.reader[].send(req)
-      echo "sent"
-      let r = conn.writer[].tryRecv()
-      if r.dataAvailable:
-        register(transp.fd)
-        retry = r.msg
+      if conn.reader[].trySend(req):
+        echo "sent"
+        let r = conn.writer[].tryRecv()
+        if r.dataAvailable:
+          retry = r.msg
+      register(transp.fd)
     else:
       retry = await processRequest(req.server, req)
     if not retry:
@@ -936,7 +938,7 @@ when compileOption("threads"):
       let tried = conn.reader[].tryRecv()
       # echo tried.dataAvailable
       if tried.dataAvailable:
-        echo tried.msg.transp.fd.int
+        echo "fd:", tried.msg.transp.fd.int
         register(tried.msg.transp.fd)
         let ret = waitFor processRequest(tried.msg.server, tried.msg)
         unregister(tried.msg.transp.fd)
