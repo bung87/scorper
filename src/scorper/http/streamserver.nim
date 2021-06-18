@@ -48,7 +48,7 @@ const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 type
   ConnObj = object
     when compileOption("threads"):
-      reader: ptr Channel[tuple[server: StreamServer, transp: StreamTransport]]
+      reader: ptr Channel[StreamTransport]
       writer: ptr Channel[bool]
     createdAt: Moment
     inUse: bool
@@ -101,6 +101,10 @@ type
       closed: bool
       reader: ptr Channel[bool]
   ResumableResult* = Result[Resumable, string]
+  TConext = ref TConextObj 
+  TConextObj = object 
+    server:Scorper
+    conn:Conn
 
 proc initRequest(req: Request, server: StreamServer, transp: StreamTransport): Future[void] {.async.} =
   shallowCopy(req.server, cast[Scorper](server))
@@ -144,8 +148,8 @@ when compileOption("threads"):
     new result
     result.createdAt = Moment.now()
     # result.returnedAt = Moment.now()
-    result.reader = cast[ptr Channel[tuple[server: StreamServer, transp: StreamTransport]]](
-      allocShared0(sizeof(Channel[tuple[server: StreamServer, transp: StreamTransport]]))
+    result.reader = cast[ptr Channel[ StreamTransport]](
+      allocShared0(sizeof(Channel[ StreamTransport]))
     )
     result.writer = writer
     result.reader[].open()
@@ -903,7 +907,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     # conn.reader[].send(req)
     # while not transp.atEof():
     # echo req.server.freeConn.len
-    if conn.reader[].trySend((server, transp)):
+    if conn.reader[].trySend( transp):
       while true:
         let r = conn.writer[].tryRecv()
         if r.dataAvailable:
@@ -946,25 +950,25 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
   return result
 
 when compileOption("threads"):
-  proc worker(conn: Conn) {.thread.} =
+  proc worker(ctx:TConext) {.thread.} =
     echo "worker"
     var req = Request()
     while true:
-      let tried = conn.reader[].tryRecv()
+      let tried = ctx.conn.reader[].tryRecv()
       if tried.dataAvailable:
         # echo "fd:", tried.msg.transp.fd.int
-        waitFor initRequest(req, tried.msg.server, tried.msg.transp)
-        register(tried.msg.transp.fd)
+        waitFor initRequest(req, ctx.server, tried.msg)
+        register(tried.msg.fd)
         var ret: bool
-        while not tried.msg.transp.atEof():
-          ret = waitFor processRequest(cast[Scorper](tried.msg.server), req)
-          conn.writer[].send ret
+        while not tried.msg.atEof():
+          ret = waitFor processRequest(cast[Scorper](ctx.server), req)
+          ctx.conn.writer[].send ret
           if not ret:
             waitFor req.reader.closeWait
             waitFor req.writer.closeWait
-            waitFor tried.msg.transp.closeWait
+            waitFor tried.msg.closeWait
             break
-        unregister(tried.msg.transp.fd)
+        unregister(tried.msg.fd)
 
 template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
@@ -988,7 +992,7 @@ template initScorper(server: Scorper) =
   except:
     discard
 
-template initThreads(server: Scorper) =
+proc initThreads(server: Scorper) {.inline.} =
   server.reader = cast[ptr Channel[bool]](
     allocShared0(sizeof(Channel[bool]))
   )
@@ -998,8 +1002,11 @@ template initThreads(server: Scorper) =
   for i in 0 ..< threadsNum:
     var conn = newConn(server.reader)
     server.freeConn.incl conn
-    var thread: Thread[Conn]
-    createThread(thread, worker, conn)
+    var thread: Thread[TConext]
+    var ctx:TConext = new TConext
+    ctx.server = server
+    ctx.conn = conn
+    createThread(thread, worker, ctx )
   # deallocShared(self.reader)
 
 proc serve*(address: string,
