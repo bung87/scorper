@@ -1,6 +1,8 @@
 
 import tables, strutils, parseutils
 import ./httptypes
+import std/cookies
+import std/strtabs
 export httptypes
 when not isMainModule:
   import ./httpcommonheaders
@@ -312,6 +314,11 @@ proc generateHeaders*(headers: HttpHeaders,
 
   add(result, CRLF)
 
+proc cookies*(headers: HttpHeaders): StringTableRef =
+  result = parseCookies headers.getOrDefault("Cookie")
+
+proc getCookie*(headers: HttpHeaders, key: string): string = headers.cookies.getOrDefault(key)
+
 when isMainModule:
   from sequtils import map, concat
   from re import re, split, findAll
@@ -356,27 +363,3 @@ proc $1*(headers: HttpHeaders): HttpHeaderValues {.inline.} =
     f.close
 
   genCommonHttpHeaderProcs()
-
-  var test = newHttpHeaders()
-  test["Connection"] = @["Upgrade", "Close"]
-  doAssert test["Connection", 0] == "Upgrade"
-  doAssert test["Connection", 1] == "Close"
-  test.add("Connection", "Test")
-  doAssert test["Connection", 2] == "Test"
-  doAssert "upgrade" in test["Connection"]
-
-  # Bug #5344.
-  doAssert parseHeader("foobar: ") == ("foobar", @[""])
-  let (key, value) = parseHeader("foobar: ")
-  test = newHttpHeaders()
-  test[key] = value
-  doAssert test["foobar"] == ""
-
-  doAssert parseHeader("foobar:") == ("foobar", @[""])
-
-  block: # test title case
-    var testTitleCase = newHttpHeaders()
-    testTitleCase.add("content-length", "1")
-    doAssert testTitleCase.hasKey("Content-Length")
-    for key, val in testTitleCase:
-      doAssert key == "Content-Length"
