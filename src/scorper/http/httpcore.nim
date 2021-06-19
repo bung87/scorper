@@ -328,13 +328,13 @@ when isMainModule:
 proc $1*(headers: HttpHeaders, value: string) {.inline.} =
   headers.table["$2"] = @[value]
 
-proc $1*(headers: HttpHeaders,value: seq[string]) {.inline.} =
+proc $1*(headers: HttpHeaders, value: seq[string]) {.inline.} =
   if value.len > 0:
     headers.table["$2"] = value
   else:
     headers.table.del("$2")
 
-proc $1*(headers: HttpHeaders): HttpHeaderValues {.inline.} = 
+proc $1*(headers: HttpHeaders): HttpHeaderValues {.inline.} =
   if headers.table.hasKey("$2"):
     return headers.table["$2"].HttpHeaderValues
 
