@@ -461,7 +461,7 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
     try:
       {.cast(gcsafe).}:
         r = parser.match(rng, ranges)
-    except:
+    except Exception:
       discard
     parseRangeOk = r.ok
   if not rangeRequest or not parseRangeOk:
@@ -728,10 +728,7 @@ proc processRequest(
   try:
     req.url = parseUrl("http://" & (if req.server.isSecurity: "s" else: "") & req.hostname & req.path)[]
   except ValueError as e:
-    try:
-      req.server.logSub.next(e.msg)
-    except:
-      discard
+    req.server.logSub.next(e.msg)
     asyncSpawn req.respError(Http400)
     return true
   case req.server.httpParser.major[]:
@@ -927,7 +924,11 @@ proc serve*(address: string,
   await server.join()
 
 proc setHandler*(self: Scorper, handler: ScorperCallback) {.inline, raises: [].} =
-  self.callback = handler
+  case self.kind
+  of CbKind.cb:
+    self.callback = handler
+  else:
+    discard
 
 proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallback] = default(ScorperCallback),
                 flags: set[ServerFlags] = {ReuseAddr},
