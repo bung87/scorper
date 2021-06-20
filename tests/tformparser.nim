@@ -16,7 +16,7 @@ suite "test form parser":
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}
-    server = newScorper(address, flags)
+    server = newScorper(address, default(ScorperCallback), flags)
     server.start()
 
   teardown:

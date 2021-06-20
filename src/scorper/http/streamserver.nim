@@ -70,10 +70,15 @@ type
     writer: AsyncStreamWriter
 
   ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
+  CbKind {.pure.} = enum
+    cb, router
   Scorper* = ref object of StreamServer
-    callback: ScorperCallback
+    case kind: CbKind
+    of CbKind.cb:
+      callback: ScorperCallback
+    of CbKind.router:
+      router: Router[ScorperCallback]
     maxBody: int
-    router: Router[ScorperCallback]
     mimeDb: MimeDB
     httpParser: MofuParser
     privAccpetParser: Parser[char, seq[tuple[mime: string, q: float, extro: int, typScore: int]]]
@@ -774,13 +779,14 @@ proc processRequest(
       return true
   # Call the user's callback.
   var keep = true
-  if scorper.callback != nil:
+  case scorper.kind
+  of CbKind.cb:
     shallowCopy(req.query, req.url.query)
     tryHandle(scorper.callback(req), keep)
     if not keep:
       return false
     discard await postCheck(req)
-  elif scorper.router != nil:
+  of CbKind.router:
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
       req.params = matched.route.params[]
@@ -878,8 +884,11 @@ template initScorper(server: Scorper) =
   var onCompleted = proc(): void =
     debugEcho "done"
   server.logSub = newObserver[string](logSubOnNext, onError, onCompleted)
-  if server.router != nil:
+  case server.kind
+  of CbKind.router:
     server.router.compress()
+  of CbKind.cb:
+    discard
   when not defined(release):
     var obs = newObservable[string]()
     try:
@@ -903,7 +912,7 @@ proc serve*(address: string,
             tlsMaxVersion = TLSVersion.TLS12,
             cache: TLSSessionCache = nil,
             ) {.async.} =
-  var server = Scorper()
+  var server = Scorper(kind: CbKind.cb)
   server.mimeDb = newScorperMimetypes()
   server.callback = callback
   server.maxBody = maxBody
@@ -920,7 +929,7 @@ proc serve*(address: string,
 proc setHandler*(self: Scorper, handler: ScorperCallback) {.inline, raises: [].} =
   self.callback = handler
 
-proc newScorper*(address: string,
+proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallback] = default(ScorperCallback),
                 flags: set[ServerFlags] = {ReuseAddr},
                 maxBody = 8.Mb,
                 isSecurity = false,
@@ -931,33 +940,13 @@ proc newScorper*(address: string,
                 tlsMaxVersion = TLSVersion.TLS12,
                 cache: TLSSessionCache = nil,
                 ): Scorper =
-  new result
-  result.mimeDb = newScorperMimetypes()
-  result.maxBody = maxBody
-  let address = initTAddress(address)
-  result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))
-  result.initScorper()
-  when defined(ssl):
-    if isSecurity:
-      result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
-
-proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallback],
-                flags: set[ServerFlags] = {ReuseAddr},
-                maxBody = 8.Mb,
-                isSecurity = false,
-                privateKey: string = "",
-                certificate: string = "",
-                secureFlags: set[TLSFlags] = {},
-                tlsMinVersion = TLSVersion.TLS11,
-                tlsMaxVersion = TLSVersion.TLS12,
-                cache: TLSSessionCache = nil,
-                ): Scorper =
-  new result
-  result.mimeDb = newScorperMimetypes()
   when handler is ScorperCallback:
+    result = Scorper(kind: CbKind.cb)
     result.callback = handler
   elif handler is Router[ScorperCallback]:
+    result = Scorper(kind: CbKind.router)
     result.router = handler
+  result.mimeDb = newScorperMimetypes()
   result.maxBody = maxBody
   let address = initTAddress(address)
   result = cast[Scorper](createStreamServer(address, processClient, flags, child = cast[StreamServer](result)))

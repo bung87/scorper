@@ -19,7 +19,7 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
 suite "test https":
   setup:
     let address = "127.0.0.1:0"
-    server = newScorper(address, isSecurity = true,
+    server = newScorper(address, default(ScorperCallback), isSecurity = true,
     privateKey = HttpsSelfSignedRsaKey,
     certificate = HttpsSelfSignedRsaCert)
     server.start()

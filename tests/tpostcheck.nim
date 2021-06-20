@@ -13,7 +13,7 @@ suite "test post check":
   setup:
     if server == default(Scorper):
       let address = "127.0.0.1:0"
-      server = newScorper(address)
+      server = newScorper(address, default(ScorperCallback))
       server.start()
       client = newAsyncHttpClient()
       # we use single client send same form 3 times, the second test's handler does not read http body,

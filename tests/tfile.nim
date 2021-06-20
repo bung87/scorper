@@ -13,7 +13,7 @@ suite "test send file":
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}
-    server = newScorper(address, flags)
+    server = newScorper(address, flags = flags)
     server.start()
   teardown:
     server.stop()
