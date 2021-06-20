@@ -284,7 +284,7 @@ proc readUntilBoundary(parser: MultipartParser): Future[int] {.async.} =
     else:
       j = 0
     inc result
-  if j < beginSep.len:
+  if j < beginSepLen:
     raise newException(LineIncompleteError, "")
 
 proc parse*(parser: MultipartParser) {.async.} =
