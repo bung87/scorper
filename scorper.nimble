@@ -58,3 +58,13 @@ task strict, "stric async exception check":
 
 before test:
   requires "asynctest"
+
+task profile,"profiling":
+  let c = readFile("benchmark/simple_resp.nim")
+  let c2 = "import nimprof\n" & c
+  writeFile("benchmark/simple_resp2.nim",c2)
+  exec "nim c --profiler:on --stacktrace:on -d:release benchmark/simple_resp2.nim"
+  exec "nohup ./benchmark/simple_resp2 &"
+  exec "curl http://localhost:8080/json"
+  rmFile("benchmark/simple_resp2.nim")
+  exec "pkill simple_resp2"
