@@ -2,7 +2,7 @@ import scorper
 const port{.intdefine.} = 8888
 when isMainModule:
   proc cb(req: Request) {.async.} =
-    let headers = {"Content-type": "text/plain"}
+    const headers = {"Content-type": "text/plain"}
     await req.resp("Hello, World!", headers.newHttpHeaders())
 
   let r = newRouter[ScorperCallback]()
