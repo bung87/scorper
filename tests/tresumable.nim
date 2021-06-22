@@ -4,7 +4,6 @@ import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import ./scorper/http/exts/resumable
 import os, parseutils, streams
-import ./scorper/http/urlly
 import results
 import asynctest, strformat
 

@@ -2,7 +2,6 @@
 import ./scorper/http/streamserver
 import ./scorper/http/streamclient
 import ./scorper/http/httpform
-import ./scorper/http/urlly
 import ./scorper/http/httpcore, chronos
 import asynctest, strformat
 

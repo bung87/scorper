@@ -25,17 +25,17 @@ type
 
 type
   Proxy* = ref object
-    url*: Url
+    url*: typeof(Url()[])
     auth*: string
 
 type
   AsyncHttpClient* = ref object
     connected: bool
-    currentURL: Url       ## Where we are currently connected.
-    headers*: HttpHeaders ## Headers to send in requests.
-    maxRedirects: Natural ## Maximum redirects, set to ``0`` to disable.
+    currentURL: typeof(Url()[]) ## Where we are currently connected.
+    headers*: HttpHeaders       ## Headers to send in requests.
+    maxRedirects: Natural       ## Maximum redirects, set to ``0`` to disable.
     userAgent: string
-    timeout*: int         ## Only used for blocking HttpClient for now.
+    timeout*: int               ## Only used for blocking HttpClient for now.
     proxy: Proxy
     ## ``nil`` or the callback to call when request progress changes.
     onProgressChanged*: ProgressChangedProc[Future[void]]
@@ -48,7 +48,7 @@ type
     oneSecondProgress: BiggestInt
     lastProgressReport: MonoTime
     transp: StreamTransport
-    getBody: bool         ## When `false`, the body is never read in requestAux.
+    getBody: bool               ## When `false`, the body is never read in requestAux.
     bodyStream: FutureStream[string]
     parseBodyFut: Future[void]
     buf: array[net.BufferSize, char]
@@ -84,7 +84,7 @@ proc getNewLocation(client: AsyncHttpClient, lastURL: string, headers: HttpHeade
     parsed.fragment = r.fragment
     result = $ parsed[]
 
-proc generateHeaders(requestUrl: Url, httpMethod: string, headers: HttpHeaders,
+proc generateHeaders(requestUrl: typeof(Url()[]), httpMethod: string, headers: HttpHeaders,
                      proxy: Proxy): string =
   # GET
   let upperMethod = httpMethod.toUpperAscii()
@@ -407,8 +407,8 @@ proc parseResponse*(client: AsyncHttpClient,
     #       client.bodyStream.fail(client.parseBodyFut.error)
 
 proc newConnection(client: AsyncHttpClient,
-                   url: Url) {.async.} =
-  if client.currentURL == default(Url) or client.currentURL.hostname !=
+                   url: typeof(Url()[])) {.async.} =
+  if client.currentURL == default(typeof(Url()[])) or client.currentURL.hostname !=
       url.hostname or client.currentURL.scheme != url.scheme or
       client.currentURL.port != url.port or
       (not client.connected):
@@ -456,7 +456,7 @@ proc newConnection(client: AsyncHttpClient,
         connectUrl.hostname = url.hostname
         connectUrl.port = if url.port != "": url.port else: "443"
 
-        let proxyHeaderString = generateHeaders(connectUrl, $HttpConnect,
+        let proxyHeaderString = generateHeaders(connectUrl[], $HttpConnect,
             newHttpHeaders(), client.proxy)
         await client.writer.write(proxyHeaderString)
         let proxyResp = await parseResponse(client, false)

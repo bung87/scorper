@@ -15,6 +15,7 @@ requires "npeg"
 requires "zippy"
 requires "jsony"
 requires "result"
+requires "urlly"
 
 # use `slim` run tasks   
 

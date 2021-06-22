@@ -8,8 +8,9 @@
 import chronos
 import mofuparser, parseutils, strutils
 import npeg/codegen
-import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, urlly, router,
+import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, router,
     netunit, mimetypes, httperror
+import urlly
 include constant
 import std / [os, streams, options, strformat, json, sequtils, macros]
 import ./ rxnim / rxnim
@@ -47,7 +48,7 @@ type
     meth*: HttpMethod
     headers*: HttpHeaders
     protocol*: tuple[major, minor: int]
-    url*: Url
+    url*: typeof(Url()[])
     path*: string              # http req path
     hostname*: string
     ip*: string
@@ -530,7 +531,7 @@ proc serveStatic*(req: Request) {.async.} =
     return
   var relPath: string
   try:
-    relPath = req.url.path.relativePath(req.prefix)
+    relPath = decodeUrlComponent(req.url.path.relativePath(req.prefix))
   except:
     discard
   if not hasSuffix(relPath):
