@@ -16,6 +16,7 @@ requires "zippy"
 requires "jsony"
 requires "result"
 requires "urlly"
+requires "https://github.com/bung87/asyncthreadpool#pack"
 
 # use `slim` run tasks   
 

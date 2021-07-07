@@ -17,6 +17,9 @@ import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
+const MultiThreads = compileOption("threads")
+when MultiThreads:
+  import asyncthreadpool
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -91,6 +94,8 @@ type
       tlsMaxVersion: TLSVersion
     isSecurity: bool
     logSub: Observer[string]
+    when MultiThreads:
+      pool: ThreadPool
   ResumableResult* = Result[Resumable, string]
 
 proc `$`*(r: Request): string =
@@ -682,9 +687,9 @@ template tryHandle(body: untyped, keep: var bool) =
       await req.defaultErrorHandle(err)
 
 proc processRequest(
-  scorper: Scorper,
   req: Request,
 ): Future[bool] {.async.} =
+
   req.responded = false
   req.parsed = false
   req.parsedJson = none(JsonNode)
@@ -767,7 +772,7 @@ proc processRequest(
       except ValueError:
         await req.respStatus(Http400, "Invalid Content-Length.")
         return true
-      if req.contentLength.int > scorper.maxBody:
+      if req.contentLength.int > req.server.maxBody:
         await req.respStatus(Http413)
         return false
       if req.headers.hasKey("Content-Type"):
@@ -777,15 +782,15 @@ proc processRequest(
       return true
   # Call the user's callback.
   var keep = true
-  case scorper.kind
+  case req.server.kind
   of CbKind.cb:
     shallowCopy(req.query, req.url.query)
-    tryHandle(scorper.callback(req), keep)
+    tryHandle(req.server.callback(req), keep)
     if not keep:
       return false
     discard await postCheck(req)
   of CbKind.router:
-    let matched = scorper.router.match($req.meth, req.url.path)
+    let matched = req.server.router.match($req.meth, req.url.path)
     if matched.success:
       req.params = matched.route.params[]
       shallowCopy(req.query, req.url.query)
@@ -849,7 +854,10 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
   while not transp.atEof():
-    let retry = await processRequest(req.server, req)
+    when MultiThreads:
+      let retry = await req.server.pool.spawn processRequest(req)
+    else:
+      let retry = await processRequest(req)
     if not retry:
       await req.reader.closeWait
       await req.writer.closeWait
@@ -876,7 +884,8 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
 template initScorper(server: Scorper) =
   server.privAccpetParser = accpetParser()
   server.httpParser = MofuParser()
-
+  when MultiThreads:
+    server.pool = newThreadPool()
   var onError = proc(error: Exception): void =
     debugEcho $error
   var onCompleted = proc(): void =
