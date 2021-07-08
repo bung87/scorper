@@ -646,6 +646,8 @@ proc form*(req: Request): Future[Form] {.async.} =
 proc postCheck(req: Request): Future[int]{.async, inline.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
+  when MultiThreads:
+    unregister(req.transp.fd)
 
 proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, gcsafe,
     raises: [].} =
@@ -687,9 +689,10 @@ template tryHandle(body: untyped, keep: var bool) =
       await req.defaultErrorHandle(err)
 
 proc processRequest(
-  req: Request,
+  req: Request
 ): Future[bool] {.async.} =
-
+  when MultiThreads:
+    register(req.transp.fd)
   req.responded = false
   req.parsed = false
   req.parsedJson = none(JsonNode)
@@ -821,6 +824,7 @@ proc processRequest(
   else:
     return false
 
+# proc getContext(ctx: MyContext): MyContext = ctx
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var req = Request()
   shallowCopy(req.server, cast[Scorper](server))
@@ -853,16 +857,27 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   else:
     req.reader = req.transp.newAsyncStreamReader
     req.writer = req.transp.newAsyncStreamWriter
-  while not transp.atEof():
-    when MultiThreads:
-      let retry = await req.server.pool.spawn processRequest(req)
-    else:
+  proc handleClient(req:Request){.async.} =
+    while not req.transp.atEof():
       let retry = await processRequest(req)
-    if not retry:
-      await req.reader.closeWait
-      await req.writer.closeWait
-      await transp.closeWait
-      break
+      if not retry:
+        await req.reader.closeWait
+        await req.writer.closeWait
+        await req.transp.closeWait
+        break
+  discard await req.server.pool.spawn handleClient(req)
+  # while not transp.atEof():
+  #   when MultiThreads:
+  #     unregister(req.transp.fd)
+  #     let retry = await req.server.pool.spawn processRequest(req)
+  #     register(req.transp.fd)
+  #   else:
+  #     let retry = await processRequest(req)
+  #   if not cast[bool](retry):
+  #     await req.reader.closeWait
+  #     await req.writer.closeWait
+  #     await transp.closeWait
+  #     break
 
 proc logSubOnNext(v: string) =
   echo v
