@@ -3,7 +3,7 @@ import streamserver, router, httpcore
 import macros
 import ../private/pnode_parse
 import strutils, sequtils, sugar
-import os, osproc
+import os
 
 template route*(meth: typed, pattern: string, headers: HttpHeaders = nil){.pragma.}
 
@@ -29,7 +29,7 @@ proc collectImps(n: PNode, o: var seq[PNode]) =
 proc `$`*(node: PNode): string =
   ## Get the string of an identifier node.
   case node.kind
-  of nkPostfix, nkInfix:
+  of nkInfix:
     result = $node[0].ident.s
   of nkIdent:
     result = $node.ident.s
@@ -37,8 +37,8 @@ proc `$`*(node: PNode): string =
     result = $node.ident.s
   of nkStrLit..nkTripleStrLit, nkCommentStmt, nkSym:
     result = node.strVal
-  # of nnkOpenSymChoice, nnkClosedSymChoice:
-  #   result = $node[0]
+  of nkPostfix:
+    result = $node[1].ident.s
   of nkCall:
     result = $node[0].ident.s
   of nkAccQuoted:
@@ -55,27 +55,7 @@ proc getPath(p: Pnode): string =
   else:
     return ""
     # return p.sons.mapIt(it.ident).join("")
-macro addRoutes(r: typed, routes: typed): untyped =
-  let id = newIdentNode("a")
-  result = nnkStmtList.newTree(
-    nnkForStmt.newTree(
-      id,
-      routes,
-      nnkStmtList.newTree(
-        nnkCall.newTree(
-          newIdentNode("addRoute"),
-          r,
-          nnkCall.newTree(
-            newIdentNode("ident"),
-            nnkPrefix.newTree(
-              newIdentNode("$"),
-              id
-    )
-  )
-    )
-  )
-    )
-  )
+
 
 proc getRoutes(cPath: string, r: var seq[string]) =
   let m = parsePNodeStr(readFile cPath)
@@ -102,13 +82,11 @@ proc getImports(cPath: string): seq[string] =
       getRoutes(cp, result)
 
 macro mount*[H](router: Router[H], h: untyped) =
-  # let cPath = lineInfoObj(h).filename
-  let cPath = instantiationInfo(fullPaths = true).filename
+  let cPath = lineInfoObj(h).filename
   let cmd = "routermacros"
   let r = staticExec(cmd & " " & cPath)
   let routes = r.split(",")
   result = nnkStmtList.newTree()
-  echo routes
   for a in routes:
     result.add newCall(ident"addRoute", router, ident(a))
 
@@ -116,8 +94,6 @@ when isMainModule:
   when declared(commandLineParams):
     var f = paramStr(1)
     f.normalizePath
-    # var r = newSeq[string]()
-    # getRoutes(f.absolutePath,r)
     let r = getImports(f.absolutePath)
     stdout.write(r.join(","))
   else:

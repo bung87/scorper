@@ -561,3 +561,6 @@ func match*[H](
 ): RouteResult[H] {.noSideEffect.} =
   ## Simple wrapper around the regular route function
   match(router, $requestMethod, requestPath, requestHeaders)
+
+
+func len*[T](c: Router[T]): int = c.verbTrees.len
