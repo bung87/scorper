@@ -7,6 +7,7 @@ license       = "Apache License 2.0"
 srcDir        = "src"
 skipDirs      = @["tests","examples","experiments","benchmark"]
 
+namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
 # Dependencies
 
 requires "nim >= 1.3.1"
@@ -16,7 +17,6 @@ requires "zippy"
 requires "jsony"
 requires "result"
 requires "urlly"
-
 # use `slim` run tasks   
 
 # task test, "Runs the test suite":

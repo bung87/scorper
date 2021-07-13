@@ -2,8 +2,8 @@ import chronos
 import streamserver, router, httpcore
 import macros
 import ../private/pnode_parse
-import strutils,sequtils,sugar
-import os
+import strutils, sequtils, sugar
+import os, osproc
 
 template route*(meth: typed, pattern: string, headers: HttpHeaders = nil){.pragma.}
 
@@ -20,11 +20,11 @@ template addRoute*[H](
   else:
     {.error: "handler should has route pragma".}
 
-proc collectImps(n:PNode,o:var seq[PNode]) =
+proc collectImps(n: PNode, o: var seq[PNode]) =
   if n.kind == nkImportStmt:
     o.add n
   for m in n:
-    collectImps(m,o)
+    collectImps(m, o)
 
 proc `$`*(node: PNode): string =
   ## Get the string of an identifier node.
@@ -46,7 +46,7 @@ proc `$`*(node: PNode): string =
   else:
     discard
 
-proc getPath(p:Pnode):string =
+proc getPath(p: Pnode): string =
   case p.kind
   of nkPrefix:
     return p.sons.mapIt($it).join("")
@@ -55,42 +55,72 @@ proc getPath(p:Pnode):string =
   else:
     return ""
     # return p.sons.mapIt(it.ident).join("")
+macro addRoutes(r: typed, routes: typed): untyped =
+  let id = newIdentNode("a")
+  result = nnkStmtList.newTree(
+    nnkForStmt.newTree(
+      id,
+      routes,
+      nnkStmtList.newTree(
+        nnkCall.newTree(
+          newIdentNode("addRoute"),
+          r,
+          nnkCall.newTree(
+            newIdentNode("ident"),
+            nnkPrefix.newTree(
+              newIdentNode("$"),
+              id
+    )
+  )
+    )
+  )
+    )
+  )
 
-template mount*[H](router: Router[H],h:typed) =
-  # let cPath = lineInfoObj(h).filename
-  let cPath = instantiationInfo(fullPaths=true).filename
+proc getRoutes(cPath: string, r: var seq[string]) =
+  let m = parsePNodeStr(readFile cPath)
+  for x in m.sons:
+    if x.kind == nkProcDef:
+      let s = collect(newSeq):
+        for y in x.sons:
+          if y.kind == nkPragma:
+            for z in y.sons:
+              if z.kind != nkEmpty:
+                $z
+      if "route" in s:
+        r.add $x[0]
+
+proc getImports(cPath: string): seq[string] =
   let f = readFile(cPath)
-  var imps =  newSeq[PNode]()
+  var imps = newSeq[PNode]()
   let n = parsePNodeStr(f)
-  
-  collectImps(n,imps)
-  var needAdd = newSeq[PNode]()
+  collectImps(n, imps)
   for i in imps:
-    # echo  i[^1].kind
     let p = getPath i[^1]
     if p.len > 0:
-      let m = parsePNodeStr(readFile os.parentDir(cPath) / os.addFileExt(p,"nim") )
-      for x in m.sons:
-        if x.kind == nkProcDef:
-          let s = collect(newSeq()):
-            for y in x.sons:
-              echo y.kind
-              if y.kind == nkPragma:
-                for z in y.sons:
-                  if z.kind != nkEmpty:
-                    $z
-          if "route" in s:
-            needAdd.add x[0]
-  echo needAdd
-  # result = nnkStmtList.newTree()
-  for a in needAdd:
-    # result.add newCall(ident"addRoute",router,ident($a))
-    addRoute(router,ident($a))
+      let cp = os.parentDir(cPath) / os.addFileExt(p, "nim")
+      getRoutes(cp, result)
 
+macro mount*[H](router: Router[H], h: untyped) =
+  # let cPath = lineInfoObj(h).filename
+  let cPath = instantiationInfo(fullPaths = true).filename
+  let r = execCmdEx("./routermacros " & cPath)
+  let routes = r.output.split(",")
+  result = nnkStmtList.newTree()
+  for a in routes:
+    result.add newCall(ident"addRoute", router, ident(a))
 
 when isMainModule:
-  proc handler(req: Request) {.route("get", "/one"), async.} = discard
-  proc handler2(req: Request) {.route(["get", "post"], "/multi"), async.} = discard
-  let r = newRouter[ScorperCallback]()
-  r.addRoute(handler)
-  r.addRoute(handler2)
+  when declared(commandLineParams):
+    var f = paramStr(1)
+    f.normalizePath
+    # var r = newSeq[string]()
+    # getRoutes(f.absolutePath,r)
+    let r = getImports(f.absolutePath)
+    stdout.write(r.join(","))
+  else:
+    proc handler(req: Request) {.route("get", "/one"), async.} = discard
+    proc handler2(req: Request) {.route(["get", "post"], "/multi"), async.} = discard
+    let r = newRouter[ScorperCallback]()
+    r.addRoute(handler)
+    r.addRoute(handler2)
