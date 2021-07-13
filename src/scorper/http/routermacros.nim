@@ -3,7 +3,7 @@ import streamserver, router, httpcore
 import macros
 import ../private/pnode_parse
 import strutils, sequtils, sugar
-import os
+import os,osproc
 
 template route*(meth: typed, pattern: string, headers: HttpHeaders = nil){.pragma.}
 
@@ -50,6 +50,8 @@ proc `$`*(node: PNode): string =
     result = $node[0].ident.s
   of nkAccQuoted:
     result = $node[0]
+  of nnkFromStmt:
+    result = $node[0]
   else:
     discard
 
@@ -58,7 +60,7 @@ proc getPaths(p: PNode ,pDir:string): seq[string] =
   case p.kind
   of nkPrefix:
     var pa = $p
-    return @[ if pa.startsWith("./") : unixToNativePath( pDir / pa) else: pa]
+    return @[ if pa.startsWith("./") : unixToNativePath( pDir / pa) else: execCmdEx("nimble" & "--path " & $p.sons[0]).output]
   of nkInfix:
     if p[^1].kind == nkBracket:
       var prefix:string
@@ -66,7 +68,7 @@ proc getPaths(p: PNode ,pDir:string): seq[string] =
       if prefix.startsWith("./") : 
         prefix = unixToNativePath( pDir / prefix)
       else: 
-        discard
+        prefix = execCmdEx("nimble" & "--path " & $p.sons[0]).output
       return p[^1].sons.mapIt(unixToNativePath(prefix / $it ))
   else:
     return result
