@@ -3,7 +3,7 @@ import streamserver, router, httpcore
 import macros
 import ../private/pnode_parse
 import strutils, sequtils, sugar
-import os,osproc
+import os, osproc
 
 template route*(meth: typed, pattern: string, headers: HttpHeaders = nil){.pragma.}
 
@@ -26,12 +26,12 @@ proc collectImps(n: PNode, o: var seq[PNode]) =
   for m in n:
     collectImps(m, o)
 
-proc collectIdents(s:openarray[PNode], a:var string) =
+proc collectIdents(s: openarray[PNode], a: var string) =
   for n in s:
     if n.kind == nkIdent:
       a.add n.ident.s
     else:
-      collectIdents(n.sons,a)
+      collectIdents(n.sons, a)
 
 proc `$`*(node: PNode): string =
   ## Get the string of an identifier node.
@@ -41,7 +41,7 @@ proc `$`*(node: PNode): string =
   of nkIdent:
     result = $node.ident.s
   of nkPrefix:
-    collectIdents(node.sons,result)
+    collectIdents(node.sons, result)
   of nkStrLit..nkTripleStrLit, nkCommentStmt, nkSym:
     result = node.strVal
   of nkPostfix:
@@ -50,32 +50,32 @@ proc `$`*(node: PNode): string =
     result = $node[0].ident.s
   of nkAccQuoted:
     result = $node[0]
-  of nnkFromStmt:
+  of nkFromStmt:
     result = $node[0]
   else:
     discard
 
 
-proc getPaths(p: PNode ,pDir:string): seq[string] =
+proc getPaths(p: PNode, pDir: string): seq[string] =
   case p.kind
   of nkPrefix:
     var pa = $p
-    return @[ if pa.startsWith("./") : unixToNativePath( pDir / pa) else: execCmdEx("nimble" & "--path " & $p.sons[0]).output]
+    return @[if pa.startsWith("./"): unixToNativePath(pDir / pa) else: execCmdEx("nimble" & "--path " & $p.sons[0]).output]
   of nkInfix:
     if p[^1].kind == nkBracket:
-      var prefix:string
-      collectIdents(p.sons[1].sons[1].sons,prefix)
-      if prefix.startsWith("./") : 
-        prefix = unixToNativePath( pDir / prefix)
-      else: 
+      var prefix: string
+      collectIdents(p.sons[1].sons[1].sons, prefix)
+      if prefix.startsWith("./"):
+        prefix = unixToNativePath(pDir / prefix)
+      else:
         prefix = execCmdEx("nimble" & "--path " & $p.sons[0]).output
-      return p[^1].sons.mapIt(unixToNativePath(prefix / $it ))
+      return p[^1].sons.mapIt(unixToNativePath(prefix / $it))
   else:
     return result
 
 
 proc getRoutes(cPath: string, r: var seq[string]) =
-  if not fileExists(cPath): return 
+  if not fileExists(cPath): return
   if cPath.startsWith(currentSourcePath.parentDir.parentDir): return
   let m = parsePNodeStr(readFile cPath)
   for x in m.sons:
@@ -95,12 +95,12 @@ proc getImports*(cPath: string): seq[string] =
   var imps = newSeq[PNode]()
   let n = parsePNodeStr(f)
   collectImps(n, imps)
-  var ps:seq[string]
+  var ps: seq[string]
   for i in imps:
     ps = getPaths(i[^1], pDir)
     for p in ps:
       if p.len > 0:
-        let cp =  os.addFileExt(p, "nim")
+        let cp = os.addFileExt(p, "nim")
         getRoutes(cp, result)
 
 macro mount*[H](router: Router[H], h: untyped) =
