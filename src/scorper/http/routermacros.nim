@@ -104,9 +104,11 @@ proc getImports(cPath: string): seq[string] =
 macro mount*[H](router: Router[H], h: untyped) =
   # let cPath = lineInfoObj(h).filename
   let cPath = instantiationInfo(fullPaths = true).filename
-  let r = execCmdEx("./routermacros " & cPath)
-  let routes = r.output.split(",")
+  let cmd = "routermacros"
+  let r = staticExec(cmd & " " & cPath)
+  let routes = r.split(",")
   result = nnkStmtList.newTree()
+  echo routes
   for a in routes:
     result.add newCall(ident"addRoute", router, ident(a))
 
