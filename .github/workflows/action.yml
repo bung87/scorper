@@ -62,7 +62,7 @@ jobs:
         nim-version: ${{ matrix.nim-version }}
 
     - name: Install Packages
-      run: nimble install -d -y
+      run: nimble install -y
     - name: Install slim
       run: nimble install slim -n
     - name: server -d:chronosStrictException check
