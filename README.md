@@ -1,5 +1,7 @@
 # scorper  ![Build Status](https://github.com/bung87/scorper/workflows/Test/badge.svg)  
 
+![scorper](artwork/scorper.png)  
+
 
 [travis]: https://travis-ci.org/bung87/scorper.svg?branch=master
 
@@ -174,4 +176,6 @@ the `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructio
 
 ## License  
 
-Apache License 2.0
+Apache License 2.0  
+
+The Scorper logo was created and released to the Scorper project under the CC BY-SA 4.0 by [https://ITwrx.org](https://ITwrx.org) and [https://LuciusRafi.com](https://LuciusRafi.com)  

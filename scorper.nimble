@@ -5,7 +5,7 @@ author        = "bung87"
 description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
 srcDir        = "src"
-skipDirs      = @["tests","examples","experiments","benchmark"]
+skipDirs      = @["tests","examples","experiments","benchmark","artwork"]
 
 namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
 # Dependencies
