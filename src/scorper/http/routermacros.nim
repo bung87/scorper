@@ -26,6 +26,13 @@ proc collectImps(n: PNode, o: var seq[PNode]) =
   for m in n:
     collectImps(m, o)
 
+proc collectIdents(s:openarray[PNode], a:var string) =
+  for n in s:
+    if n.kind == nkIdent:
+      a.add n.ident.s
+    else:
+      collectIdents(n.sons,a)
+
 proc `$`*(node: PNode): string =
   ## Get the string of an identifier node.
   case node.kind
@@ -34,7 +41,7 @@ proc `$`*(node: PNode): string =
   of nkIdent:
     result = $node.ident.s
   of nkPrefix:
-    result = $node.ident.s
+    collectIdents(node.sons,result)
   of nkStrLit..nkTripleStrLit, nkCommentStmt, nkSym:
     result = node.strVal
   of nkPostfix:
@@ -46,18 +53,28 @@ proc `$`*(node: PNode): string =
   else:
     discard
 
-proc getPath(p: Pnode): string =
+
+proc getPaths(p: PNode ,pDir:string): seq[string] =
   case p.kind
   of nkPrefix:
-    return p.sons.mapIt($it).join("")
+    var pa = $p
+    return @[ if pa.startsWith("./") : unixToNativePath( pDir / pa) else: pa]
   of nkInfix:
-    return ""
+    if p[^1].kind == nkBracket:
+      var prefix:string
+      collectIdents(p.sons[1].sons[1].sons,prefix)
+      if prefix.startsWith("./") : 
+        prefix = unixToNativePath( pDir / prefix)
+      else: 
+        discard
+      return p[^1].sons.mapIt(unixToNativePath(prefix / $it ))
   else:
-    return ""
-    # return p.sons.mapIt(it.ident).join("")
+    return result
 
 
 proc getRoutes(cPath: string, r: var seq[string]) =
+  if not fileExists(cPath): return 
+  if cPath.startsWith(currentSourcePath.parentDir.parentDir): return
   let m = parsePNodeStr(readFile cPath)
   for x in m.sons:
     if x.kind == nkProcDef:
@@ -70,16 +87,19 @@ proc getRoutes(cPath: string, r: var seq[string]) =
       if "route" in s:
         r.add $x[0]
 
-proc getImports(cPath: string): seq[string] =
+proc getImports*(cPath: string): seq[string] =
   let f = readFile(cPath)
+  let pDir = os.parentDir(cPath)
   var imps = newSeq[PNode]()
   let n = parsePNodeStr(f)
   collectImps(n, imps)
+  var ps:seq[string]
   for i in imps:
-    let p = getPath i[^1]
-    if p.len > 0:
-      let cp = os.parentDir(cPath) / os.addFileExt(p, "nim")
-      getRoutes(cp, result)
+    ps = getPaths(i[^1], pDir)
+    for p in ps:
+      if p.len > 0:
+        let cp =  os.addFileExt(p, "nim")
+        getRoutes(cp, result)
 
 macro mount*[H](router: Router[H], h: untyped) =
   let cPath = lineInfoObj(h).filename
@@ -92,13 +112,10 @@ macro mount*[H](router: Router[H], h: untyped) =
 
 when isMainModule:
   when declared(commandLineParams):
-    var f = paramStr(1)
-    f.normalizePath
-    let r = getImports(f.absolutePath)
-    stdout.write(r.join(","))
+    block:
+      var f = paramStr(1)
+      f.normalizePath
+      let r = getImports(f.absolutePath)
+      stdout.write(r.join(","))
   else:
-    proc handler(req: Request) {.route("get", "/one"), async.} = discard
-    proc handler2(req: Request) {.route(["get", "post"], "/multi"), async.} = discard
-    let r = newRouter[ScorperCallback]()
-    r.addRoute(handler)
-    r.addRoute(handler2)
+    discard
