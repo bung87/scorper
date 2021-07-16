@@ -1,12 +1,12 @@
 # Package
 
-version       = "1.0.19"
+version       = "1.0.20"
 author        = "bung87"
 description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
 srcDir        = "src"
 skipDirs      = @["tests","examples","experiments","benchmark","artwork"]
-
+installExt = @["nim"]
 namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
 # Dependencies
 
