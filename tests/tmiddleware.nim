@@ -5,12 +5,13 @@ import scorper/http/streamclient
 import strformat
 import os
 
-proc abc(req: Request) {.async, postMiddleware.} =
+proc abc(req: Request): Future[bool] {.async, postMiddleware.} =
   let p = getTempDir() / "scorper_middleware_log.log"
   var f = open(p, fmWrite)
   f.write("hello")
   f.flushFile
   f.close
+  return false
 
 import scorper
 
