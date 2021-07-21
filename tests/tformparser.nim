@@ -1,6 +1,7 @@
 
 import ./scorper/http/streamserver
 import ./scorper/http/streamclient
+import ./scorper/http/httprequest
 import ./scorper/http/httpform
 import ./scorper/http/multipartparser
 import ./scorper/http/httpcore, chronos, os

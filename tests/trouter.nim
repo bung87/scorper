@@ -1,5 +1,6 @@
 
 import ./scorper/http/streamserver
+import ./scorper/http/httprequest
 import ./scorper/http/streamclient
 import ./scorper/http/router
 import ./scorper/http/httpcore, chronos

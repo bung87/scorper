@@ -1,6 +1,7 @@
 
 import strutils
 include ./scorper/http/streamserver
+import ./scorper/http/httprequest
 include ./scorper/http/streamclient
 import asynctest, strformat
 
