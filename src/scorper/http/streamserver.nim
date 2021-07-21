@@ -17,7 +17,7 @@ import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
-from httprequest import Request 
+from httprequest import Request
 import ../ scorpermacros
 
 when defined(ssl):
@@ -46,7 +46,7 @@ when defined(windows):
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
 type
-  ImpRequest = ref object of Request
+  ImpRequest = ref object of typeof(Request()[])
     transp: StreamTransport
     buf: array[HttpRequestBufferSize, char]
     contentLength: BiggestUInt # as RFC no limit
@@ -63,7 +63,7 @@ type
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 
-  ScorperCallback* = proc (req: ImpRequest): Future[void] {.closure, gcsafe.}
+  ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
   CbKind {.pure.} = enum
     cb, router
   Scorper* = ref object of StreamServer
@@ -85,6 +85,8 @@ type
     isSecurity: bool
     logSub: Observer[string]
   ResumableResult* = Result[Resumable, string]
+
+converter toImpRequest*(a: Request): ImpRequest = cast[ImpRequest](a)
 
 proc `$`*(r: ImpRequest): string =
   var j = newJObject()
