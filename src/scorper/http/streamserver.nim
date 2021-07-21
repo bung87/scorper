@@ -17,15 +17,8 @@ import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
-
-const preProcessMiddlewares = CacheSeq"preProcessMiddlewares"
-const postProcessMiddlewares = CacheSeq"postProcessMiddlewares"
-
-macro implPreProcessMiddleware*(impl: typed): untyped =
-  preProcessMiddlewares.add impl
-
-macro implPostProcessMiddleware*(impl: typed): untyped =
-  postProcessMiddlewares.add impl
+from httprequest import Request 
+import ../ scorpermacros
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -38,7 +31,7 @@ else:
       NoVerifyHost,         # Client: Skip remote certificate check
       NoVerifyServerName,   # Client: Skip Server Name Indication (SNI) check
       EnforceServerPref,    # Server: Enforce server preferences
-      NoRenegotiation,      # Server: Reject renegotiations requests
+      NoRenegotiation,      # Server: Reject renegotiations ImpRequests
       TolerateNoClientAuth, # Server: Disable strict client authentication
       FailOnAlpnMismatch    # Server: Fail on application protocol mismatch
     TLSSessionCache* = ref object
@@ -53,16 +46,7 @@ when defined(windows):
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
 type
-  Request* = ref object
-    meth*: HttpMethod
-    headers*: HttpHeaders
-    protocol*: tuple[major, minor: int]
-    url*: typeof(Url()[])
-    path*: string              # http req path
-    hostname*: string
-    ip*: string
-    params*: Table[string, string]
-    query*: seq[(string, string)]
+  ImpRequest = ref object of Request
     transp: StreamTransport
     buf: array[HttpRequestBufferSize, char]
     contentLength: BiggestUInt # as RFC no limit
@@ -79,7 +63,7 @@ type
     reader: AsyncStreamReader
     writer: AsyncStreamWriter
 
-  ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
+  ScorperCallback* = proc (req: ImpRequest): Future[void] {.closure, gcsafe.}
   CbKind {.pure.} = enum
     cb, router
   Scorper* = ref object of StreamServer
@@ -102,7 +86,7 @@ type
     logSub: Observer[string]
   ResumableResult* = Result[Resumable, string]
 
-proc `$`*(r: Request): string =
+proc `$`*(r: ImpRequest): string =
   var j = newJObject()
   j["url"] = % $r.url
   j["method"] = % $r.meth
@@ -110,9 +94,9 @@ proc `$`*(r: Request): string =
   j["headers"] = %* r.headers.table
   result = $j
 
-func len*(r: Request): BiggestUInt = r.contentLength
+func len*(r: ImpRequest): BiggestUInt = r.contentLength
 
-proc formatCommon*(r: Request, status: HttpCode, size: int): string =
+proc formatCommon*(r: ImpRequest, status: HttpCode, size: int): string =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
   # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined
   let remoteUser = os.getEnv("REMOTE_USER", "-")
@@ -127,13 +111,13 @@ proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeE
     headers.Server HttpServer
   return headers
 
-func getExt*(req: Request, mime: string): string {.inline.} =
+func getExt*(req: ImpRequest, mime: string): string {.inline.} =
   result = req.server.mimeDb.getExt(mime, default = "")
 
-func getMimetype*(req: Request, ext: string): string{.inline.} =
+func getMimetype*(req: ImpRequest, ext: string): string{.inline.} =
   result = req.server.mimeDb.getMimetype(ext, default = "")
 
-macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untyped) =
+macro acceptMime*(req: ImpRequest, ext: untyped, headers: HttpHeaders, body: untyped) =
   ## Responds to the req respect client's accept
   ## Automatically set headers content type to corresponding accept mime, when none matched, change it to other mime yourself
   result = quote do:
@@ -155,17 +139,17 @@ macro acceptMime*(req: Request, ext: untyped, headers: HttpHeaders, body: untype
     else:
       `body`
 
-func gzip*(req: Request): bool = GzipEnable and req.headers.hasKey("Accept-Encoding") and
+func gzip*(req: ImpRequest): bool = GzipEnable and req.headers.hasKey("Accept-Encoding") and
     string(req.headers["Accept-Encoding"]).contains("gzip")
 
-template devLog(req: Request, content: untyped) =
+template devLog(req: ImpRequest, content: untyped) =
   when not defined(release):
     try:
       req.server.logSub.next(`content`)
     except:
       discard
 
-proc resp*(req: Request, content: sink string,
+proc resp*(req: ImpRequest, content: sink string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``, headers and
   ## content.
@@ -198,11 +182,11 @@ proc resp*(req: Request, content: sink string,
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
-proc resp*(req: Request, content: sink string,
+proc resp*(req: ImpRequest, content: sink string,
               headers: seq[(string, string)], code: HttpCode = Http200): Future[void] {.inline, async.} =
   await resp(req, content, headers.newHttpHeaders())
 
-proc respError*(req: Request, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[
+proc respError*(req: ImpRequest, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[
     void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
@@ -229,11 +213,11 @@ proc respError*(req: Request, code: HttpCode, content: sink string, headers = ne
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
-proc respError*(req: Request, code: HttpCode, content: sink string,
+proc respError*(req: ImpRequest, code: HttpCode, content: sink string,
               headers: seq[(string, string)]): Future[void] {.inline, async.} =
   await respError(req, code, content, headers.newHttpHeaders())
 
-proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Future[void] {.async.} =
+proc respError*(req: ImpRequest, code: HttpCode, headers = newHttpHeaders()): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
     return
@@ -260,14 +244,14 @@ proc respError*(req: Request, code: HttpCode, headers = newHttpHeaders()): Futur
   req.devLog(req.formatCommon(code, length))
   req.responded = true
 
-proc respError*(req: Request, code: HttpCode,
+proc respError*(req: ImpRequest, code: HttpCode,
               headers: seq[(string, string)]): Future[void] {.inline, async.} =
   await respError(req, code, headers.newHttpHeaders())
 
 func pairParam(x: tuple[key: string, value: string]): string =
   result = x[0] & '=' & '"' & x[1] & '"'
 
-proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: seq[tuple[key: string,
+proc respBasicAuth*(req: ImpRequest, scheme = "Basic", realm = "Scorper", params: seq[tuple[key: string,
     value: string]] = @[], code = Http401): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``.
   if req.responded == true:
@@ -280,21 +264,21 @@ proc respBasicAuth*(req: Request, scheme = "Basic", realm = "Scorper", params: s
   req.devLog(req.formatCommon(code, 0))
   req.responded = true
 
-proc respStatus*(req: Request, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
+proc respStatus*(req: ImpRequest, code: HttpCode, ver = HttpVer11): Future[void] {.async.} =
   if req.responded == true:
     return
   await req.writer.write($ver & " " & $code & "Date: " & httpDate() & CRLF & CRLF)
   req.devLog(req.formatCommon(code, 0))
   req.responded = true
 
-proc respStatus*(req: Request, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
+proc respStatus*(req: ImpRequest, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.} =
   if req.responded == true:
     return
   await req.writer.write($ver & " " & $code.int & msg & "Date: " & httpDate() & CRLF & CRLF)
   req.devLog(req.formatCommon(code, 0))
   req.responded = true
 
-template writeFileFull(req: Request, file: File, size: int) =
+template writeFileFull(req: ImpRequest, file: File, size: int) =
   const bufSize = 8192
   if size < bufSize:
     await req.writer.write(file.readAll)
@@ -305,7 +289,7 @@ template writeFileFull(req: Request, file: File, size: int) =
       await req.writer.write(buf.addr, readBytes)
       if readBytes != bufSize: break
 
-proc writeFile(req: Request, fname: string, size: int): Future[void] {.async.} =
+proc writeFile(req: ImpRequest, fname: string, size: int): Future[void] {.async.} =
   var handle = 0
   var file: File
   try:
@@ -330,7 +314,7 @@ proc writeFile(req: Request, fname: string, size: int): Future[void] {.async.} =
       writeFileFull(req, file, size)
   close(file)
 
-template writeFileStream(req: Request, fname: string, offset: int, size: int) =
+template writeFileStream(req: ImpRequest, fname: string, offset: int, size: int) =
   const bufSize = 8192
   var buf {.noinit.}: array[bufSize, char]
   var totalRead = 0
@@ -347,7 +331,7 @@ template writeFileStream(req: Request, fname: string, offset: int, size: int) =
       break
   fs.close
 
-proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
+proc writePartialFile(req: ImpRequest, fname: string, ranges: seq[tuple[starts: int, ends: int]], meta: Option[tuple[
     info: FileInfo, headers: HttpHeaders]], boundary: string, mime: string) {.async.} =
   let fullSize = meta.unsafeGet.info.size.int
   var handle = 0
@@ -396,7 +380,7 @@ proc writePartialFile(req: Request, fname: string, ranges: seq[tuple[starts: int
   if handle != 0:
     close(file)
 
-proc fileGuard(req: Request, filepath: string): Future[Option[FileInfo]] {.async.} =
+proc fileGuard(req: ImpRequest, filepath: string): Future[Option[FileInfo]] {.async.} =
   # If-Modified-Since: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.25
   # The result of a req having both an If-Modified-Since header field and either an If-Match or an If-Unmodified-Since header fields is undefined by this specification.
   if not fileExists(filepath):
@@ -431,7 +415,7 @@ proc fileGuard(req: Request, filepath: string): Future[Option[FileInfo]] {.async
       return none(FileInfo)
   return some(info)
 
-proc fileMeta(req: Request, filepath: string): Future[Option[tuple[info: FileInfo, headers: HttpHeaders]]]{.async, inline.} =
+proc fileMeta(req: ImpRequest, filepath: string): Future[Option[tuple[info: FileInfo, headers: HttpHeaders]]]{.async, inline.} =
   let info = await fileGuard(req, filepath)
   if not info.isSome():
     return none(tuple[info: FileInfo, headers: HttpHeaders])
@@ -450,7 +434,7 @@ func calcContentLength(ranges: seq[tuple[starts: int, ends: int]], size: int): i
     else:
       result = result + abs(b[1])
 
-proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.gcsafe, async.} =
+proc sendFile*(req: ImpRequest, filepath: string, extroHeaders: HttpHeaders = newHttpHeaders()) {.gcsafe, async.} =
   ## send file for display
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(req, filepath)
@@ -461,10 +445,10 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
     meta.unsafeGet.headers[key] = val
   var (_, _, ext) = splitFile(filepath)
   let mime = req.server.mimeDb.getMimetype(ext)
-  let rangeRequest = req.headers.hasKey("Range")
+  let rangeImpRequest = req.headers.hasKey("Range")
   var parseRangeOk = false
   var ranges = newSeq[tuple[starts: int, ends: int]]()
-  if rangeRequest:
+  if rangeImpRequest:
     let parser = rangeParser()
     let rng: string = req.headers["Range"]
     var r: MatchResult[char]
@@ -474,7 +458,7 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
     except Exception:
       discard
     parseRangeOk = r.ok
-  if not rangeRequest or not parseRangeOk:
+  if not rangeImpRequest or not parseRangeOk:
     meta.unsafeGet.headers.ContentType mime
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
     await req.writer.write(msg)
@@ -502,7 +486,7 @@ proc sendFile*(req: Request, filepath: string, extroHeaders: HttpHeaders = newHt
       await req.writePartialFile(filepath, ranges, meta, boundary, mime)
       req.devLog(req.formatCommon(Http206, contentLength))
 
-proc sendDownload*(req: Request, filepath: string) {.async.} =
+proc sendDownload*(req: ImpRequest, filepath: string) {.async.} =
   ## send file directly without mime type , downloaded file name same as original
   # Last-Modified: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.29
   var meta = await fileMeta(req, filepath)
@@ -516,7 +500,7 @@ proc sendDownload*(req: Request, filepath: string) {.async.} =
   req.devLog(req.formatCommon(Http200, meta.unsafeGet.info.size.int))
   req.responded = true
 
-proc sendAttachment*(req: Request, filepath: string, asName: string = "") {.async.} =
+proc sendAttachment*(req: ImpRequest, filepath: string, asName: string = "") {.async.} =
   let filename = if asName.len == 0: filepath.extractFilename else: asName
   let encodedFilename = &"filename*=UTF-8''{encodeUrlComponent(filename)}"
   let extroHeaders = newHttpHeaders({
@@ -533,7 +517,7 @@ proc hasSuffix(s: string): bool =
       return true
     dec i
 
-proc serveStatic*(req: Request) {.async.} =
+proc serveStatic*(req: ImpRequest) {.async.} =
   ## Relys on `StaticDir` environment variable
   if req.meth != HttpGet and req.meth != HttpHead:
     await req.respError(Http405)
@@ -566,7 +550,7 @@ proc serveStatic*(req: Request) {.async.} =
   req.responded = true
 
 
-proc json*(req: Request): Future[JsonNode] {.async.} =
+proc json*(req: ImpRequest): Future[JsonNode] {.async.} =
   if req.parsedJson.isSome:
     return req.parsedJson.unSafeGet
   var str: string
@@ -587,7 +571,7 @@ proc json*(req: Request): Future[JsonNode] {.async.} =
   req.parsedJson = some(result)
   req.parsed = true
 
-proc body*(req: Request): Future[string] {.async.} =
+proc body*(req: ImpRequest): Future[string] {.async.} =
   if req.rawBody.isSome:
     return req.rawBody.unSafeGet
   result = ""
@@ -598,11 +582,11 @@ proc body*(req: Request): Future[string] {.async.} =
   req.rawBody = some(result)
   req.parsed = true
 
-proc stream*(req: Request): AsyncStreamReader =
+proc stream*(req: ImpRequest): AsyncStreamReader =
   doAssert req.transp.closed == false
   req.reader
 
-proc form*(req: Request): Future[Form] {.async.} =
+proc form*(req: ImpRequest): Future[Form] {.async.} =
   if req.parsedForm.isSome:
     return req.parsedForm.unSafeGet
   result = newForm()
@@ -647,11 +631,11 @@ proc form*(req: Request): Future[Form] {.async.} =
   req.parsedForm = some(result)
   req.parsed = true
 
-proc postCheck(req: Request): Future[int]{.async, inline.} =
+proc postCheck(req: ImpRequest): Future[int]{.async, inline.} =
   if req.meth in MethodNeedsBody and req.parsed == false:
     result = await req.reader.consume(req.contentLength.int)
 
-proc defaultErrorHandle(req: Request, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, gcsafe,
+proc defaultErrorHandle(req: ImpRequest, err: ref Exception | HttpError; headers = newHttpHeaders()){.async, gcsafe,
     raises: [].} =
   if req.responded:
     return
@@ -692,7 +676,7 @@ template tryHandle(body: untyped, keep: var bool) =
 
 proc processRequest(
   scorper: Scorper,
-  req: Request,
+  req: ImpRequest,
 ): Future[bool] {.async.} =
   req.responded = false
   req.parsed = false
@@ -825,15 +809,9 @@ proc processRequest(
   else:
     return false
 
-macro handlePostProcessMiddlewares(req: untyped): untyped =
-  result = newStmtList()
-  debugEcho postProcessMiddlewares.len
-  if postProcessMiddlewares.len > 0:
-    for m in postProcessMiddlewares:
-      result.add newCall(ident"await", newCall(m.name, req))
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
-  var req = Request()
+  var req = ImpRequest()
   shallowCopy(req.server, cast[Scorper](server))
   req.headers = newHttpHeaders()
   shallowCopy(req.transp, transp)
@@ -987,7 +965,7 @@ proc isComplete*(resumable: Resumable): bool =
     inc i
   return complete
 
-proc handleResumableUpload*(req: Request; resumableKeys = newResumableKeys()): Future[ResumableResult]{.async.} =
+proc handleResumableUpload*(req: ImpRequest; resumableKeys = newResumableKeys()): Future[ResumableResult]{.async.} =
   template resumableParam(key: untyped): untyped =
     req.query[resumableKeys.`key`]
 

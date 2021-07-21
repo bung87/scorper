@@ -1,9 +1,11 @@
-import scorper
-
+import scorper/scorpermacros
+import chronos
 const port{.intdefine.} = 8888
 
 implPostProcessMiddleware:
   proc abc(req: Request) {.async.} = debugEcho 233
+
+import scorper
 
 when isMainModule:
   proc cb(req: Request) {.async.} =
