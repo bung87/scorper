@@ -12,11 +12,20 @@ import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpf
     netunit, mimetypes, httperror
 import urlly
 include constant
-import std / [os, streams, options, strformat, json, sequtils, macros]
+import std / [os, streams, options, strformat, json, sequtils, macros, macrocache]
 import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
+
+const preProcessMiddlewares = CacheSeq"preProcessMiddlewares"
+const postProcessMiddlewares = CacheSeq"postProcessMiddlewares"
+
+macro implPreProcessMiddleware*(impl: typed): untyped =
+  preProcessMiddlewares.add impl
+
+macro implPostProcessMiddleware*(impl: typed): untyped =
+  postProcessMiddlewares.add impl
 
 when defined(ssl):
   import chronos / streams/tlsstream
@@ -816,6 +825,13 @@ proc processRequest(
   else:
     return false
 
+macro handlePostProcessMiddlewares(req: untyped): untyped =
+  result = newStmtList()
+  debugEcho postProcessMiddlewares.len
+  if postProcessMiddlewares.len > 0:
+    for m in postProcessMiddlewares:
+      result.add newCall(ident"await", newCall(m.name, req))
+
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var req = Request()
   shallowCopy(req.server, cast[Scorper](server))
@@ -850,6 +866,7 @@ proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
     req.writer = req.transp.newAsyncStreamWriter
   while not transp.atEof():
     let retry = await processRequest(req.server, req)
+    handlePostProcessMiddlewares(req)
     if not retry:
       await req.reader.closeWait
       await req.writer.closeWait
