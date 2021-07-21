@@ -3,12 +3,16 @@ import chronos
 import asynctest
 import scorper/http/streamclient
 import strformat
+import os
 
-implPostProcessMiddleware:
-  proc abc(req: Request) {.async.} = discard
+proc abc(req: Request) {.async, postMiddleware.} =
+  let p = getTempDir() / "scorper_middleware_log.log"
+  var f = open(p, fmWrite)
+  f.write("hello")
+  f.flushFile
+  f.close
 
 import scorper
-
 
 var server{.threadvar.}: Scorper
 var client: AsyncHttpClient
@@ -43,3 +47,6 @@ suite "test middleware macros":
       body = await response.readBody()
     doAssert(response.code == Http200)
     doAssert(body == "Hello, World!")
+    let p = getTempDir() / "scorper_middleware_log.log"
+    let c = readFile(p)
+    doAssert c == "hello"

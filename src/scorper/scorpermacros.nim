@@ -2,18 +2,19 @@ from ./http/httprequest import Request
 import std/[macros, macrocache]
 export Request
 
+type MiddlewareKind* = enum
+  pre, post
+
 const preProcessMiddlewares = CacheSeq"preProcessMiddlewares"
 const postProcessMiddlewares = CacheSeq"postProcessMiddlewares"
 
-macro implPreProcessMiddleware*(impls: untyped): untyped =
-  for p in impls:
-    preProcessMiddlewares.add p
-  result = impls
+macro preMiddleware*(impl: untyped): untyped =
+  preProcessMiddlewares.add impl
+  result = impl
 
-macro implPostProcessMiddleware*(impls: untyped): untyped =
-  for p in impls:
-    postProcessMiddlewares.add p
-  result = impls
+macro postMiddleware*(impl: untyped): untyped =
+  postProcessMiddlewares.add impl
+  result = impl
 
 macro handlePostProcessMiddlewares*(req: untyped): untyped =
   result = newStmtList()
