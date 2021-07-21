@@ -95,6 +95,19 @@ when isMainModule:
   let address = "127.0.0.1:8888"
   waitFor serve(address, cb)
 ```
+### Middleware  
+implemented in `scorper/scorpermacros`  
+
+type defined as `MiddlewareProc* = proc (req: Request): Future[bool]`  
+
+the `MiddlewareProc` return `bool` indicate whether continue call next middleware or not.  
+
+Notice: **Should**  `import scorper/scorpermacros` first then defined your middleware with `postMiddleware` or `preMiddleware` pragma, then `import scorper` as usual  
+
+* `preMiddleware` will injected after Request object all fields fulfilled and before your callback.  
+* `postMiddleware` will injected after your callback.  
+
+see [tmiddleware.nim](tests/tmiddleware.nim)
 
 ## Types  
 ``` nim 
@@ -117,6 +130,7 @@ type
     status*: ServerStatus         # Current server status
     flags*: set[ServerFlags]      # Flags
     errorCode*: OSErrorCode
+  MiddlewareProc* = proc (req: Request): Future[bool]
 ```
 ## Todos  
 

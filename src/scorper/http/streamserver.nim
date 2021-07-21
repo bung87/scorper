@@ -775,6 +775,7 @@ proc processRequest(
   case scorper.kind
   of CbKind.cb:
     shallowCopy(req.query, req.url.query)
+    handlePreProcessMiddlewares(req)
     tryHandle(scorper.callback(req), keep)
     if not keep:
       return false
@@ -785,6 +786,7 @@ proc processRequest(
       req.params = matched.route.params[]
       shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
+      handlePreProcessMiddlewares(req)
       tryHandle(matched.handler(req), keep)
       if not keep:
         return false
