@@ -6,13 +6,13 @@
 ## Copyright (c) 2020 Bung
 
 import chronos
-import mofuparser, parseutils, strutils
+import mofuparser
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, router,
     netunit, mimetypes, httperror
 import urlly
 include constant
-import std / [os, streams, options, strformat, json, sequtils, macros, macrocache]
+import std / [os, streams, options, strformat, json, sequtils, parseutils, strutils, macros, macrocache]
 import ./ rxnim / rxnim
 import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`
@@ -38,7 +38,6 @@ else:
       # storage: seq[byte]
       # context: SslSessionCacheLru
 import chronos / sendfile
-import exts/resumable
 import results
 
 when defined(windows):
@@ -84,7 +83,6 @@ type
       tlsMaxVersion: TLSVersion
     isSecurity: bool
     logSub: Observer[string]
-  ResumableResult* = Result[Resumable, string]
 
 converter toImpRequest*(a: Request): ImpRequest = cast[ImpRequest](a)
 
@@ -958,77 +956,4 @@ proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallb
 
 func isClosed*(server: Scorper): bool =
   server.status = ServerStatus.Closed
-
-proc isComplete*(resumable: Resumable): bool =
-  var i: BiggestUInt = 0
-  var complete = true
-  while i < resumable.totalChunks:
-    let chunkKey = resumable.identifier & "." & $(i+1)
-    if not fileExists(resumable.tmpDir / chunkKey):
-      complete = false
-    inc i
-  return complete
-
-proc handleResumableUpload*(req: ImpRequest; resumableKeys = newResumableKeys()): Future[ResumableResult]{.async.} =
-  template resumableParam(key: untyped): untyped =
-    req.query[resumableKeys.`key`]
-
-  var resumable: Resumable
-  discard parseBiggestUInt(resumableParam(totalChunks), resumable.totalChunks)
-  discard parseBiggestUInt(resumableParam(chunkIndex), resumable.chunkIndex)
-  discard parseBiggestUInt(resumableParam(currentChunkSize), resumable.currentChunkSize)
-  discard parseBiggestUInt(resumableParam(totalSize), resumable.totalSize)
-  resumable.identifier = resumableParam(identifier)
-  let tmpDir = getTempDir()
-  resumable.tmpDir = tmpDir
-  let chunkKey = resumable.identifier & "." & $resumable.chunkIndex
-  const bufSize = 8192
-  var buffer: array[bufSize, char]
-  if fileExists(tmpDir / chunkKey):
-    await req.respStatus(Http201)
-  else:
-    let file = open(tmpDir / chunkKey, fmWrite)
-    let stream = req.stream()
-    var nbytes: int
-    var reads: BiggestUInt
-    while not stream.atEof():
-      if reads == req.len:
-        break
-      if reads == resumable.currentChunkSize:
-        break
-      nbytes = await stream.readOnce(buffer[0].addr, buffer.len)
-      reads.inc nbytes
-      discard file.writeBuffer(buffer[0].addr, nbytes)
-    file.close
-    await req.respStatus(Http200)
-
-  let complete = resumable.isComplete()
-  if complete:
-
-    let file = newFileStream(tmpDir / resumable.identifier, fmWrite)
-    var j: BiggestUInt = 0
-    while j < resumable.totalChunks:
-      let chunkKey = resumable.identifier & "." & $(j+1)
-      let s = openFileStream(tmpDir / chunkKey)
-      while not s.atEnd:
-        let readLen = s.readData(buffer.addr, buffer.len)
-        file.writeData(buffer.addr, readLen)
-      s.flush
-      try:
-        s.close
-      except:
-        discard
-      inc j
-    file.flush
-    try:
-      file.close
-    except:
-      discard
-    let filepath = tmpDir / resumable.identifier
-    resumable.savePath = filepath
-    when not defined(release):
-      let fsize = BiggestUInt(getFileSize(filepath))
-      assert fileExists(filepath) and fsize == resumable.totalSize
-  result.ok resumable
-
 
