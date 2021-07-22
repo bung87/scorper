@@ -6,7 +6,7 @@ import strformat
 import os
 
 proc abc(req: Request): Future[bool] {.async, postMiddleware.} =
-  let p = getTempDir() / "scorper_middleware_log.log"
+  let p = getTempDir() / "scorper_middleware_log2.log"
   var f = open(p, fmWrite)
   f.write("hello")
   f.flushFile
@@ -36,6 +36,8 @@ suite "test middleware macros":
     server.stop()
     server.close()
     await server.join()
+    let p = getTempDir() / "scorper_middleware_log2.log"
+    removeFile(p)
 
   test "basic":
 
@@ -48,6 +50,6 @@ suite "test middleware macros":
       body = await response.readBody()
     doAssert(response.code == Http200)
     doAssert(body == "Hello, World!")
-    let p = getTempDir() / "scorper_middleware_log.log"
+    let p = getTempDir() / "scorper_middleware_log2.log"
     let c = readFile(p)
     doAssert c == "hello"
