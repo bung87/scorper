@@ -7,7 +7,7 @@ export multipart
 export httpcore except parseHeader
 import results
 import logging
-import exts/resumable
+from exts/resumable import newResumableKeys
 import oids
 when defined(ssl):
   import chronos / streams/tlsstream
