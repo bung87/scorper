@@ -15,6 +15,9 @@ Write examples/usage api as I try to better understand the available api of Scor
   - [Response HttpCodes](#response-httpcodes)
   - [Authentication HttpCode401](#authentication-httpcode401)
   - [Request JSON](#request-json)
+  - [Request Route Params/Query](#request-route-paramsquery)
+  - [URL Encoding/Decoding](#url-encodingdecoding)
+  - [Form Decoding](#form-decoding)
 - [Types](#types)
   - [ServerFlags](#serverflags)
   - [Request](#request)
@@ -166,10 +169,87 @@ proc handler(request: Request) {.async.} =
                                             #   "Error" body
 ```
 
+
+## Request Route Params/Query
+
+Route variables and queries can be accessed by the request `params` and `query` table fields.
+
+```nim
+import scorper
+
+proc handler(request: Request) {.async.} =
+  doAssert request.params["author"] == "bung87"   # Access parsed param in route
+  doAssert request.params["module"] == "scorper"
+  doAssert request.query["q"] == "is_amazing"     # Access parsed query
+
+  await request.resp("")
+
+# Create router
+let address, flags = "127.0.0.1:8888", {ReuseAddr}
+let router = newRouter[ScorperCallback]()
+
+# Add route with params
+router.addRoute(handler, "get", "/nim/{author}/{module}")
+
+# Start server
+let server = newScorper(address, router, flags)
+server.start()
+waitFor server.join()
+
+# curl 127.0.0.1:8888/nim/bung87/scorper?q=is_amazing
+```
+
+## URL Encoding/Decoding
+
 <!---
-## Router magic with Params
-TODO
+If the header for content type is set to url-encoded messages, will the
+body automatically be url encoded?
 --->
+
+Encoded uri requests are decoded automatically.
+
+When handling Request Route params etc; the decoding occurs before the tables are populated. This means when accessing the route variable, you will receive the decoded input.
+
+```nim
+proc handler(request: Request) {.async.} =
+  doAssert request.params["decoded"] == "ß"   # Decoded from %C3%9F
+  
+  await request.resp("")
+
+# Create router
+let address, flags = "127.0.0.1:8888", {ReuseAddr}
+let router = newRouter[ScorperCallback]()
+
+#Add route with params
+router.addRoute(handler, "get", "/scorper/{decoded}")
+
+# Start server
+let server = newScorper(address, router, flags)
+server.start()
+waitFor server.join()
+
+# curl 127.0.0.1:8888/scorper/%C3%9F
+```
+
+## Form Decoding
+
+Requests with content-types of url encoded forms will automatically be decoded. Lets look at the following example where a client posts the following message:
+
+> `UserName=test&UserNameKana=%E3%83%86%E3%82%B9%E3%83%88&MailAddress=test%40example.com`
+
+With headers `Content-Type` of `application/x-www-form-urlencoded`.
+
+The content of the form is accessible from the request as follows:
+
+```nim
+proc handler(request: Request) {.async.} =
+  let form = await request.form
+  doAssert $form is string
+  doAssert form.data["UserName"] == "test"
+  doAssert form.data["UserNameKana"] == "テスト"
+  doAssert form.data["MailAddress"] == "test@example.com"
+  await request.resp("")
+```
 
 <!---
 ## Static files
