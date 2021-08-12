@@ -14,12 +14,6 @@ Built using [chronos](https://github.com/status-im/nim-chronos.git) and other po
 
 > `scorper` will self contain manageable dependency source code for accelerated development.  
 
-## Production
-
-By default, exceptions will be raised and exit the program.
-
-You can disable this with the compile switch `-d:chronosStrictException`. See chronos [#Error handling](https://github.com/status-im/nim-chronos#error-handling) for more details.
-
 ## Compiler flags  
 
 ### -ssl
@@ -191,6 +185,31 @@ type
     errorCode*: OSErrorCode
   MiddlewareProc* = proc (req: Request): Future[bool]
 ```
+
+## Error handling & Exception effects
+
+As [`scorper`](https://github.com/bung87/scorper) make use of [`chronos`](https://github.com/status-im/nim-chronos) for asynchronous procedures, the handling of errors and exceptions within this paradigm are of relevance.
+
+> `chronos` currently offers minimal support for exception effects and `raises`
+annotations. In general, during the `async` transformation, a generic
+`except CatchableError` handler is added around the entire function being
+transformed, in order to catch any exceptions and transfer them to the `Future`.
+>
+> Effectively, this means that while code can be compiled with
+`{.push raises: [Defect]}`, the intended effect propagation and checking is
+**disabled** for `async` functions.
+>
+> To enable checking exception effects in `async` code, enable strict mode with
+**`-d:chronosStrictException`**.
+>
+> In the strict mode, `async` functions are checked such that they only raise
+`CatchableError` and thus must make sure to explicitly specify exception
+effects on forward declarations, callbacks and methods using
+`{.raises: [CatchableError].}` (or more strict) annotations.
+
+See `chronos` [#Error handling](https://github.com/status-im/nim-chronos#error-handling) for more details.
+
+Use `-d:chronosStrictException` to enable strict mode as explained above.
 
 ## Todos  
 
