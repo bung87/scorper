@@ -1,25 +1,34 @@
-# scorper  ![Build Status](https://github.com/bung87/scorper/workflows/Test/badge.svg)  
+# SCORPER  ![Build Status](https://github.com/bung87/scorper/workflows/Test/badge.svg)  
 
 ![scorper](artwork/scorper.png)  
 
 
 [travis]: https://travis-ci.org/bung87/scorper.svg?branch=master
 
-scorper is a micro and elegant web framework written in Nim  
+**Elegant, performant, asynchronous micro web framework written in Nim**  
 
-Build upon [chronos](https://github.com/status-im/nim-chronos.git) and serveral excellent projects.
+Built using [chronos](https://github.com/status-im/nim-chronos.git) and other powerful libraries.
 
-`scorper` will self contain manageable dependencies source code as much as posibble for accelerating development.  
 
-**Notice**: `scorper` heavily relys on `chronos` which use its own `async` macro it will conflicts with std `asyncdispatch`'s `async` macro, check your project dependencies chronos support first.    
+**Note**: `scorper` is built using `chronos` which implements an `async`/`await` paradigm that is, at its core, different and therefore incompatible with the nim std library `asyncdispatch`'s `async`; this conflict is irresolvable and you will have to ensure your project dependencies support chronos async/await (note: many libraries do offer this, often using a compiler switch).     
 
-## Production 
+> `scorper` will self contain manageable dependency source code for accelerated development.  
 
-compile your program with `-d:chronosStrictException` if you dont want any exception crash your program.  for details check chronos's readme [#Error handling](https://github.com/status-im/nim-chronos#error-handling)
+## Production
 
-## Compile flags  
-`-d:ssl`  
-then use `newScorper` proc and pass `isSecurity = true`,`privateKey`, `certificate`  
+By default, exceptions will be raised and exit the program.
+
+You can disable this with the compile switch `-d:chronosStrictException`. See chronos [#Error handling](https://github.com/status-im/nim-chronos#error-handling) for more details.
+
+## Compiler flags  
+
+### -ssl
+
+Compile with: `-d:ssl`  
+
+Then, using the proc `newScorper`, you will need to pass `isSecurity = true`,`privateKey`, `certificate` 
+
+### Other
 
 ``` nim
 const GzipEnable {.booldefine.} = true 
@@ -32,22 +41,41 @@ const gzipMinLength* {.intdefine.} = 20
 ```
 
 ## Usage  
+
 ### hello world  
 
 ### `serve` with callback  
 
 ``` nim
 import scorper
+
 const port{.intdefine.} = 8888
+
+proc cb(req: Request) {.async.} =
+  ## See Request type to see fields accessible by callbacks
+
+  let headers = {"Content-type": "text/plain"}
+  await req.resp("Hello, World!", headers.newHttpHeaders())
+
 when isMainModule:
-  proc cb(req: Request) {.async.} =
-    let headers = {"Content-type": "text/plain"}
-    await req.resp("Hello, World!", headers.newHttpHeaders())
   let address = "127.0.0.1:" & $port
+
   waitFor serve(address, cb)
+  ## waitFor is a chronos implementation
+  ## See chronos for options around executing async procs
 ```
 
 ### `newScorper` with router or callback  
+
+<!---
+Requires a more specific example aimed specifically at introducing router;
+simultaneous introduction of the serve static and flags {ReuseAddr} require
+documentation/explanation
+--->
+
+<!---
+neatify example
+--->
 
 ``` nim
 when isMainModule:
@@ -62,6 +90,10 @@ when isMainModule:
 ``` 
 
 ### use `route` pragma
+
+<!---
+Chore: requires better documentation and explanation
+--->
 ``` nim
 proc handler(req: Request) {.route("get","/one"),async.} = discard
 proc handler2(req: Request) {.route(["get","post"],"/multi"),async.} = discard
@@ -71,6 +103,11 @@ r.addRoute(handler2)
 ```
 
 #### use `route` with `mount` macro  
+
+<!---
+Chore: requires better documentation and explanation
+--->
+
 ``` nim
 import ./my_controler
 let r = newRouter[ScorperCallback]()
@@ -78,38 +115,60 @@ r.mount(my_controler)
 ```  
 
 ### responds depends on request mime  
+
 ``` nim
 import scorper
 
-when isMainModule:
-  proc cb(req: Request) {.async.} =
-    var headers = newHttpHeaders()
-    acceptMime(req, ext, headers):
-      case ext
-      of "html": await req.resp("Hello World", headers)
-      of "txt": await req.resp("Hello World", headers)
-      else:
-        headers["Content-Type"] = "text/html"
-        await req.resp("Hello World", headers)
+proc cb(req: Request) {.async.} =
+  var headers = newHttpHeaders()
+  acceptMime(req, ext, headers):
+    ## The template will automatically define the second parameter
 
+    case ext
+    of "html": await req.resp("Hello World", headers)
+    of "txt": await req.resp("Hello World", headers)
+    else:
+      headers["Content-Type"] = "text/html"
+      await req.resp("Hello World", headers)
+
+when isMainModule:
   let address = "127.0.0.1:8888"
   waitFor serve(address, cb)
 ```
+
 ### Middleware  
-implemented in `scorper/scorpermacros`  
 
-type defined as `MiddlewareProc* = proc (req: Request): Future[bool]`  
+<!---
+Chore: include a bit more 
+--->
 
-the `MiddlewareProc` return `bool` indicate whether continue call next middleware or not.  
+Middleware can be implemented by importing `scorper/scorpermacros` (the import and definition of your middleware procedures **MUST** occur before importing scorper; see the note labeled *IMPORTANT* below)
 
-Notice: **Should**  `import scorper/scorpermacros` first then defined your middleware with `postMiddleware` or `preMiddleware` pragma, then `import scorper` as usual  
+>#### preMiddleware
+>
+>Procedure that is injected after the Request object fields are filled but BEFORE your callback.
+>
+>#### postMiddleware
+>
+>Procedure that is injected AFTER your callback (and therefore after your *response*).
 
-* `preMiddleware` will injected after Request object all fields fulfilled and before your callback.  
-* `postMiddleware` will injected after your callback.  
+#### Declaring middleware:
 
-see [tmiddleware.nim](tests/tmiddleware.nim)
+```nim
+import scorper/scorpermacros
+
+proc middleWare(req: Request): Future[bool] {.async, postMiddleware.} =
+  ## Do things here
+  return false
+  ## return false to prevent calling the next middleware
+```
+
+Middleware procedures return `bool` to indicate whether to continue the call-chain to the next middleware.  
+
+see [tmiddleware.nim](tests/tmiddleware.nim) for more
 
 ## Types  
+
 ``` nim 
 type
   Request* = ref object
@@ -132,8 +191,11 @@ type
     errorCode*: OSErrorCode
   MiddlewareProc* = proc (req: Request): Future[bool]
 ```
+
 ## Todos  
 
+- [ ] Parse JSON streamingly.  
+- [ ] CLI tool generate object oriented controller and routes.  
 - [x] Parse http request streamingly.  
 - [x] Parse form streamingly and lazyly.  
 - [x] Send file and attachement streamingly.  
@@ -141,9 +203,7 @@ type
 - [x] Serve static files (env:StaticDir)  
 - [x] Parse JSON lazyly.  
 - [x] cookies module.  
-- [ ] Parse JSON streamingly.  
 - [x] Better error control flow.  
-- [ ] CLI tool generate object oriented controller and routes.  
 - [x] Auto render response respect client accepted content (acceptMime macro)type.  
 - [x] Chuncked file upload handle for large file. 
 - [x] https support 
@@ -178,11 +238,12 @@ Requests/sec:  28441.14
 Transfer/sec:      3.12MB
 ```
 ### Conclusion
-*qps* almost ten thousands faster than `jester` with stdlib.  it even thousand faster than `asynchttpserver`
 
-## Extro feature or limitations  
+*Scorper* is almost ten thousands faster than `jester` with stdlib.  It is even a thousand times faster than `asynchttpserver`
 
-the `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructions  
+## Misc features/limitations  
+
+The `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructions  
 
 ## Related projects  
 
