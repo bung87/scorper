@@ -13,7 +13,8 @@ Write examples/usage api as I try to better understand the available api of Scor
   - [Route & Mount pragma](#route--mount-pragma)
   - [Header magic](#header-magic)
   - [Response HttpCodes](#response-httpcodes)
-  - [Authentication HttpCode401](#authentication-httpcode401)
+  - [Basic Authentication](#basic-authentication)
+  - [Template responses](#template-responses)
   - [Request JSON](#request-json)
   - [Request Route Params/Query](#request-route-paramsquery)
   - [URL Encoding/Decoding](#url-encodingdecoding)
@@ -78,6 +79,39 @@ var server = newScorper(address, router, flags)
 # Start Scorper
 server.start()
 waitFor server.join()
+```
+
+*Note: The difference between the serve and newScorper proc is that serve cannot handle routers, has no return value and automatically calls the start and join procs; see below*
+
+```nim
+proc serve*(address: string,
+            callback: ScorperCallback,
+            flags: set[ServerFlags] = {ReuseAddr},
+            maxBody = 8.Mb,
+            isSecurity = false,
+            privateKey: string = "",
+            certificate: string = "",
+            secureFlags: set[TLSFlags] = {},
+            tlsMinVersion = TLSVersion.TLS11,
+            tlsMaxVersion = TLSVersion.TLS12,
+            cache: TLSSessionCache = nil,
+            ) {.async.} =
+  #...
+  server.start()
+  await server.join()
+
+proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallback] = default(ScorperCallback),
+                flags: set[ServerFlags] = {ReuseAddr},
+                maxBody = 8.Mb,
+                isSecurity = false,
+                privateKey: string = "",
+                certificate: string = "",
+                secureFlags: set[TLSFlags] = {},
+                tlsMinVersion = TLSVersion.TLS11,
+                tlsMaxVersion = TLSVersion.TLS12,
+                cache: TLSSessionCache = nil,
+                ): Scorper =
+  #...
 ```
 
 ## Route & Mount pragma
@@ -151,14 +185,69 @@ proc handler(request: Request) {.async.} =
   await request.resp("Oops!, 404", code = Http404)
 ```
 
-## Authentication HttpCode401
+## Basic Authentication
+
+Incomplete API. This is subject to change. See src/scorper/http/httpbasicauth
+
+A request can have authorization basic headers automatically decoded and then passed to a validator for verification.
+
 ```nim
+# Create validator
+# Must take a Request and two string params and return a Future[bool]
+
+proc basicValidation(request: Request, user, pass: string): Future[bool] {.async.} =
+  # Check the decoded user and pass against your database/whatever
+  # return true for authentication to be accepted and for the calling callback to continue
+  # return false for automatic Http401 response
+  return true
+
+# Create your callback
 proc handler(request: Request) {.async.} =
-  if req.headers.hasKey("Authorization"):
-    await req.resp("")              # Client will receive a Http200
+  # Create validation object and pass to request method basicAuth
+  var validator = HttpBasicAuthValidator(basicValidation) # our validator proc
+  if await request.basicAuth(validator):
+    # Do things because request is validified
   else:
-    await req.respBasicAuth()       # Client will receive a Http401
+    # Do things here because request was invalid
+    # RESPONSE UNNECESSARY; see note below
+
+  # basicAuth proc returns a bool; however any failure to validate the auth header
+  # will result in an automatic response of either Http400 or Http401. An if/else
+  # statement can be used however responses for failure are unnecessary.
+  # Using the statement below is therefore perfectly valid
+  #
+  #   if not await request.basicAuth(validator): return
+
+# Can create router here or set server handler directly
+let address, flags = "127.0.0.1:8888", {ReuseAddr}
+let server = newScorper(address, handler, flags)
+server.start()
+waitFor server.join()
 ```
+
+## Template responses
+
+A variety of procs can be used to generate responses to requests. The procedures and their parameters are listed below; please see src/scorper/http/streamserver for their implementations.
+
+Listed below are some common response procs.
+
+```nim
+proc respBasicAuth*(req: ImpRequest, scheme = "Basic", realm = "Scorper", params: seq[tuple[key: string,
+    value: string]] = @[], code = Http401): Future[void] {.async.}
+    ## Responds to the req with the specified ``HttpCode``; defaults to Http401
+
+proc respError*(req: ImpRequest, code: HttpCode, content: sink string, headers = newHttpHeaders()): Future[
+    void] {.async.}
+proc respError*(req: ImpRequest, code: HttpCode, headers = newHttpHeaders()): Future[void] {.async.}
+  ## Responds to the req with the specified ``HttpCode``.
+
+proc respStatus*(req: ImpRequest, code: HttpCode, ver = HttpVer11): Future[void] {.async.}
+proc respStatus*(req: ImpRequest, code: HttpCode, msg: string, ver = HttpVer11): Future[void] {.async.}
+
+## Chore: include responses related to files/downloads etc
+```
+
+<!--- Note: request default respError codes --->
 
 ## Request JSON
 
