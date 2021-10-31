@@ -64,7 +64,7 @@ jobs:
     - name: Install Packages
       run: nimble install -y
     - name: Install slim
-      run: nimble install asynctest
+      run: nimble install slim
     - name: server -d:chronosStrictException check
       run: nim c -d:chronosStrictException src/scorper/http/streamserver.nim
     - name: Test
