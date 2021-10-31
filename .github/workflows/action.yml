@@ -21,18 +21,18 @@ jobs:
           # - macOS-latest
         experimental: [false]
         nim-version:
-          - stable
+          - 1.4.8
           # - devel
         include:
           - os: windows-latest
             experimental: true
-            nim-version: stable
+            nim-version: 1.4.8
             #   - stable
             #   - devel
         # exclude:
           - os: macos-latest
             experimental: true
-            nim-version: stable
+            nim-version: 1.4.8
             #   - stable
             #   - devel
             # nim-version: stable
