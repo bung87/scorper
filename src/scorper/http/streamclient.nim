@@ -12,7 +12,7 @@ import oids
 when defined(ssl):
   import chronos / streams/tlsstream
 
-type R = Result[int, string]
+type R = results.Result[int, string]
 
 when defined(windows):
   import winlean
