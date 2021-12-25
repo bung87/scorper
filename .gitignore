@@ -3,6 +3,7 @@
 !*.*
 
 # Cache
+cache/
 nimcache/
 rnimcache/
 dnimcache/

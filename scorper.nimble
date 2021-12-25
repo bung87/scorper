@@ -1,6 +1,6 @@
 # Package
 
-version       = "1.0.23"
+version       = "1.0.24"
 author        = "bung87"
 description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
@@ -16,7 +16,7 @@ requires "npeg"
 requires "zippy"
 requires "jsony"
 requires "result"
-requires "urlly"
+requires "urlly >= 0.2.0 & < 0.3.0"
 # use `slim` run tasks   
 
 # task test, "Runs the test suite":
