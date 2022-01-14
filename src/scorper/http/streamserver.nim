@@ -517,14 +517,14 @@ proc hasSuffix(s: string): bool =
       return true
     dec i
 
-proc serveStatic*(req: ImpRequest) {.async.} =
+proc serveStatic*(req: Request) {.async.} =
   ## Relys on `StaticDir` environment variable
   if req.meth != HttpGet and req.meth != HttpHead:
     await req.respError(Http405)
     return
   var relPath: string
   try:
-    relPath = decodeUrlComponent(req.url.path.relativePath(req.prefix))
+    relPath = decodeUrlComponent(req.url.path.relativePath(cast[ImpRequest](req).prefix))
   except:
     discard
   if not hasSuffix(relPath):
@@ -539,15 +539,15 @@ proc serveStatic*(req: ImpRequest) {.async.} =
       await req.respError(Http404)
       return
     var (_, _, ext) = splitFile(absPath)
-    let mime = req.server.mimeDb.getMimetype(ext)
+    let mime = cast[ImpRequest](req).server.mimeDb.getMimetype(ext)
     meta.unsafeGet.headers.ContentType mime
     meta.unsafeGet.headers.AcceptRanges "bytes"
     var msg = generateHeaders(meta.unsafeGet.headers, Http200)
-    discard await req.transp.write(msg)
-    req.responded = true
+    discard await cast[ImpRequest](req).transp.write(msg)
+    cast[ImpRequest](req).responded = true
     return
   await req.sendFile(absPath)
-  req.responded = true
+  cast[ImpRequest](req).responded = true
 
 
 proc json*(req: ImpRequest): Future[JsonNode] {.async.} =
