@@ -36,6 +36,8 @@ const gzipMinLength* {.intdefine.} = 20
 
 ## Usage  
 
+details see here [usage](./USAGE.md)  
+
 ### hello world  
 
 ### `serve` with callback  
