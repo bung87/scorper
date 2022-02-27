@@ -24,13 +24,3 @@ block: # test title case
   for key, val in testTitleCase:
     doAssert key == "Content-Length"
 
-import std/cookies
-import std/strtabs
-
-block: # test cookie
-
-  var test = newHttpHeaders()
-  test["Cookie"] = "yummy_cookie=choco; tasty_cookie=strawberry"
-  let cookies = parseCookies test.getOrDefault("Cookie")
-  doAssert test.cookies[] == cookies[]
-  doAssert cookies.getOrDefault("tasty_cookie") == test.getCookie("tasty_cookie")
