@@ -10,12 +10,12 @@ installExt = @["nim"]
 namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
 # Dependencies
 
-requires "nim >= 1.6.0"
+requires "nim >= 1.3.1"
 requires "chronos >= 3.0.2" # initial 2.6.1
 requires "npeg"
 requires "zippy"
 requires "jsony"
-requires "result"
+requires "stew"
 requires "urlly >= 0.2.0 & < 0.3.0"
 # use `slim` run tasks   
 

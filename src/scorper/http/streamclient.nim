@@ -5,7 +5,7 @@ import nativesockets
 export asyncresponse
 export multipart
 export httpcore except parseHeader
-import results
+import stew/results
 import logging
 from exts/resumable import newResumableKeys
 import oids

@@ -38,7 +38,7 @@ else:
       # storage: seq[byte]
       # context: SslSessionCacheLru
 import chronos / sendfile
-import results
+import stew/results
 
 when defined(windows):
   import winlean

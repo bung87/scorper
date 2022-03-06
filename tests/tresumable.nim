@@ -5,7 +5,7 @@ import ./scorper/http/streamclient
 import ./scorper/http/httpcore, chronos
 import ./scorper/http/exts/resumable
 import os, parseutils, streams
-import results
+import stew/results
 import asynctest, strformat
 
 const filename = currentSourcePath.parentDir / "range.txt"
