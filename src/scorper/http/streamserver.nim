@@ -699,7 +699,6 @@ proc processRequest(
     return false
   # Headers
   let headerEnd = req.server.httpParser.parseHeader(addr req.buf[0], req.buf.len)
-  assert headerEnd != -1
   if headerEnd == -1:
     await req.respError(Http400)
     return true
