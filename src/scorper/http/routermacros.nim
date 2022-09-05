@@ -107,7 +107,7 @@ macro mount*[H](router: Router[H], h: untyped) =
   let cPath = lineInfoObj(h).filename
   var (dir, name, ext) = splitFile(currentSourcePath)
   var cmd = joinPath(dir,name)
-  discard staticExec "nim c -d:release" & currentSourcePath
+  discard staticExec "nim c -d:release " & currentSourcePath
   when defined(windows):
     cmd.add ".exe"
   let r = staticExec(cmd & " " & cPath)
