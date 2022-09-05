@@ -105,8 +105,13 @@ proc getImports*(cPath: string): seq[string] =
 
 macro mount*[H](router: Router[H], h: untyped) =
   let cPath = lineInfoObj(h).filename
-  let cmd = "routermacros"
+  var (dir, name, ext) = splitFile(currentSourcePath)
+  var cmd = joinPath(dir,name)
+  discard staticExec "nim c -d:release" & currentSourcePath
+  when defined(windows):
+    cmd.add ".exe"
   let r = staticExec(cmd & " " & cPath)
+  doAssert r.len > 0
   let routes = r.split(",")
   result = nnkStmtList.newTree()
   for a in routes:
