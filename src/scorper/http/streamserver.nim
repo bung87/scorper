@@ -574,10 +574,10 @@ proc json*(req: ImpRequest): Future[JsonNode] {.async.} =
 proc body*(req: ImpRequest): Future[string] {.async.} =
   if req.rawBody.isSome:
     return req.rawBody.unSafeGet
-  result = ""
+  result = newString(req.contentLength)
   try:
-    result = await req.reader.readLine(limit = req.contentLength.int)
-  except AsyncStreamIncompleteError as e:
+    await req.reader.readExactly(result[0].addr, req.contentLength.int)
+  except AsyncStreamIncompleteError:
     await req.respStatus(Http400, ContentLengthMismatch)
   req.rawBody = some(result)
   req.parsed = true
