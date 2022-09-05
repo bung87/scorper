@@ -7,12 +7,13 @@ import os, strutils
 import asynctest, strformat
 include ./cert
 
-var server{.threadvar.}: Scorper
-
-var handler = proc (request: Request) {.closure, async.} =
-  await request.sendFile(currentSourcePath.parentDir() / "range.txt")
 
 suite "test range request with ssl":
+  var server{.threadvar.}: Scorper
+
+  var handler = proc (request: Request) {.closure, async.} =
+    await request.sendFile(currentSourcePath.parentDir() / "range.txt")
+
   setup:
     let address = "127.0.0.1:0"
     server = newScorper(address, handler, isSecurity = true,

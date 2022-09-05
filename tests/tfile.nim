@@ -8,9 +8,8 @@ import asynctest, strformat
 
 const source = staticRead(currentSourcePath.parentDir / "range.txt")
 
-var server: Scorper
-
 suite "test send file":
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

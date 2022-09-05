@@ -10,8 +10,6 @@ import asynctest, strformat
 const root = currentSourcePath.parentDir().parentDir()
 const source = staticRead(root / "README.md")
 
-var server: Scorper
-
 proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   let
     client = newAsyncHttpClient()
@@ -22,6 +20,7 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   return clientResponse
 
 suite "test serve static file":
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

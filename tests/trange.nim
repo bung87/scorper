@@ -6,12 +6,12 @@ import ./scorper/http/httpcore, chronos
 import os, strutils
 import asynctest, strformat
 
-var server{.threadvar.}: Scorper
-
-var handler = proc (request: Request) {.closure, async.} =
-  await request.sendFile(currentSourcePath.parentDir() / "range.txt")
-
 suite "test range request":
+  var server{.threadvar.}: Scorper
+
+  var handler = proc (request: Request) {.closure, async.} =
+    await request.sendFile(currentSourcePath.parentDir() / "range.txt")
+
   setup:
     let address = "127.0.0.1:0"
     server = newScorper(address, handler)

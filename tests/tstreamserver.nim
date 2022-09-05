@@ -5,8 +5,6 @@ import ./scorper/http/httprequest
 include ./scorper/http/streamclient
 import asynctest, strformat
 
-var server: Scorper
-
 proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   let testUrl = fmt"http://127.0.0.1:{server.local.port}"
   let
@@ -17,6 +15,7 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   return clientResponse
 
 suite "test server":
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

@@ -6,8 +6,6 @@ include ./scorper/http/streamclient
 import asynctest, strformat
 include ./cert
 
-var server: Scorper
-
 proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   let testUrl = fmt"https://127.0.0.1:{server.local.port}"
   let
@@ -18,6 +16,7 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   return clientResponse
 
 suite "test https":
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     server = newScorper(address, default(ScorperCallback), isSecurity = true,

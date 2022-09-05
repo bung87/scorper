@@ -6,13 +6,13 @@ import ./scorper/http/httpcore, chronos
 import json, strutils
 import asynctest, strformat
 
-var server: Scorper
 
-var handler = proc (request: Request) {.closure, async.} =
-  let j = await request.json()
-  await request.resp($j)
 
 suite "test json":
+  var server: Scorper
+  var handler = proc (request: Request) {.closure, async.} =
+    let j = await request.json()
+    await request.resp($j)
   setup:
     let address = "127.0.0.1:0"
     server = newScorper(address, handler)

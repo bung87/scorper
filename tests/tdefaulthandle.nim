@@ -6,9 +6,8 @@ import ./scorper/http/httpcore, chronos
 import json, strutils
 import asynctest, strformat
 
-var server: Scorper
-
 suite "test default handler with mime":
+  var server: Scorper
   setup:
     proc handler(request: Request) {.closure, async.} =
       let j = await request.json()

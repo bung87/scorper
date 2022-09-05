@@ -9,9 +9,10 @@ import strformat
 import base64
 import asynctest, strformat
 
-var server: Scorper
+
 
 suite "test auth":
+  var server: Scorper
   setup:
     proc handler(req: Request) {.closure, async.} =
       if req.headers.hasKey("Authorization"):

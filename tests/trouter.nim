@@ -7,20 +7,19 @@ import ./scorper/http/httpcore, chronos
 import tables
 import asynctest, strformat
 
-var server: Scorper
-
-var handlerParamRaw = proc (request: Request) {.async.} =
-  doAssert request.params["code"] == "ß"
-  await request.resp("")
-
-var handlerParams = proc (request: Request) {.async.} =
-  await request.resp($request.params & $request.query.toTable)
-
-var handlerParamsEncode = proc (request: Request) {.async.} =
-  doAssert request.params["codex"] == "ß"
-  await request.resp("")
-
 suite "test router":
+  var server: Scorper
+
+  var handlerParamRaw = proc (request: Request) {.async.} =
+    doAssert request.params["code"] == "ß"
+    await request.resp("")
+
+  var handlerParams = proc (request: Request) {.async.} =
+    await request.resp($request.params & $request.query.toTable)
+
+  var handlerParamsEncode = proc (request: Request) {.async.} =
+    doAssert request.params["codex"] == "ß"
+    await request.resp("")
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

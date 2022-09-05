@@ -17,11 +17,9 @@ proc abc(req: Request): Future[bool] {.async, postMiddleware.} =
 import scorper
 import scorper/http/streamclient
 
-var server{.threadvar.}: Scorper
-var client: AsyncHttpClient
-
-
 suite "test middleware macros":
+  var server{.threadvar.}: Scorper
+  var client: AsyncHttpClient
   setup:
     var handler = proc (req: Request) {.async.} =
       let headers = {"Content-type": "text/plain"}

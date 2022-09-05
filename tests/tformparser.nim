@@ -11,9 +11,8 @@ let Sample = """multipart/form-data;boundary="sample_boundary""""
 
 doAssert parseBoundary(Sample).boundary == "sample_boundary"
 
-var server: Scorper
-
 suite "test form parser":
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

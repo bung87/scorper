@@ -6,14 +6,6 @@ import ./scorper/http/httpform
 import ./scorper/http/httpcore, chronos
 import asynctest, strformat
 
-var handler = proc (request: Request) {.closure, async.} =
-  let form = await request.form
-  doAssert $form is string
-  doAssert form.data["UserName"] == "test"
-  doAssert form.data["UserNameKana"] == "テスト"
-  doAssert form.data["MailAddress"] == "test@example.com"
-  await request.resp("Hello World, 200")
-
 proc request(server: Scorper): Future[AsyncResponse] {.async.} =
   let
     client = newAsyncHttpClient()
@@ -25,9 +17,15 @@ proc request(server: Scorper): Future[AsyncResponse] {.async.} =
 
   return clientResponse
 
-var server: Scorper
-
 suite "test url encode":
+  var handler = proc (request: Request) {.closure, async.} =
+    let form = await request.form
+    doAssert $form is string
+    doAssert form.data["UserName"] == "test"
+    doAssert form.data["UserNameKana"] == "テスト"
+    doAssert form.data["MailAddress"] == "test@example.com"
+    await request.resp("Hello World, 200")
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}

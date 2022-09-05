@@ -7,10 +7,9 @@ import ./scorper/http/httpcore, chronos
 import os, strutils
 import asynctest, strformat
 
-var server{.threadvar.}: Scorper
-var client: AsyncHttpClient
-
 suite "test post check":
+  var server{.threadvar.}: Scorper
+  var client: AsyncHttpClient
   setup:
     if server == default(Scorper):
       let address = "127.0.0.1:0"

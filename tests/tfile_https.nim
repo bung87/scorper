@@ -9,9 +9,8 @@ include ./cert
 
 const source = staticRead(currentSourcePath.parentDir / "range.txt")
 
-var server: Scorper
-
 suite "test send file with https":
+  var server: Scorper
   setup:
     let address = "127.0.0.1:0"
     server = newScorper(address, default(ScorperCallback), isSecurity = true,

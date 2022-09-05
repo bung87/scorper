@@ -11,18 +11,6 @@ import asynctest, strformat
 const filename = currentSourcePath.parentDir / "range.txt"
 const source = staticRead(filename)
 
-var server: Scorper
-
-var handler = proc (request: Request) {.closure, async.} =
-  let r = await request.handleResumableUpload()
-  if r.isOk:
-    debugEcho "handleResumableUpload success"
-    let resumable = r.get
-    if resumable.savePath.len > 0:
-      debugEcho "resumable.savePath: " & resumable.savePath
-      doAssert getFileSize(resumable.savePath) == source.len
-  else:
-    debugEcho "handleResumableUpload fails"
 
 proc request(server: Scorper): Future[void] {.async.} =
   let
@@ -32,6 +20,19 @@ proc request(server: Scorper): Future[void] {.async.} =
   await client.close()
 
 suite "test handleResumableUpload":
+  var server: Scorper
+
+  var handler = proc (request: Request) {.closure, async.} =
+    let r = await request.handleResumableUpload()
+    if r.isOk:
+      debugEcho "handleResumableUpload success"
+      let resumable = r.get
+      if resumable.savePath.len > 0:
+        debugEcho "resumable.savePath: " & resumable.savePath
+        doAssert getFileSize(resumable.savePath) == source.len
+    else:
+      debugEcho "handleResumableUpload fails"
+
   setup:
     let address = "127.0.0.1:0"
     let flags = {ReuseAddr}
