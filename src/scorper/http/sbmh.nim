@@ -3,7 +3,7 @@
 import std/[algorithm]
 
 type StreamSearcherCallback = proc (isMatch: bool; data: openArray[char];
-                                start: int; e: int; isSafeData: bool)
+                                start: int; e: int; isSafeData: bool) {.raises: [CatchableError].}
 type StreamSearcher* = ref object
   lookbehind: array[70, char]
   needle: string
@@ -72,7 +72,7 @@ proc destroy*(self: StreamSearcher) =
   self.lookbehindSize = 0
   self.bufPos = 0
 
-proc feed*(self: StreamSearcher; data: openArray[char]; ): int =
+proc feed*(self: StreamSearcher; data: openArray[char]; ): int {.raises: [CatchableError].} =
   let len = data.len
   let needle = self.needle
   let needleLen = needle.len
@@ -191,7 +191,7 @@ proc feed*(self: StreamSearcher; data: openArray[char]; ): int =
   self.bufPos = len
   return len
 
-proc push*(self: StreamSearcher; chunk: openArray[char]; pos: int = 0): int =
+proc push*(self: StreamSearcher; chunk: openArray[char]; pos: int = 0): int {.raises: [CatchableError].} =
   let chunkLen = chunk.len
   self.bufPos = pos
   while (result != chunkLen and self.matches < self.maxMatches):

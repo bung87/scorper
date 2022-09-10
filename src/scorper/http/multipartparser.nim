@@ -251,7 +251,7 @@ proc parse*(parser: MultipartParser) {.async.} =
   let beginSep = parser.boundaryBegin
   
   let boundaryDeliCallback = proc (isMatch: bool; data: openArray[char]; start: int; e: int;
-      isSafeData: bool) =
+      isSafeData: bool) {.raises: [CatchableError].} =
     debug "boundaryDeliCallback"
     if start == e : return
 
@@ -342,7 +342,10 @@ proc parse*(parser: MultipartParser) {.async.} =
       of contentEnd:
         if parser.currentDisposition.kind == file:
           parser.currentDisposition.file.flush
-          parser.currentDisposition.file.close
+          try:
+            parser.currentDisposition.file.close
+          except Exception as e:
+            raise newException(IOError, e.msg)
 
         if parser.remainLen != 0:
           inc parser.dispositionIndex
