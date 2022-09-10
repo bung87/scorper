@@ -17,7 +17,6 @@ const FormDataFlagLen = "form-data;".len
 type
   BoundaryMissingError* = object of CatchableError
   BoundaryInvalidError* = object of CatchableError
-  LineIncompleteError = object of CatchableError
   BodyIncompleteError* = object of CatchableError
   MultipartState* = enum
     boundaryBegin, boundaryEnd, contentEnd, extroHeader, disposition, contentBegin
@@ -31,12 +30,11 @@ type
     transp: StreamTransport
     aSlice: Slice[int] # store name,value pair indexes
     bSlice: Slice[int]
-    boundaryBeginHandled: bool
     read: int
     buf: ptr char
     src: ptr array[HttpRequestBufferSize, char]
     dispositions*: seq[ContentDisposition]
-    # streamSearcher: StreamSearcher
+
   ContentDispositionKind* = enum
     data, file
   ContentDisposition* = ref object
@@ -45,7 +43,7 @@ type
       of data:
         value*: string
       of file:
-        filename*, filepath*, contentType*, contentDescription*, contentLength*: string
+        filename*, filepath*, contentType*: string
         file: FileStream
 
 proc `$`*(x: ContentDisposition): string =
@@ -69,7 +67,6 @@ proc parseBoundary*(line: string): tuple[i: int, boundary: string] =
   # consists of 1 to 70 characters
   # https://tools.ietf.org/html/rfc7578#section-4.1
   const Flag = "multipart/form-data;"
-  # const FlagLen = Flag.len
   const BoundaryFlag = "boundary="
   result.i = line.find(Flag)
   if result.i > -1:
@@ -200,7 +197,7 @@ proc processFileName(parser: MultipartParser) =
   parser.buf += 1
 
 proc parseParam(parser: MultipartParser;data:openArray[char]){.inline.} =
-  # Content-Type, Content-Description, Content-Length, Transfer-Encoding
+  # parse http request multipart headers
   debug "dispositionIndex:" & $parser.dispositionIndex
   # skip " and line end
   parser.incBSlice 4
@@ -238,11 +235,8 @@ proc parseParam(parser: MultipartParser;data:openArray[char]){.inline.} =
   case parser.aStr(data):
     of "Content-Type":
       parser.currentDisposition.contentType = parser.bStr(data)
-    of "Content-Description":
-      parser.currentDisposition.contentDescription = parser.bStr(data)
-    of "Content-Length":
-      parser.currentDisposition.contentLength = parser.bStr(data)
     else:
+      # TODO: handle custom headers
       discard
   debug "disposition kind:" & $parser.dispositions[parser.dispositionIndex]
 
