@@ -561,7 +561,7 @@ proc json*(req: ImpRequest): Future[JsonNode] {.async.} =
   result = newJNull()
   try:
     str = await req.reader.readLine(limit = req.contentLength.int)
-  except AsyncStreamIncompleteError as e:
+  except AsyncStreamIncompleteError:
     await req.respStatus(Http400, ContentLengthMismatch)
     req.parsedJson = some(result)
     req.parsed = true
