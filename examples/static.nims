@@ -1,1 +1,1 @@
-putEnv("StaticDir",".")
+putEnv("StaticDir","./static")
