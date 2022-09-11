@@ -1,3 +1,4 @@
+{.push hint[Name]: off.}
 proc cpuidex*(cpuInfo:ptr int,function_id:cint,subfunction_id:cint)
   {.importc:"__cpuidex", header:"intrin.h"}
 
@@ -90,3 +91,5 @@ proc getCPUType*() : CPU_TYPE =
   cpuid(cpuInfo,7)
   if (cpuInfo[1] and (1 shl 5)) == 0: return SSE41 #actually avx but we are not that granual yet
   return AVX2
+
+{.pop.}

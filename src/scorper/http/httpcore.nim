@@ -349,6 +349,7 @@ proc $1*(headers: HttpHeaders): HttpHeaderValues {.inline.} =
   template genCommonHttpHeaderProcs =
     var f = open(currentSourcePath.parentDir / "httpcommonheaders.nim", fmWrite)
     f.writeLine "## generated through ./httpcore"
+    f.writeLine "{.push hint[Name]: off.}"
     f.writeLine "import ./httptypes"
     f.writeLine "import tables"
     for x in ["Accept", "WWW-Authenticate", "X-Frame-Options", "Content-Encoding", "Last-Modified", "Accept-Ranges",
@@ -360,6 +361,7 @@ proc $1*(headers: HttpHeaders): HttpHeaderValues {.inline.} =
       let key = toTitleCase(x)
       let temp = TPL % [camelize x, key]
       f.write temp
+    f.writeLine "{.pop.}"
     f.close
 
   genCommonHttpHeaderProcs()

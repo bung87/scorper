@@ -1,4 +1,5 @@
 ## generated through ./httpcore
+{.push hint[Name]: off.}
 import ./httptypes
 import tables
 
@@ -519,3 +520,4 @@ proc Warning*(headers: HttpHeaders): HttpHeaderValues {.inline.} =
   if headers.table.hasKey("Warning"):
     return headers.table["Warning"].HttpHeaderValues
 
+{.pop.}

@@ -2,6 +2,8 @@ import macros, bitops, ./httpcore
 import .. / private / SIMD / cpu_type
 include constant
 
+{.push hint[Name]: off.}
+
 macro getCPU: untyped =
   let CPU = $getCPUType()
 
@@ -161,6 +163,8 @@ const HEADER_VALUE_TOKEN = [
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 ]
+
+{.pop.}
 
 type
   MofuHeader* = object

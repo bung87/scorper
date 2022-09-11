@@ -1,5 +1,5 @@
 import netunit
-
+{.push used.}
 const HttpRequestBufferSize {.intdefine.} = 2.Kb
 const BufferLimitExceeded = "Buffer Limit Exceeded"
 const ContentLengthMismatch = "Content-Length does not match actual"
@@ -8,3 +8,4 @@ const gzipMinLength {.intdefine.} = 20 # same as nginx config http://nginx.org/e
 const HttpServer {.strdefine.} = "scorper"
 const GzipEnable {.booldefine.} = true
 const TimeOut {.intdefine.} = 300
+{.pop.}

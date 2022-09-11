@@ -10,8 +10,6 @@ mImport(os.joinPath( "compiler" , "ast.nim"))
 export ast
 
 type ParseError = ref object of CatchableError
-const DevNullDir = when defined(windows):"c:\\" else: "/dev"
-const DevNullFile = when defined(windows):"nul" else: "null"
 
 proc parsePNodeStr*(str: string): PNode =
   let cache: IdentCache = newIdentCache()
@@ -21,6 +19,8 @@ proc parsePNodeStr*(str: string): PNode =
   config.verbosity = 0
   config.options.excl optHints
   when defined(nimpretty):
+    const DevNullDir = when defined(windows):"c:\\" else: "/dev"
+    const DevNullFile = when defined(windows):"nul" else: "null"
     config.outDir = toAbsoluteDir(DevNullDir)
     config.outFile = RelativeFile(DevNullFile)
   openParser(

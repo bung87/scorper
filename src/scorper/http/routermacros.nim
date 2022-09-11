@@ -105,7 +105,7 @@ proc getImports*(cPath: string): seq[string] =
 
 macro mount*[H](router: Router[H], h: untyped) =
   let cPath = lineInfoObj(h).filename
-  var (dir, name, ext) = splitFile(currentSourcePath)
+  var (dir, name, _) = splitFile(currentSourcePath)
   var cmd = joinPath(dir,name)
   discard staticExec "nim c -d:release " & currentSourcePath
   when defined(windows):
