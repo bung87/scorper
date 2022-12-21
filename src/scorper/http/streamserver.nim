@@ -153,6 +153,18 @@ template devLog(req: ImpRequest, content: untyped) =
     except:
       discard
 
+template handleCompress(needCompress: bool; content: string; ctn: var string; length: var int) =
+  if needCompress:
+    headers.ContentEncoding "gzip"
+    ctn = compress(content, BestSpeed, dfGzip)
+    length = ctn.len
+  else:
+    when defined(gcArc) or defined(gcOrc):
+      ctn = move(content)
+    else:
+      shallowCopy(ctn, content)
+    length = originalLen
+
 proc resp*(req: ImpRequest, content: sink string,
               headers: HttpHeaders = newHttpHeaders(), code: HttpCode = Http200): Future[void] {.async.} =
   ## Responds to the req with the specified ``HttpCode``, headers and
@@ -165,13 +177,7 @@ proc resp*(req: ImpRequest, content: sink string,
   let needCompress = gzip and originalLen >= gzipMinLength
   var ctn: string
   var length: int
-  if needCompress:
-    headers.ContentEncoding "gzip"
-    ctn = compress(content, BestSpeed, dfGzip)
-    length = ctn.len
-  else:
-    shallowCopy(ctn, content)
-    length = originalLen
+  handleCompress(needCompress, content, ctn, length)
   let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
@@ -201,13 +207,7 @@ proc respError*(req: ImpRequest, code: HttpCode, content: sink string, headers =
   let needCompress = gzip and originalLen >= gzipMinLength
   var ctn: string
   var length: int
-  if needCompress:
-    headers.ContentEncoding "gzip"
-    ctn = compress(content, BestSpeed, dfGzip)
-    length = ctn.len
-  else:
-    shallowCopy(ctn, content)
-    length = originalLen
+  handleCompress(needCompress, content, ctn, length)
   let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
@@ -226,19 +226,13 @@ proc respError*(req: ImpRequest, code: HttpCode, headers = newHttpHeaders()): Fu
   if req.responded == true:
     return
   var headers = genericHeaders(headers)
-  let content = $code
+  var content = $code
   let gzip = req.gzip()
   let originalLen = content.len
   let needCompress = gzip and originalLen >= gzipMinLength
   var ctn: string
   var length: int
-  if needCompress:
-    headers.ContentEncoding "gzip"
-    ctn = compress(content, BestSpeed, dfGzip)
-    length = ctn.len
-  else:
-    shallowCopy(ctn, content)
-    length = originalLen
+  handleCompress(needCompress, content, ctn, length)
   let flen = $length
   headers.hasKeyOrPut("Content-Length"):
     flen
@@ -775,7 +769,10 @@ proc processRequest(
   var keep = true
   case scorper.kind
   of CbKind.cb:
-    shallowCopy(req.query, req.url.query)
+    when defined(gcArc) or defined(gcOrc):
+      req.query = move(req.url.query)
+    else:
+      shallowCopy(req.query, req.url.query)
     handlePreProcessMiddlewares(req)
     tryHandle(scorper.callback(req), keep)
     if not keep:
@@ -785,7 +782,10 @@ proc processRequest(
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
       req.params = matched.route.params[]
-      shallowCopy(req.query, req.url.query)
+      when defined(gcArc) or defined(gcOrc):
+        req.query = move(req.url.query)
+      else:
+        shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
       handlePreProcessMiddlewares(req)
       tryHandle(matched.handler(req), keep)
@@ -817,9 +817,13 @@ proc processRequest(
 
 proc processClient(server: StreamServer, transp: StreamTransport) {.async.} =
   var req = ImpRequest()
-  shallowCopy(req.server, cast[Scorper](server))
   req.headers = newHttpHeaders()
-  shallowCopy(req.transp, transp)
+  when defined(gcArc) or defined(gcOrc):
+    req.server = cast[Scorper](server)
+    req.transp = transp
+  else:
+    shallowCopy(req.server, cast[Scorper](server))
+    shallowCopy(req.transp, transp)
   try:
     req.hostname = $req.transp.localAddress
   except TransportError:
