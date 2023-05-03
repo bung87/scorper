@@ -286,19 +286,19 @@ func `==`*(a, b: HttpCode): bool {.borrow.}
 
 func is2xx*(code: HttpCode): bool {.inline.} =
   ## Determines whether ``code`` is a 2xx HTTP status code.
-  code.int in {200 .. 299}
+  code.int in 200 .. 299
 
 func is3xx*(code: HttpCode): bool {.inline.} =
   ## Determines whether ``code`` is a 3xx HTTP status code.
-  code.int in {300 .. 399}
+  code.int in 300 .. 399
 
 func is4xx*(code: HttpCode): bool {.inline.} =
   ## Determines whether ``code`` is a 4xx HTTP status code.
-  code.int in {400 .. 499}
+  code.int in 400 .. 499
 
 func is5xx*(code: HttpCode): bool {.inline.} =
   ## Determines whether ``code`` is a 5xx HTTP status code.
-  code.int in {500 .. 599}
+  code.int in 500 .. 599
 
 func `$`*(httpMethod: HttpMethod): string =
   return (system.`$`(httpMethod))[4 .. ^1].toUpperAscii()

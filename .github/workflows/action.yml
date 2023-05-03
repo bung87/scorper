@@ -19,7 +19,7 @@ jobs:
           - ubuntu-latest
           - windows-latest
           - macOS-latest
-        experimental: [false]
+
         nim-version:
           - 1.6.0
           - stable
