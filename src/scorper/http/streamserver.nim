@@ -523,7 +523,7 @@ proc serveStatic*(req: Request) {.async.} =
   var relPath: string
   try:
     relPath = decodeUrlComponent(req.url.path.relativePath(cast[ImpRequest](req).prefix))
-  except CatchableError:
+  except Exception:
     discard
   if not hasSuffix(relPath):
     relPath = relPath / "index.html"
