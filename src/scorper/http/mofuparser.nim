@@ -460,22 +460,22 @@ proc parseChunk*(mc: MofuChunk, buf: ptr char, bSize: var int): int =
   chunkExit()
 
 proc getMethod*(req: MofuParser): string {.inline.} =
-  result = ($(req.httpMethod))[0 .. req.httpMethodLen]
+  result = ($ cast[cstring](req.httpMethod))[0 .. req.httpMethodLen]
 
 proc getPath*(req: MofuParser): string {.inline.} =
-  result = ($(req.path))[0 .. req.pathLen]
+  result = ($ cast[cstring](req.path))[0 .. req.pathLen]
 
 proc getHeader*(req: MofuParser, name: string): string {.inline.} =
   for i in 0 ..< req.headerLen:
-    if ($(req.headers[i].name))[0 .. req.headers[i].namelen] == name:
-      result = ($(req.headers[i].value))[0 .. req.headers[i].valuelen]
+    if ($ cast[cstring](req.headers[i].name))[0 .. req.headers[i].namelen] == name:
+      result = ($ cast[cstring](req.headers[i].value))[0 .. req.headers[i].valuelen]
       return
   result = ""
 
 iterator headersPair*(req: MofuParser): tuple[name, value: string] =
   for i in 0 ..< req.headerLen:
-    yield (($(req.headers[i].name))[0 .. req.headers[i].namelen],
-           ($(req.headers[i].value))[0 .. req.headers[i].valuelen])
+    yield (($ cast[cstring](req.headers[i].name))[0 .. req.headers[i].namelen],
+           ($ cast[cstring](req.headers[i].value))[0 .. req.headers[i].valuelen])
 
 proc toHttpHeaders*(mhr: MofuParser): HttpHeaders =
   var hds: seq[tuple[key: string, val: string]] = @[]
