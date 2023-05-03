@@ -40,7 +40,7 @@ suite "test json":
     var s: string
     try:
       toUgly(s, parseJson("""{ "name": "Nim", "age": 12 }"""))
-    except:
+    except CatchableError:
       discard
     doAssert(body == s)
 

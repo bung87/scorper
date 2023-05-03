@@ -131,7 +131,7 @@ macro acceptMime*(req: ImpRequest, ext: untyped, headers: HttpHeaders, body: unt
     try:
       {.cast(gcsafe).}:
         r = req.server.privAccpetParser.match(accept, mimes)
-    except Exception as err:
+    except CatchableError as err:
       await req.respError(Http500, err.msg, headers)
       return
     var ext {.inject.}: string
@@ -150,7 +150,7 @@ template devLog(req: ImpRequest, content: untyped) =
   when not defined(release):
     try:
       req.server.logSub.next(`content`)
-    except:
+    except CatchableError:
       discard
 
 template handleCompress(needCompress: bool; content: string; ctn: var string; length: var int) =
@@ -292,10 +292,10 @@ proc writeFile(req: ImpRequest, fname: string, size: int): Future[void] {.async.
   var file: File
   try:
     file = open(fname)
-  except Exception as e:
+  except CatchableError as e:
     try:
       req.server.logSub.next(e.msg)
-    except Exception:
+    except CatchableError:
       discard
     return
   when defined(windows):
@@ -337,10 +337,10 @@ proc writePartialFile(req: ImpRequest, fname: string, ranges: seq[tuple[starts: 
   if not req.server.isSecurity:
     try:
       file = open(fname)
-    except Exception as e:
+    except CatchableError as e:
       try:
         req.server.logSub.next(e.msg)
-      except Exception:
+      except Defect, CatchableError:
         await req.respError(Http500)
       return
     when defined(windows):
@@ -361,7 +361,7 @@ proc writePartialFile(req: ImpRequest, fname: string, ranges: seq[tuple[starts: 
     if req.server.isSecurity:
       try:
         writeFileStream(req, fname, offset, size)
-      except Exception:
+      except Defect, CatchableError:
         await req.respError(Http500)
         return
     else:
@@ -371,7 +371,7 @@ proc writePartialFile(req: ImpRequest, fname: string, ranges: seq[tuple[starts: 
       else:
         try:
           writeFileStream(req, fname, offset, size)
-        except Exception:
+        except Defect, CatchableError:
           await req.respError(Http500)
           return
   await req.writer.write(CRLF & boundary & "--")
@@ -386,7 +386,7 @@ proc fileGuard(req: ImpRequest, filepath: string): Future[Option[FileInfo]] {.as
   var info: FileInfo
   try:
     info = getFileInfo(filepath)
-  except:
+  except CatchableError:
     return none(FileInfo)
   if fpOthersRead notin info.permissions:
     await req.respError(Http403)
@@ -395,7 +395,7 @@ proc fileGuard(req: ImpRequest, filepath: string): Future[Option[FileInfo]] {.as
     var ifModifiedSince: Time
     try:
       ifModifiedSince = parseTime(req.headers["If-Modified-Since"], HttpDateFormat, utc())
-    except:
+    except CatchableError:
       await req.respError(Http400)
       return none(FileInfo)
     if info.lastWriteTime == ifModifiedSince:
@@ -405,7 +405,7 @@ proc fileGuard(req: ImpRequest, filepath: string): Future[Option[FileInfo]] {.as
     var ifUnModifiedSince: Time
     try:
       ifUnModifiedSince = parseTime(req.headers["If-Unmodified-Since"], HttpDateFormat, utc())
-    except:
+    except CatchableError:
       await req.respError(Http400)
       return none(FileInfo)
     if info.lastWriteTime > ifUnModifiedSince:
@@ -523,7 +523,7 @@ proc serveStatic*(req: Request) {.async.} =
   var relPath: string
   try:
     relPath = decodeUrlComponent(req.url.path.relativePath(cast[ImpRequest](req).prefix))
-  except:
+  except CatchableError:
     discard
   if not hasSuffix(relPath):
     relPath = relPath / "index.html"
@@ -563,8 +563,6 @@ proc json*(req: ImpRequest): Future[JsonNode] {.async.} =
   try:
     result = parseJson(str)
   except CatchableError as e:
-    raise newHttpError(Http400, e.msg)
-  except Exception as e:
     raise newHttpError(Http400, e.msg)
   req.parsedJson = some(result)
   req.parsed = true
@@ -622,7 +620,7 @@ proc form*(req: ImpRequest): Future[Form] {.async.} =
         else:
           try:
             req.server.logSub.next("form parse error: " & $parser.state)
-          except:
+          except CatchableError:
             discard
       else:
         discard
@@ -667,7 +665,7 @@ template tryHandle(body: untyped, keep: var bool) =
   except HttpError as err:
     if not req.responded:
       await req.defaultErrorHandle(err)
-  except:
+  except CatchableError:
     if not req.responded:
       let err = getCurrentException()
       await req.defaultErrorHandle(err)
@@ -895,11 +893,11 @@ template initScorper(server: Scorper) =
     var obs = newObservable[string]()
     try:
       discard subscribe[string](obs, server.logSub)
-    except:
+    except CatchableError:
       discard
   try:
     server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $server.local)
-  except:
+  except CatchableError:
     discard
 
 proc serve*(address: string,

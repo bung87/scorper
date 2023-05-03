@@ -19,7 +19,7 @@ proc basicAuth*(request: Request, validator: HttpBasicAuthValidator): Future[boo
     let s2 = authorization.find("Basic")
     let decoded = base64.decode(authorization[s2+6 .. ^1])
     up = decoded.split(":", 1)
-  except:
+  except CatchableError:
     await request.respError(Http400, "Authorization header not valid")
     return false
   success = await validator.validate(up[0], up[1])

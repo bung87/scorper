@@ -59,7 +59,7 @@ const defUserAgent* = "Nim httpclient/" & NimVersion
 proc log(client: AsyncHttpClient, level: Level, args: varargs[string]) =
   try:
     client.log level, args
-  except:
+  except CatchableError:
     discard
 
 proc newProxy*(url: string, auth = ""): Proxy =
@@ -237,7 +237,7 @@ proc parseChunks(client: AsyncHttpClient): Future[void]
     if chunkSizeStr == "":
       try:
         client.log lvlError, "Server terminated connection prematurely"
-      except:
+      except CatchableError:
         discard
     while i < chunkSizeStr.len:
       case chunkSizeStr[i]
@@ -356,7 +356,7 @@ proc parseResponse*(client: AsyncHttpClient,
     linei = 0
     try:
       line = await client.reader.readLine()
-    except:
+    except CatchableError:
       line = ""
       await sleepAsync(0)
       continue

@@ -99,13 +99,13 @@ proc handleResumableUpload*(req: Request; resumableKeys = newResumableKeys()): F
       s.flush
       try:
         s.close
-      except:
+      except CatchableError:
         discard
       inc j
     file.flush
     try:
       file.close
-    except:
+    except CatchableError:
       discard
     let filepath = tmpDir / resumable.identifier
     resumable.savePath = filepath
