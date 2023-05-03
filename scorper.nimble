@@ -7,7 +7,7 @@ license       = "Apache License 2.0"
 srcDir        = "src"
 skipDirs      = @["tests","examples","experiments","benchmark","artwork"]
 installExt = @["nim"]
-namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
+# namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
 # Dependencies
 
 requires "nim >= 1.3.1"
@@ -57,8 +57,8 @@ task bench_h,"benchmark simple responses with httpbeast":
 task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"
 
-before test:
-  requires "asynctest"
+
+taskRequires "test", "asynctest"
 
 task profile,"profiling":
   let c = readFile("benchmark/simple_resp.nim")

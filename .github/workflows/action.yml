@@ -46,15 +46,13 @@ jobs:
         #   ${{ runner.os }}-nimble-${{ matrix.nim-version}}-
       # if: runner.os != 'Windows'
     - name: Setup nim
-      uses: jiro4989/setup-nim-action@v1.3.2
+      uses: jiro4989/setup-nim-action@v1
       with:
         nim-version: ${{ matrix.nim-version }}
 
     - name: Install Packages
       run: nimble install -y
-    - name: Install slim
-      run: nimble install slim -y
     - name: server -d:chronosStrictException check
       run: nim c -d:chronosStrictException src/scorper/http/streamserver.nim
     - name: Test
-      run: slim --silent test 
+      run: nimble --silent test 
