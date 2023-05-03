@@ -665,7 +665,7 @@ template tryHandle(body: untyped, keep: var bool) =
   except HttpError as err:
     if not req.responded:
       await req.defaultErrorHandle(err)
-  except CatchableError:
+  except Exception:
     if not req.responded:
       let err = getCurrentException()
       await req.defaultErrorHandle(err)
