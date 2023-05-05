@@ -236,7 +236,11 @@ check Todo list upon and [issues](https://github.com/bung87/scorper/issues)
 clone this repository, run `nimble install stage` , if you already have `stage` installed, run `stage init`  
 `stage` is used for integrating with git commit hook, doing checking and code formatting.  
 
-## Benchmark  
+## Benchmark
+
+[Web Frameworks Benchmark](https://web-frameworks-benchmark.netlify.app/result?l=nim)  
+
+[TechEmpower benchmarks](https://www.techempower.com/benchmarks/)  
 
 requires `wrk`  
 
