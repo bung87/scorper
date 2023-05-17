@@ -19,8 +19,6 @@ requires "stew"
 requires "urlly >= 0.2.0 & < 0.3.0"
 # use `slim` run tasks   
 
-# task test, "Runs the test suite":
-  # exec "testament --megatest:off pattern 'tests/*.nim'"
 
 task docs,"a":
   exec "nim doc --project src/scorper.nim"
