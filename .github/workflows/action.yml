@@ -57,4 +57,4 @@ jobs:
     - name: server -d:chronosStrictException check
       run: nim c -d:chronosStrictException src/scorper/http/streamserver.nim
     - name: Test
-      run: slim --silent test
+      run: slim -y --silent test
