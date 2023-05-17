@@ -59,7 +59,7 @@ task strict, "stric async exception check":
 
 
 before test:
-  requires "asynctest >= 0.2.0 & < 0.3.0"
+  requires "asynctest >= 0.3.2 & < 0.4.0"
 
 task profile,"profiling":
   let c = readFile("benchmark/simple_resp.nim")
