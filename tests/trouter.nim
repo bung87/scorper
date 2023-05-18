@@ -9,7 +9,7 @@ import asynctest, strformat
 
 suite "test router":
   var server: Scorper
-  var client: AsyncHttpClient
+  var client = newAsyncHttpClient()
 
   var handlerParamRaw = proc (request: Request) {.async.} =
     doAssert request.params["code"] == "ß"
@@ -52,24 +52,24 @@ suite "test router":
     doAssert(body == $p & $q)
 
 
-  # test "testParamEncode":
+  test "testParamEncode":
 
-  #   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
-  #     let codeUrl = fmt"http://127.0.0.1:{server.local.port}/code/%C3%9F"
-  #     result = await client.request(codeUrl)
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let codeUrl = fmt"http://127.0.0.1:{server.local.port}/code/%C3%9F"
+      result = await client.request(codeUrl)
 
-  #   let
-  #     response = await request(server)
-  #   doAssert(response.code == Http200)
+    let
+      response = await request(server)
+    doAssert(response.code == Http200)
 
 
-  # test "testParamRaw":
+  test "testParamRaw":
 
-  #   proc request(server: Scorper): Future[AsyncResponse] {.async.} =
-  #     let codeUrl = fmt"http://127.0.0.1:{server.local.port}/code_raw/ß"
-  #     result = await client.request(codeUrl)
+    proc request(server: Scorper): Future[AsyncResponse] {.async.} =
+      let codeUrl = fmt"http://127.0.0.1:{server.local.port}/code_raw/ß"
+      result = await client.request(codeUrl)
 
-  #   let
-  #     response = await request(server)
-  #   doAssert(response.code == Http404)
+    let
+      response = await request(server)
+    doAssert(response.code == Http404)
 
