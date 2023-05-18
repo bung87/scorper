@@ -17,7 +17,6 @@ requires "zippy"
 requires "jsony"
 requires "stew"
 requires "urlly >= 0.2.0 & < 0.3.0"
-# use `slim` run tasks   
 
 
 task docs,"a":
