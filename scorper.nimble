@@ -1,6 +1,6 @@
 # Package
 
-version       = "1.1.1"
+version       = "1.1.2"
 author        = "bung87"
 description   = "micro and elegant web framework"
 license       = "Apache License 2.0"
@@ -11,7 +11,8 @@ installExt = @["nim"]
 # Dependencies
 
 requires "nim >= 1.3.1"
-requires "chronos >= 3.0.2" # initial 2.6.1
+# requires "chronos >= 3.0.2" # initial 2.6.1
+requires "chronos"
 requires "npeg"
 requires "zippy"
 requires "jsony"
