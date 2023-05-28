@@ -654,6 +654,7 @@ proc defaultErrorHandle(req: ImpRequest, err: ref Exception | HttpError; headers
       await req.respError(Http400, err.msg, headers)
 
 template tryHandle(req: ImpRequest, fut: untyped, keep: var bool) =
+  mixin defaultErrorHandle
   try:
     await chronos.wait(fut, TimeOut.seconds)
   except AsyncTimeoutError:
