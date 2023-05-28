@@ -19,7 +19,7 @@ include constant
 import std / [os, streams, options, strformat, json, sequtils, parseutils, strutils, macros, macrocache]
 import ./ rxnim / rxnim
 import segfaults
-from std/times import Time, parseTime, utc, `<`, now, `$`, initDuration
+from std/times import Time, parseTime, utc, `<`, now, `$`
 import zippy
 from httprequest import Request
 import ../ scorpermacros
@@ -656,7 +656,7 @@ proc defaultErrorHandle(req: ImpRequest, err: ref Exception | HttpError; headers
 template tryHandle(req: ImpRequest, fut: untyped, keep: var bool) =
   mixin defaultErrorHandle
   try:
-    await chronos.wait(fut, initDuration(seconds = TimeOut))
+    await chronos.wait(fut, chronos.seconds(TimeOut))
   except AsyncTimeoutError:
     if not req.responded:
       let err = newHttpError(408.HttpCode)
