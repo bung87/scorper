@@ -653,10 +653,9 @@ proc defaultErrorHandle(req: ImpRequest, err: ref Exception | HttpError; headers
       headers.ContentType "text/plain"
       await req.respError(Http400, err.msg, headers)
 
-template tryHandle(req: ImpRequest, body: untyped, keep: var bool) =
-  mixin defaultErrorHandle
+template tryHandle(req: ImpRequest, fut: untyped, keep: var bool) =
   try:
-    await wait(body, TimeOut.seconds)
+    await chronos.wait(fut, TimeOut.seconds)
   except AsyncTimeoutError:
     if not req.responded:
       let err = newHttpError(408.HttpCode)
