@@ -19,7 +19,7 @@ include constant
 import std / [os, streams, options, strformat, json, sequtils, parseutils, strutils, macros, macrocache]
 import ./ rxnim / rxnim
 import segfaults
-from std/times import Time, parseTime, utc, `<`, now, `$`
+from std/times import Time, parseTime, utc, `<`, now, `$`, initDuration
 import zippy
 from httprequest import Request
 import ../ scorpermacros
