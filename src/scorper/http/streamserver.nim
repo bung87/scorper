@@ -551,10 +551,10 @@ proc serveStatic*(req: Request) {.async.} =
 proc json*(req: ImpRequest): Future[JsonNode] {.async.} =
   if req.parsedJson.isSome:
     return req.parsedJson.unSafeGet
-  var str: string
+  var str = newString(req.contentLength)
   result = newJNull()
   try:
-    str = await req.reader.readLine(limit = req.contentLength.int)
+    await req.reader.readExactly(str[0].addr, req.contentLength.int)
   except AsyncStreamIncompleteError:
     await req.respStatus(Http400, ContentLengthMismatch)
     req.parsedJson = some(result)
