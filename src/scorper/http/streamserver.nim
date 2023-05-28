@@ -961,5 +961,5 @@ proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallb
       result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
 
 func isClosed*(server: Scorper): bool =
-  server.status = ServerStatus.Closed
+  server.status == ServerStatus.Closed
 
