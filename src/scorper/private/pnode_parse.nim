@@ -33,8 +33,9 @@ proc parsePNodeStr*(str: string): PNode =
 
   pars.lex.errorHandler =
     proc(conf: ConfigRef; info: TLineInfo; msg: TMsgKind; arg: string) =
-      if msg notin {hintLineTooLong}:
-        raise ParseError(msg: arg)
+      when declared(hintLineTooLong):
+        if msg notin {hintLineTooLong}:
+          raise ParseError(msg: arg)
 
   try:
     result = parseAll(pars)

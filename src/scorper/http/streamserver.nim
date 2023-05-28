@@ -118,7 +118,7 @@ proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeE
 func getExt*(req: ImpRequest, mime: string): string {.inline.} =
   result = req.server.mimeDb.getExt(mime, default = "")
 
-func getMimetype*(req: ImpRequest, ext: string): string{.inline.} =
+func getMimetype*(req: ImpRequest, ext: string): string {.inline.} =
   result = req.server.mimeDb.getMimetype(ext, default = "")
 
 macro acceptMime*(req: ImpRequest, ext: untyped, headers: HttpHeaders, body: untyped) =
@@ -143,7 +143,7 @@ macro acceptMime*(req: ImpRequest, ext: untyped, headers: HttpHeaders, body: unt
     else:
       `body`
 
-func gzip*(req: ImpRequest): bool = GzipEnable and req.headers.hasKey("Accept-Encoding") and
+func gzip*(req: ImpRequest): bool {.inline.} = GzipEnable and req.headers.hasKey("Accept-Encoding") and
     string(req.headers["Accept-Encoding"]).contains("gzip")
 
 template devLog(req: ImpRequest, content: untyped) =
@@ -172,9 +172,8 @@ proc resp*(req: ImpRequest, content: sink string,
   # If the headers did not contain a Content-Length use our own
   if req.responded == true:
     return
-  let gzip = req.gzip()
   let originalLen = content.len
-  let needCompress = gzip and originalLen >= gzipMinLength
+  let needCompress = req.gzip() and originalLen >= gzipMinLength
   var ctn: string
   var length: int
   handleCompress(needCompress, content, ctn, length)
@@ -202,9 +201,8 @@ proc respError*(req: ImpRequest, code: HttpCode, content: sink string, headers =
   if req.responded == true:
     return
   var headers = genericHeaders(headers)
-  let gzip = req.gzip()
   let originalLen = content.len
-  let needCompress = gzip and originalLen >= gzipMinLength
+  let needCompress = req.gzip() and originalLen >= gzipMinLength
   var ctn: string
   var length: int
   handleCompress(needCompress, content, ctn, length)
@@ -227,9 +225,8 @@ proc respError*(req: ImpRequest, code: HttpCode, headers = newHttpHeaders()): Fu
     return
   var headers = genericHeaders(headers)
   var content = $code
-  let gzip = req.gzip()
   let originalLen = content.len
-  let needCompress = gzip and originalLen >= gzipMinLength
+  let needCompress = req.gzip() and content.len >= gzipMinLength
   var ctn: string
   var length: int
   handleCompress(needCompress, content, ctn, length)
@@ -716,8 +713,9 @@ proc processRequest(
       return true
 
   req.path = scorper.httpParser.getPath()
+  const prefix = "http://" & (when isSecurity: "s" else: "")
   try:
-    req.url = parseUrl("http://" & (when isSecurity: "s" else: "") & req.hostname & req.path)[]
+    req.url = parseUrl(prefix & req.hostname & req.path)[]
   except ValueError as e:
     scorper.logSub.next(e.msg)
     asyncSpawn req.respError(Http400)
