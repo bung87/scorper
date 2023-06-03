@@ -389,7 +389,7 @@ proc fileGuard(req: ImpRequest, filepath: string): Future[Option[FileInfo]] {.as
     await req.respError(Http403)
     return none(FileInfo)
   if req.headers.hasKey("If-Modified-Since"):
-    var ifModifiedSince: Time
+    var ifModifiedSince: times.Time
     try:
       ifModifiedSince = parseTime(req.headers["If-Modified-Since"], HttpDateFormat, utc())
     except CatchableError:
@@ -399,7 +399,7 @@ proc fileGuard(req: ImpRequest, filepath: string): Future[Option[FileInfo]] {.as
       await req.respStatus(Http304)
       return none(FileInfo)
   elif req.headers.hasKey("If-Unmodified-Since"):
-    var ifUnModifiedSince: Time
+    var ifUnModifiedSince: times.Time
     try:
       ifUnModifiedSince = parseTime(req.headers["If-Unmodified-Since"], HttpDateFormat, utc())
     except CatchableError:
