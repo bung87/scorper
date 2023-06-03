@@ -22,7 +22,7 @@ jobs:
 
         nim-version:
           # - 1.6.0
-          # - stable
+          - stable
           - devel
 
     steps:
