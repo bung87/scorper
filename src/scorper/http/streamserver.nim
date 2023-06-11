@@ -354,7 +354,7 @@ proc writePartialFile(req: ImpRequest, fname: string, ranges: seq[tuple[starts: 
     else:
       await req.writer.write(fmt"Content-Range: bytes {b.ends}/{fullSize}" & CRLF & CRLF)
     let offset = if b.ends >= 0: b.starts else: fullSize + b.ends
-    let size = if b.ends > 0: b.ends - b.starts + 1: elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
+    let size = if b.ends > 0: b.ends - b.starts + 1 elif b.ends == 0: fullSize - b.starts else: abs(b.ends)
     if req.server.isSecurity:
       try:
         writeFileStream(req, fname, offset, size)
