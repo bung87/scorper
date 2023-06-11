@@ -713,7 +713,7 @@ proc processRequest(
       return true
 
   req.path = scorper.httpParser.getPath()
-  const prefix = "http://" & (when isSecurity: "s" else: "")
+  const prefix = "http" & (when isSecurity: "s" else: "") & "://"
   try:
     req.url = parseUrl(prefix & req.hostname & req.path)[]
   except ValueError as e:
