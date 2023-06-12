@@ -16,7 +16,7 @@ suite "test router":
     await request.resp("")
 
   var handlerParams = proc (request: Request) {.async.} =
-    await request.resp($request.params & $request.query.toTable)
+    await request.resp($request.params & $request.url.query.toTable)
 
   var handlerParamsEncode = proc (request: Request) {.async.} =
     doAssert request.params["codex"] == "ß"
