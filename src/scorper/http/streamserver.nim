@@ -104,7 +104,7 @@ proc formatCommon*(r: ImpRequest, status: HttpCode, size: int): string =
   # LogFormat "%h %l %u %t \"%r\" %>s %b" common
   # LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\"" combined
   let remoteUser = os.getEnv("REMOTE_USER", "-")
-  result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
+  result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.url.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
 proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeEffect].} =
   ## genericHeaders contains Date,X-Frame-Options
@@ -640,7 +640,7 @@ proc defaultErrorHandle(req: ImpRequest, err: ref Exception | HttpError; headers
       toUgly(s, %* {"error": err.msg})
       await req.respError(code, s, headers)
     of "js":
-      let cbName: string = req.query["callback"]
+      let cbName: string = req.url.query["callback"]
       var s: string
       toUgly(s, %* {"error": err.msg})
       await req.respError(code, fmt"""{cbName}({s});""", headers)
@@ -712,10 +712,10 @@ proc processRequest(
       await req.respError(Http501)
       return true
 
-  req.path = scorper.httpParser.getPath()
+  let path = scorper.httpParser.getPath()
   const prefix = "http" & (when isSecurity: "s" else: "") & "://"
   try:
-    req.url = parseUrl(prefix & req.hostname & req.path)[]
+    req.url = parseUrl(prefix & req.hostname & path)[]
   except ValueError as e:
     scorper.logSub.next(e.msg)
     asyncSpawn req.respError(Http400)
@@ -767,10 +767,6 @@ proc processRequest(
   var keep = true
   case scorper.kind
   of CbKind.cb:
-    when defined(gcArc) or defined(gcOrc):
-      req.query = move(req.url.query)
-    else:
-      shallowCopy(req.query, req.url.query)
     handlePreProcessMiddlewares(req)
     tryHandle(req, scorper.callback(req), keep)
     if not keep:
@@ -780,10 +776,6 @@ proc processRequest(
     let matched = scorper.router.match($req.meth, req.url.path)
     if matched.success:
       req.params = matched.route.params[]
-      when defined(gcArc) or defined(gcOrc):
-        req.query = move(req.url.query)
-      else:
-        shallowCopy(req.query, req.url.query)
       req.prefix = matched.route.prefix
       handlePreProcessMiddlewares(req)
       tryHandle(req, matched.handler(req), keep)

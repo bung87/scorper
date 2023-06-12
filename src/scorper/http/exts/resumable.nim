@@ -54,7 +54,7 @@ proc isComplete*(resumable: Resumable): bool =
 
 proc handleResumableUpload*(req: Request; resumableKeys = newResumableKeys()): Future[ResumableResult]{.async.} =
   template resumableParam(key: untyped): untyped =
-    req.query[resumableKeys.`key`]
+    req.url.query[resumableKeys.`key`]
 
   var resumable: Resumable
   discard parseBiggestUInt(resumableParam(totalChunks), resumable.totalChunks)

@@ -172,11 +172,10 @@ type
     headers*: HttpHeaders
     protocol*: tuple[major, minor: int]
     url*: Url
-    path*: string              # http req path
     hostname*: string
     ip*: string
     params*: Table[string, string]
-    query*: seq[(string, string)]
+
   ScorperCallback* = proc (req: Request): Future[void] {.closure, gcsafe.}
   Scorper* = ref object of StreamServer
     # inherited (partial)
