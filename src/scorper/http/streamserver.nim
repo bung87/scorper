@@ -868,7 +868,7 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
   result.register(ext = "jsonp", mimetype = "application/javascript")
   return result
 
-template initScorper(server: Scorper) =
+template initScorper(server: Scorper, isSecurity: static[bool]) =
   server.privAccpetParser = accpetParser()
   server.httpParser = MofuParser()
 
@@ -889,7 +889,7 @@ template initScorper(server: Scorper) =
     except CatchableError:
       discard
   try:
-    server.logSub.next("Scorper serve at http" & (if isSecurity: "s" else: "") & "://" & $server.local)
+    server.logSub.next("Scorper serve at http" & (when isSecurity: "s" else: "") & "://" & $server.local)
   except CatchableError:
     discard
 
@@ -911,7 +911,7 @@ proc serve*(address: string,
   server.maxBody = maxBody
   let address = initTAddress(address)
   server = cast[Scorper](createStreamServer(address, processClientImpl(isSecurity), flags, child = cast[StreamServer](server)))
-  server.initScorper()
+  server.initScorper(isSecurity)
   when defined(ssl):
     when isSecurity:
       server.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
@@ -947,7 +947,7 @@ proc newScorper*(address: string, handler: ScorperCallback | Router[ScorperCallb
   result.maxBody = maxBody
   let address = initTAddress(address)
   result = cast[Scorper](createStreamServer(address, processClientImpl(isSecurity), flags, child = cast[StreamServer](result)))
-  result.initScorper()
+  result.initScorper(isSecurity)
   when defined(ssl):
     when isSecurity:
       result.initSecurityScorper(secureFlags, privateKey, certificate, tlsMinVersion, tlsMaxVersion)
