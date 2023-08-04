@@ -21,9 +21,9 @@ jobs:
           - macOS-latest
 
         nim-version:
-          # - 1.6.0
+          - 1.9.5
           # - stable
-          - devel
+          # - devel
 
     steps:
     - name: Checkout
