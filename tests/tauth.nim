@@ -1,9 +1,9 @@
 
-import ./scorper/http/streamserver
-import ./scorper/http/httprequest
-import ./scorper/http/streamclient
-import ./scorper/http/router
-import ./scorper/http/httpcore, chronos
+import scorper/http/streamserver
+import scorper/http/httprequest
+import scorper/http/streamclient
+import scorper/http/router
+import scorper/http/httpcore, chronos
 import tables
 import strformat
 import base64

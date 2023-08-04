@@ -1,4 +1,4 @@
-import ./scorper/http/acceptparser
+import scorper/http/acceptparser
 import sequtils
 block basic:
   let parser = accpetParser()

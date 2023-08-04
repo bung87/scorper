@@ -5,7 +5,7 @@
 ##
 ## Copyright (c) 2020 Bung
 
-import chronos
+import chronos except Moment
 import mofuparser
 import npeg/codegen
 import urlencodedparser, multipartparser, acceptparser, rangeparser, oids, httpform, httpdate, httpcore, router,
@@ -19,7 +19,7 @@ include constant
 import std / [os, streams, options, strformat, json, sequtils, parseutils, strutils, macros, macrocache]
 import ./ rxnim / rxnim
 import segfaults
-from std/times import Time, parseTime, utc, `<`, now, `$`
+from std/times import Time, parseTime, utc, `<`, now, `$`, initDuration
 import zippy
 from httprequest import Request
 import ../ scorpermacros
@@ -106,10 +106,12 @@ proc formatCommon*(r: ImpRequest, status: HttpCode, size: int): string =
   let remoteUser = os.getEnv("REMOTE_USER", "-")
   result = fmt"""{r.hostname} - {remoteUser} {$now()} "{r.meth} {r.url.path} HTTP/{r.protocol.major}.{r.protocol.minor}" {status} {size}"""
 
+var serverDate {.threadvar.}: string
+
 proc genericHeaders(headers = newHttpHeaders()): lent HttpHeaders {.tags: [TimeEffect].} =
   ## genericHeaders contains Date,X-Frame-Options
   # Date: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.18
-  headers.Date httpDate()
+  headers.Date serverDate
   headers.XFrameOptions "SAMEORIGIN"
   when HttpServer.len > 0:
     headers.Server HttpServer
@@ -841,6 +843,15 @@ template processClientImpl(isSecurity: bool): proc (server: StreamServer, transp
     else:
       req.reader = req.transp.newAsyncStreamReader
       req.writer = req.transp.newAsyncStreamWriter
+    var pipeContinuation: proc (udata: pointer) {.gcsafe, raises: [].}
+    const Du = chronos.microseconds(1000)
+    pipeContinuation= proc (udata: pointer) {.gcsafe, raises: [].} =
+      serverDate = httpDate()
+      discard setTimer(Moment.fromNow(Du),
+                              pipeContinuation, nil)
+    serverDate = httpDate()
+    discard setTimer(Moment.fromNow(Du),
+                              pipeContinuation, nil)
     while not transp.atEof():
       let retry = await processRequest(req.server, req, isSecurity)
       handlePostProcessMiddlewares(req)
