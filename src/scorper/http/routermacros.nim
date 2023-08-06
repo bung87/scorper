@@ -113,7 +113,8 @@ proc getImports*(cPath: string): seq[string] =
         let cp = os.addFileExt(p, "nim")
         getRoutes(cp, result)
 
-macro mount*[H](router: Router[H], h: untyped) =
+macro mount*[H](router: Router[H], h: untyped) {.deprecated:
+      "deprecated since v1.1.9".} =
   let cPath = lineInfoObj(h).filename
   var (dir, name, _) = splitFile(currentSourcePath)
   var cmd = joinPath(dir,name)

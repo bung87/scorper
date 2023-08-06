@@ -98,18 +98,6 @@ r.addRoute(handler)
 r.addRoute(handler2)
 ```
 
-#### use `route` with `mount` macro  
-
-<!---
-Chore: requires better documentation and explanation
---->
-
-``` nim
-import ./my_controler
-let r = newRouter[ScorperCallback]()
-r.mount(my_controler)
-```  
-
 ### responds depends on request mime  
 
 ``` nim
