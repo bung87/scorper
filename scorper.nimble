@@ -7,7 +7,7 @@ license       = "Apache License 2.0"
 srcDir        = "src"
 skipDirs      = @["tests","examples","experiments","benchmark","artwork"]
 installExt = @["nim"]
-# namedbin = {"./scorper/http/routermacros":"routermacros" }.toTable()
+# namedbin = {"scorper/http/routermacros":"routermacros" }.toTable()
 # Dependencies
 
 requires "nim >= 1.3.1"

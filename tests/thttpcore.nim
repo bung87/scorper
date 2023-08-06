@@ -1,4 +1,4 @@
-include ./scorper/http/httpcore
+include scorper/http/httpcore
 
 var test = newHttpHeaders()
 test["Connection"] = @["Upgrade", "Close"]

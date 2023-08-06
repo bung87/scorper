@@ -1,9 +1,9 @@
 
-import ./scorper/http/streamserver
-import ./scorper/http/httprequest
-import ./scorper/http/streamclient
-import ./scorper/http/httpform
-import ./scorper/http/httpcore, chronos
+import scorper/http/streamserver
+import scorper/http/httprequest
+import scorper/http/streamclient
+import scorper/http/httpform
+import scorper/http/httpcore, chronos
 import os, strutils
 import asynctest, strformat
 

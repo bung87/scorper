@@ -1,8 +1,8 @@
 
-import ./scorper/http/streamserver
-import ./scorper/http/httprequest
-import ./scorper/http/streamclient
-import ./scorper/http/httpcore, chronos
+import scorper/http/streamserver
+import scorper/http/httprequest
+import scorper/http/streamclient
+import scorper/http/httpcore, chronos
 import os
 import asynctest, strformat
 
