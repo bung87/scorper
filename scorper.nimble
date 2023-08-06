@@ -56,8 +56,8 @@ task strict, "stric async exception check":
   exec "nimble test -d:chronosStrictException"
 
 
-before test:
-  requires "asynctest >= 0.3.2 & < 0.4.0"
+# before test:
+#   requires "asynctest >= 0.3.2 & < 0.4.0"
 
 task profile,"profiling":
   let c = readFile("benchmark/simple_resp.nim")

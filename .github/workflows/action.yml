@@ -22,8 +22,8 @@ jobs:
 
         nim-version:
           - '1.6.14'
-          # - stable
-          # - devel
+          - stable
+          - devel
 
     steps:
     - name: Checkout
