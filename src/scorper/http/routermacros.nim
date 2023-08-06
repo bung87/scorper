@@ -23,13 +23,23 @@ template addRoute*[H](
 proc collectImps(n: PNode, o: var seq[PNode]) =
   if n.kind == nkImportStmt:
     o.add n
-  for m in n:
-    collectImps(m, o)
+  elif n.kind == nkStmtList:
+    for m in n:
+      collectImps(m, o)
 
 proc collectIdents(s: openarray[PNode], a: var string) =
   for n in s:
-    if n.kind == nkIdent:
+    case n.kind
+    of nkIdent:
       a.add n.ident.s
+    of nkCharLit..nkUInt64Lit:
+      discard
+    of nkFloatLit..nkFloat128Lit:
+      discard
+    of nkStrLit..nkTripleStrLit:
+      discard
+    of nkSym:
+      discard
     else:
       collectIdents(n.sons, a)
 
