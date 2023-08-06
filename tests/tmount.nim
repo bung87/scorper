@@ -1,6 +1,6 @@
 import ./mroutes
-import ./scorper / http / [streamserver, router]
-import ./scorper / http / routermacros
+import scorper/http/[streamserver, router]
+import scorper/http/routermacros
 import macros
 from os import nil
 
