@@ -48,10 +48,11 @@ when defined(windows):
   import winlean
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
+var buf {.threadvar.}: array[HttpRequestBufferSize, char] 
+
 type
   ImpRequest = ref object of typeof(Request()[])
     transp: StreamTransport
-    buf: array[HttpRequestBufferSize, char]
     contentLength: BiggestUInt # as RFC no limit
     contentType: string
     server: Scorper
@@ -587,7 +588,7 @@ proc form*(req: ImpRequest): Future[Form] {.async.} =
   result = newForm()
   case req.contentType:
     of "application/x-www-form-urlencoded":
-      var parser = newUrlEncodedParser(req.transp, req.buf.addr, req.contentLength.int)
+      var parser = newUrlEncodedParser(req.transp, buf.addr, req.contentLength.int)
       var parsed = await parser.parse()
       for (key, value) in parsed:
         let v = if value.len > 0: decodeUrlComponent(value) else: ""
@@ -604,7 +605,7 @@ proc form*(req: ImpRequest): Future[Form] {.async.} =
         except BoundaryInvalidError as e:
           await req.respError(Http400, e.msg)
           return
-        var parser = newMultipartParser(parsed.boundary, req.transp, req.buf.addr, req.contentLength.int)
+        var parser = newMultipartParser(parsed.boundary, req.transp, buf.addr, req.contentLength.int)
         try:
           await parser.parse()
         except BodyIncompleteError as e:
@@ -685,7 +686,7 @@ proc processRequest(
   const HeaderSep = @[byte('\c'), byte('\L'), byte('\c'), byte('\L')]
   var count: int
   try:
-    count = await req.reader.readUntil(req.buf[0].addr, len(req.buf), sep = HeaderSep)
+    count = await req.reader.readUntil(buf[0].addr, len(buf), sep = HeaderSep)
   except AsyncStreamIncompleteError:
     return true
   except AsyncStreamLimitError:
@@ -695,7 +696,7 @@ proc processRequest(
     await req.respStatus(Http400, e.msg)
     return false
   # Headers
-  let headerEnd = scorper.httpParser.parseHeader(addr req.buf[0], req.buf.len)
+  let headerEnd = scorper.httpParser.parseHeader(addr buf[0], buf.len)
   if headerEnd == -1:
     await req.respError(Http400)
     return true
