@@ -48,7 +48,7 @@ when defined(windows):
   import winlean
 const MethodNeedsBody = {HttpPost, HttpPut, HttpConnect, HttpPatch}
 
-var buf {.threadvar.}: array[HttpRequestBufferSize, char] 
+var buf {.global.}: array[HttpRequestBufferSize, char] 
 
 type
   ImpRequest = ref object of typeof(Request()[])
