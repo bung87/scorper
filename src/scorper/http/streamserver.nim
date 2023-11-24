@@ -18,7 +18,6 @@ import urlly
 include constant
 import std / [os, streams, options, strformat, json, sequtils, parseutils, strutils, macros, macrocache]
 import ./ rxnim / rxnim
-import segfaults
 from std/times import Time, parseTime, utc, `<`, now, `$`, initDuration
 import zippy
 from httprequest import Request
@@ -42,7 +41,6 @@ else:
       # storage: seq[byte]
       # context: SslSessionCacheLru
 import chronos / sendfile
-import stew/results
 
 when defined(windows):
   import winlean

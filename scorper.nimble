@@ -16,7 +16,6 @@ requires "chronos"
 requires "npeg"
 requires "zippy"
 requires "jsony"
-requires "stew"
 requires "urlly >= 0.2.0 & < 0.3.0"
 
 

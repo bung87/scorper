@@ -2,7 +2,6 @@ import ../ httprequest
 from ../ streamserver import respStatus, stream, len, toImpRequest
 import ../ httpcore
 import std / [os, streams, json, parseutils]
-import stew/results
 import chronos
 import urlly
 
