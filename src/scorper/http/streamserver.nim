@@ -181,7 +181,7 @@ proc resp*(req: ImpRequest, content: sink string,
   headers.hasKeyOrPut("Content-Length"):
     flen
   headers.hasKeyOrPut("Date"):
-    httpDate()
+    serverDate
   when HttpServer.len > 0:
     headers.hasKeyOrPut("Server"):
       HttpServer
