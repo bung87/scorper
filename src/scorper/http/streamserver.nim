@@ -841,15 +841,7 @@ template processClientImpl(isSecurity: bool): proc (server: StreamServer, transp
     else:
       req.reader = req.transp.newAsyncStreamReader
       req.writer = req.transp.newAsyncStreamWriter
-    var pipeContinuation: proc (udata: pointer) {.gcsafe, raises: [].}
-    const Du = chronos.microseconds(1000)
-    pipeContinuation= proc (udata: pointer) {.gcsafe, raises: [].} =
-      serverDate = httpDate()
-      discard setTimer(Moment.fromNow(Du),
-                              pipeContinuation, nil)
-    serverDate = httpDate()
-    discard setTimer(Moment.fromNow(Du),
-                              pipeContinuation, nil)
+
     while not transp.atEof():
       let retry = await processRequest(req.server, req, isSecurity)
       handlePostProcessMiddlewares(req)
@@ -880,7 +872,15 @@ proc newScorperMimetypes(): MimeDB {.inline.} =
 template initScorper(server: Scorper, isSecurity: static[bool]) =
   server.privAccpetParser = accpetParser()
   server.httpParser = MofuParser()
-
+  var pipeContinuation: proc (udata: pointer) {.gcsafe, raises: [].}
+  const Du = chronos.microseconds(1000)
+  pipeContinuation= proc (udata: pointer) {.gcsafe, raises: [].} =
+    serverDate = httpDate()
+    discard setTimer(Moment.fromNow(Du),
+                            pipeContinuation, nil)
+  serverDate = httpDate()
+  discard setTimer(Moment.fromNow(Du),
+                            pipeContinuation, nil)
   var onError = proc(error: Exception): void =
     debugEcho $error
   var onCompleted = proc(): void =
