@@ -1,7 +1,6 @@
 import scorper
 
 when isMainModule:
-  # cd `example` dir first then run `nim c -r static.nim`
   let r = newRouter[ScorperCallback]()
   r.addRoute(serveStatic, "get", "/static/*$")
   let address = "127.0.0.1:8888"
