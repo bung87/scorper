@@ -249,6 +249,11 @@ The `mofuparser` use `SIMD` which relys on cpu support `SSE` or `AVX` instructio
 
 [amysql](https://github.com/bung87/amysql)  Async MySQL Connector write in pure Nim. (support chronos with compile flag `-d:ChronosAsync`)
 
+### Sponsor
+
+💙 Consider using my [Vultr referral](https://www.vultr.com/?ref=7263256) if you need cloud hosting.
+
+
 ## License  
 
 Apache License 2.0  
